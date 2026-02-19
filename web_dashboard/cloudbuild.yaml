@@ -16,7 +16,9 @@ steps:
       - 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=103324730349'
       - '--build-arg'
       - 'NEXT_PUBLIC_FIREBASE_APP_ID=1:103324730349:web:b76e135a4a5673d1bc1de4'
-      - '.'
+      - '-f'
+      - 'web_dashboard/Dockerfile'
+      - 'web_dashboard'
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
