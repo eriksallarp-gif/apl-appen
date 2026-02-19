@@ -7,7 +7,7 @@ steps:
       - '-t'
       - 'europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web:$COMMIT_SHA'
       - '--build-arg'
-      - 'NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyCAFtTbCOtaRmepRutWup3q8x0Ye5vrFLI'
+      - 'NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyC4wmU4JxZUP_ybiIxEdgv2JQ0gMaXKa1g'
       - '--build-arg'
       - 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=apl-appen-aa472.firebaseapp.com'
       - '--build-arg'
