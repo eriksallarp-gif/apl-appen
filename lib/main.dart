@@ -1,0 +1,5482 @@
+﻿import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'dart:math';
+import 'dart:async';
+import 'firebase_options.dart';
+import 'Screens/tidkort_screen.dart';
+import 'Screens/start_screen.dart';
+import 'Screens/student_registration_screen.dart';
+import 'Screens/approval_and_assessment_screen.dart';
+import 'Screens/teacher_dashboard_screen.dart';
+import 'Screens/week_management_screen.dart';
+import 'Screens/statistics_screen.dart';
+import 'Screens/supervisor_assessment_page.dart';
+import 'Screens/bedomning_screen.dart';
+import 'Screens/ersattning_screen.dart';
+import 'Screens/admin_screen.dart';
+import 'Screens/student_detail_statistics_screen.dart';
+
+// Tidkortmallar för olika specialiseringar
+const activityTemplateTrabetare = <Map<String, dynamic>>[
+  {
+    "group": "Formsättning",
+    "items": ["Formbyggnad", "Elementform", "Demontering"],
+  },
+  {
+    "group": "Armering och betong",
+    "items": ["Armering", "Betong"],
+  },
+  {
+    "group": "Utvändigt arbete",
+    "items": ["Utvändig beklädnad", "Tak", "Dörrar & Fönster"],
+  },
+  {
+    "group": "Stomme och beklädnad",
+    "items": ["Stolpverk", "Bjälklag"],
+  },
+  {
+    "group": "Invändigt arbete",
+    "items": [
+      "Inredning",
+      "Snickerier",
+      "Invändig beklädnad",
+      "Dörrar",
+      "Golv",
+    ],
+  },
+  {
+    "group": "Isolering",
+    "items": ["Värme/ljud/brand", "Fuktisolering"],
+  },
+  {
+    "group": "Reparationer",
+    "items": ["Demontering/Rivning", "Återmontering"],
+  },
+  {
+    "group": "Miljö / Övrigt",
+    "items": ["Miljö", "Hjälparbeten", "Skyddsarbeten", "Övrigt"],
+  },
+];
+
+// TODO: Lägg till mallar för andra specialiseringar
+const activityTemplateMurare = <Map<String, dynamic>>[
+  {
+    "group": "Murning",
+    "items": ["Tegel", "Betongblock", "Lättbetong"],
+  },
+  {
+    "group": "Puts",
+    "items": ["Grovputs", "Finputs", "Puts övrigt"],
+  },
+  {
+    "group": "Övrigt",
+    "items": ["Byggnadsställning", "Hjälparbeten", "Övrigt"],
+  },
+];
+
+const activityTemplateMalare = <Map<String, dynamic>>[
+  {
+    "group": "Invändig målning - Snickerier m.m.",
+    "items": ["Underbehandling", "Målning"],
+  },
+  {
+    "group": "Invändig målning - Tak & Väggar",
+    "items": ["Underbehandling", "Målning", "Tapetsering", "Vävsättning"],
+  },
+  {
+    "group": "Utvändig målning - Trä & mineraliska ytor",
+    "items": ["Underbehandling", "Målning"],
+  },
+  {
+    "group": "Utvändig målning - Fönster",
+    "items": ["Underbehandling", "Målning"],
+  },
+  {
+    "group": "Övrigt",
+    "items": ["Övrigt"],
+  },
+];
+
+const activityTemplateAnlaggare = <Map<String, dynamic>>[
+  {
+    "group": "Anläggning och vägbyggnad",
+    "items": [
+      "Vägarbeten",
+      "Beläggningar",
+      "Gångbanor",
+      "Grundläggningar",
+      "Ledningsbyggnad",
+      "Gröna ytor",
+      "Maskiner",
+      "Markbyggnad",
+      "Rörläggning",
+    ],
+  },
+  {
+    "group": "Armering och betong",
+    "items": ["Armering", "Betong"],
+  },
+  {
+    "group": "Miljö",
+    "items": ["Hjälparbeten", "Skyddsarbeten"],
+  },
+  {
+    "group": "Övrigt",
+    "items": ["Övrigt"],
+  },
+];
+
+const activityTemplateVVS = <Map<String, dynamic>>[
+  {
+    "group": "VVS-installationer",
+    "items": [
+      "Radiatorer och övriga värmare",
+      "Sanitära apparater",
+      "Installation i pannapparat och fläktrum",
+      "Värmeledningar",
+      "Kall- och varmvattenledningar",
+      "Avloppsledningar inomhus",
+      "Utomhusledningar",
+      "Reparations- och servicearbeten",
+      "Svetsning av rör",
+      "Övrigt",
+    ],
+  },
+];
+
+const activityTemplatePlatslagare = <Map<String, dynamic>>[
+  {
+    "group": "Plåtarbete",
+    "items": [
+      "Verkstadsarbete",
+      "Ventilation - tillverkning",
+      "Ventilation - montering",
+      "Ventilation - service",
+      "Takarbete",
+      "Garneringsarbete",
+      "Fasadarbete",
+      "Profilerad plåt",
+    ],
+  },
+  {
+    "group": "Övrigt",
+    "items": ["Övrigt"],
+  },
+  {
+    "group": "Miljö",
+    "items": ["Hjälparbeten", "Skyddsarbeten"],
+  },
+];
+
+const activityTemplateDefault = <Map<String, dynamic>>[
+  {
+    "group": "Arbetsuppgifter",
+    "items": ["Uppgift 1", "Uppgift 2", "Uppgift 3"],
+  },
+  {
+    "group": "Övrigt",
+    "items": ["Hjälparbeten", "Övrigt"],
+  },
+];
+
+// Funktion för att hämta rätt tidkortmall baserat på specialisering
+List<Map<String, dynamic>> getActivityTemplate(String? specialization) {
+  switch (specialization) {
+    case 'Träarbetare':
+      return activityTemplateTrabetare;
+    case 'Murare':
+      return activityTemplateMurare;
+    case 'Målare':
+      return activityTemplateMalare;
+    case 'Anläggare':
+      return activityTemplateAnlaggare;
+    case 'VVS':
+      return activityTemplateVVS;
+    case 'Plåtslagare':
+      return activityTemplatePlatslagare;
+    case 'Elektriker':
+      // TODO: Lägg till specifik mall för elektriker
+      return activityTemplateDefault;
+    default:
+      return activityTemplateTrabetare; // Fallback till Träarbetare
+  }
+}
+
+// Bakåtkompatibilitet - använd Träarbetare som default
+const activityTemplate = activityTemplateTrabetare;
+
+String _ymd(DateTime d) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${d.year}-${two(d.month)}-${two(d.day)}';
+}
+
+class WeeklyTimesheetScreen extends StatefulWidget {
+  final String studentUid;
+  final String teacherUid;
+  final String? classId; // Optional - hämtas från användarens profil om saknas
+  final String weekStart; // YYYY-MM-DD
+  final bool readOnly; // true för lärare-läge
+  final String? lockedMessage; // Meddelande om tidkortet är låst
+  final String? specialization; // Elevens specialisering för rätt tidkortmall
+
+  const WeeklyTimesheetScreen({
+    super.key,
+    required this.studentUid,
+    required this.teacherUid,
+    this.classId,
+    required this.weekStart,
+    required this.readOnly,
+    this.lockedMessage,
+    this.specialization,
+  });
+
+  @override
+  State<WeeklyTimesheetScreen> createState() => _WeeklyTimesheetScreenState();
+}
+
+class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
+  final _controllers = <String, Map<String, TextEditingController>>{};
+  final _commentControllers = <String, TextEditingController>{}; // For "Övrigt" comments
+  bool _saving = false;
+  String? _msg;
+  List<Map<String, dynamic>>? _activityTemplate;
+  bool _controllersInitialized = false;
+
+  static const _days = ['mon', 'tue', 'wed', 'thu', 'fri'];
+
+  Future<void> _initializeTemplate() async {
+    if (_controllersInitialized) return;
+
+    String? specialization = widget.specialization;
+
+    // Hämta specialisering från Firestore om inte angiven
+    if (specialization == null) {
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.studentUid)
+            .get();
+        specialization = userDoc.data()?['specialization'] as String?;
+      } catch (e) {
+        print('Kunde inte hämta specialisering: $e');
+      }
+    }
+
+    _activityTemplate = getActivityTemplate(specialization);
+
+    // Skapa controllers för alla rader/dagar (tomma istället för '0')
+    for (final g in _activityTemplate!) {
+      for (final item in (g['items'] as List)) {
+        final name = item.toString();
+        _controllers[name] = {
+          for (final day in _days) day: TextEditingController(),
+        };
+        // Create comment controller for "Övrigt" items
+        if (name == 'Övrigt') {
+          _commentControllers[name] = TextEditingController();
+        }
+      }
+    }
+
+    _controllersInitialized = true;
+  }
+
+  @override
+  void dispose() {
+    for (final row in _controllers.values) {
+      for (final c in row.values) {
+        c.dispose();
+      }
+    }
+    for (final c in _commentControllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Map<String, dynamic> _buildEntries() {
+    final out = <String, dynamic>{};
+    for (final entry in _controllers.entries) {
+      final activity = entry.key;
+      final dayMap = <String, int>{};
+      for (final day in _days) {
+        final raw = entry.value[day]!.text.trim();
+        final val = int.tryParse(raw);
+        dayMap[day] = val ?? 0;
+      }
+      out[activity] = dayMap;
+    }
+    return out;
+  }
+
+  Map<String, dynamic> _buildComments() {
+    final out = <String, dynamic>{};
+    for (final entry in _commentControllers.entries) {
+      final activity = entry.key;
+      final comment = entry.value.text.trim();
+      if (comment.isNotEmpty) {
+        out[activity] = comment;
+      }
+    }
+    return out;
+  }
+
+  int _sumWeek() {
+    int sum = 0;
+    for (final row in _controllers.values) {
+      for (final day in _days) {
+        sum += int.tryParse(row[day]!.text.trim()) ?? 0;
+      }
+    }
+    return sum;
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _saving = true;
+      _msg = null;
+    });
+    final docId = '${widget.studentUid}_${widget.weekStart}';
+    final snap = await FirebaseFirestore.instance
+        .collection('timesheets')
+        .doc(docId)
+        .get();
+    final approved = (snap.data()?['approved'] ?? false) == true;
+    if (approved) {
+      setState(() => _msg = 'Tidkortet är godkänt och låst.');
+      return;
+    }
+
+    try {
+      // Hämta classId från användarens profil om det inte finns i parametern
+      String classId = widget.classId ?? '';
+      if (classId.isEmpty) {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.studentUid)
+            .get();
+        classId = userDoc.data()?['classId'] ?? '';
+      }
+
+      final docId = '${widget.studentUid}_${widget.weekStart}';
+      await FirebaseFirestore.instance.collection('timesheets').doc(docId).set({
+        'studentUid': widget.studentUid,
+        'teacherUid': widget.teacherUid,
+        'classId': classId,
+        'weekStart': widget.weekStart,
+        'entries': _buildEntries(),
+        'comments': _buildComments(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        // approved hanteras av lärare, men vi lämnar fältet om det finns
+      }, SetOptions(merge: true));
+
+      setState(() => _msg = 'Sparat ✅');
+    } catch (e) {
+      setState(() => _msg = 'Fel: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: _initializeTemplate(),
+      builder: (context, snapshot) {
+        if (!_controllersInitialized) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final docId = '${widget.studentUid}_${widget.weekStart}';
+        final docStream = FirebaseFirestore.instance
+            .collection('timesheets')
+            .doc(docId)
+            .snapshots();
+
+        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: docStream,
+          builder: (context, snap) {
+            final data = snap.data?.data();
+            final entries = (data?['entries'] as Map?)?.cast<String, dynamic>();
+            final approved = (data?['approved'] ?? false) as bool;
+            final locked = (data?['locked'] ?? false) as bool;
+            final effectiveReadOnly = widget.readOnly || approved || locked;
+
+            // Fyll controllers från Firestore när data finns
+            if (entries != null) {
+              for (final e in entries.entries) {
+                final activity = e.key;
+                final dayMap = (e.value as Map?)?.cast<String, dynamic>() ?? {};
+                final row = _controllers[activity];
+                if (row != null) {
+                  for (final day in _days) {
+                    final v = (dayMap[day] ?? 0).toString();
+                    if (row[day]!.text != v) row[day]!.text = v;
+                  }
+                }
+              }
+            }
+
+            // Load comments from Firestore
+            final comments = (data?['comments'] as Map?)?.cast<String, dynamic>();
+            if (comments != null) {
+              for (final c in comments.entries) {
+                final activity = c.key;
+                final comment = c.value.toString();
+                final controller = _commentControllers[activity];
+                if (controller != null && controller.text != comment) {
+                  controller.text = comment;
+                }
+              }
+            }
+
+            // Beräkna veckonummer från weekStart
+            int weekNumber = 1;
+            try {
+              final parts = widget.weekStart.split('-');
+              if (parts.length == 3) {
+                final year = int.parse(parts[0]);
+                final month = int.parse(parts[1]);
+                final day = int.parse(parts[2]);
+                final startDate = DateTime(year, month, day);
+                final jan4 = DateTime(startDate.year, 1, 4);
+                final monday = jan4.subtract(
+                  Duration(days: jan4.weekday - DateTime.monday),
+                );
+                weekNumber = startDate.difference(monday).inDays ~/ 7 + 1;
+              }
+            } catch (e) {
+              // Använd default om parsning misslyckas
+            }
+
+            return Scaffold(
+              appBar: AppBar(
+                title: Text('Tidkort vecka $weekNumber'),
+                elevation: 0,
+                actions: [
+                  if (!effectiveReadOnly)
+                    IconButton(
+                      tooltip: 'Spara',
+                      onPressed: _saving ? null : _save,
+                      icon: const Icon(Icons.save),
+                    ),
+                  if (widget.readOnly)
+                    IconButton(
+                      tooltip: approved
+                          ? 'Avmarkera godkänd'
+                          : 'Markera godkänd',
+                      onPressed: () async {
+                        await FirebaseFirestore.instance
+                            .collection('timesheets')
+                            .doc(docId)
+                            .set({
+                              'approved': !approved,
+                            }, SetOptions(merge: true));
+                      },
+                      icon: Icon(
+                        approved
+                            ? Icons.check_circle
+                            : Icons.check_circle_outline,
+                      ),
+                    ),
+                ],
+              ),
+              body: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Status card
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.orange.shade400,
+                              Colors.orange.shade600,
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Denna vecka',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${_sumWeek()} timmar',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (approved)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade400,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Text(
+                                      'GODKÄND ✅',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.edit,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Visa låst-meddelande om tidkortet är låst
+                      if (widget.lockedMessage != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            border: Border.all(color: Colors.red.shade200),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.lock, color: Colors.red.shade700),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  widget.lockedMessage!,
+                                  style: TextStyle(
+                                    color: Colors.red.shade700,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      if (_msg != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: _msg!.contains('Sparat')
+                                ? Colors.green.shade50
+                                : Colors.orange.shade50,
+                            border: Border.all(
+                              color: _msg!.contains('Sparat')
+                                  ? Colors.green.shade200
+                                  : Colors.orange.shade200,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _msg!,
+                            style: TextStyle(
+                              color: _msg!.contains('Sparat')
+                                  ? Colors.green.shade700
+                                  : Colors.orange.shade700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      const Text(
+                        'Arbetssyssla',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Aktiviteter grupperade
+                      for (final g in _activityTemplate!) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            g['group'].toString(),
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        for (final item in (g['items'] as List)) ...[
+                          _TimesheetRow(
+                            label: item.toString(),
+                            controllers: _controllers[item.toString()]!,
+                            readOnly: effectiveReadOnly,
+                            commentController: item.toString() == 'Övrigt'
+                                ? _commentControllers['Övrigt']
+                                : null,
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        const SizedBox(height: 8),
+                      ],
+
+                      if (!effectiveReadOnly)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 16, bottom: 32),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _saving ? null : _save,
+                              icon: const Icon(Icons.save),
+                              label: const Text('Spara tidkort'),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _TimesheetRow extends StatelessWidget {
+  final String label;
+  final Map<String, TextEditingController> controllers;
+  final bool readOnly;
+  final TextEditingController? commentController;
+
+  const _TimesheetRow({
+    required this.label,
+    required this.controllers,
+    required this.readOnly,
+    this.commentController,
+  });
+
+  static const _days = ['mon', 'tue', 'wed', 'thu', 'fri'];
+  static const _dayLabel = {
+    'mon': 'Mån',
+    'tue': 'Tis',
+    'wed': 'Ons',
+    'thu': 'Tor',
+    'fri': 'Fre',
+  };
+
+  int _getRowSum() {
+    int sum = 0;
+    for (final day in _days) {
+      sum += int.tryParse(controllers[day]!.text.trim()) ?? 0;
+    }
+    return sum;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade200, width: 1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${_getRowSum()}h',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Dag-headers
+            Row(
+              children: [
+                for (final day in _days) ...[
+                  Expanded(
+                    child: Text(
+                      _dayLabel[day]!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Input-fält
+            Row(
+              children: [
+                for (final day in _days) ...[
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: TextField(
+                        controller: controllers[day],
+                        readOnly: readOnly,
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 10,
+                          ),
+                          hintText: '0',
+                          hintStyle: TextStyle(color: Colors.grey.shade300),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(
+                              color: Colors.orange.shade400,
+                              width: 2,
+                            ),
+                          ),
+                          disabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(6),
+                            borderSide: BorderSide(color: Colors.grey.shade200),
+                          ),
+                          filled: readOnly,
+                          fillColor: readOnly
+                              ? Colors.grey.shade100
+                              : Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            // Comment field for "Övrigt"
+            if (commentController != null) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: commentController,
+                readOnly: readOnly,
+                maxLines: 3,
+                style: const TextStyle(fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Kommentar - Vad gjorde du?',
+                  labelStyle: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                  hintText: 'Beskriv vad denna övrigt-tid användes till',
+                  hintStyle: TextStyle(color: Colors.grey.shade300),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(
+                      color: Colors.orange.shade400,
+                      width: 2,
+                    ),
+                  ),
+                  disabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  filled: readOnly,
+                  fillColor: readOnly ? Colors.grey.shade100 : Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class StudentWeeklyTimesheetHome extends StatelessWidget {
+  const StudentWeeklyTimesheetHome({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser!;
+    final userDocStream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots();
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: userDocStream,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final data = snap.data?.data() ?? {};
+        final teacherUid = (data['teacherUid'] ?? '').toString().trim();
+
+        if (teacherUid.isEmpty) {
+          return const Center(child: Text('Ingen lärare kopplad.'));
+        }
+
+        // Räkna ut måndag denna vecka
+        final now = DateTime.now();
+        final monday = now.subtract(
+          Duration(days: now.weekday - DateTime.monday),
+        );
+        final weekStart =
+            '${monday.year}-${monday.month.toString().padLeft(2, '0')}-${monday.day.toString().padLeft(2, '0')}';
+
+        return WeeklyTimesheetScreen(
+          studentUid: user.uid,
+          teacherUid: teacherUid,
+          weekStart: weekStart,
+          readOnly: false, // elev får redigera
+        );
+      },
+    );
+  }
+}
+
+class AssessmentFormPageFromDeepLink extends StatelessWidget {
+  final String assessmentId;
+
+  const AssessmentFormPageFromDeepLink({super.key, required this.assessmentId});
+
+  @override
+  Widget build(BuildContext context) {
+    // Försök att hitta timesheetId från assessmentId i Firestore
+    // Om dokumentet redan finns, använd det, annars skapa en placeholder
+    return Scaffold(
+      appBar: AppBar(title: const Text('Bedömning'), centerTitle: true),
+      body: FutureBuilder<String?>(
+        future: _getTimesheetIdForAssessment(assessmentId),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          // Även om vi inte hittar timesheetId, kan vi fortsätta
+          // eftersom AssessmentFormPage lagrar det baserat på assessmentId
+          return AssessmentFormPage(
+            assessmentId: assessmentId,
+            timesheetId: snapshot.data ?? '',
+          );
+        },
+      ),
+    );
+  }
+
+  Future<String?> _getTimesheetIdForAssessment(String assessmentId) async {
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('assessments')
+          .doc(assessmentId)
+          .get();
+
+      if (snap.exists) {
+        return (snap.data()?['timesheetId'] as String?);
+      }
+    } catch (e) {
+      // Tyst fel — vi skapar nytt dokument
+    }
+    return null;
+  }
+}
+
+class AssessmentFormPage extends StatefulWidget {
+  final String assessmentId;
+  final String timesheetId;
+
+  const AssessmentFormPage({
+    super.key,
+    required this.assessmentId,
+    required this.timesheetId,
+  });
+
+  @override
+  State<AssessmentFormPage> createState() => _AssessmentFormPageState();
+}
+
+class _AssessmentFormPageState extends State<AssessmentFormPage> {
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _companyCtrl = TextEditingController();
+  final _feedbackCtrl = TextEditingController();
+  bool _loading = false;
+  String? _error;
+  String? _success;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    _companyCtrl.dispose();
+    _feedbackCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitAssessment() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+      _success = null;
+    });
+
+    try {
+      final name = _nameCtrl.text.trim();
+      final phone = _phoneCtrl.text.trim();
+      final company = _companyCtrl.text.trim();
+      final feedback = _feedbackCtrl.text.trim();
+
+      if (name.isEmpty || phone.isEmpty || company.isEmpty) {
+        setState(
+          () => _error = 'Namn, mobilnummer och företag är obligatoriska.',
+        );
+        return;
+      }
+
+      // Hämta timesheetData för att få studentUid
+      final timesheetSnap = await FirebaseFirestore.instance
+          .collection('timesheets')
+          .doc(widget.timesheetId)
+          .get();
+
+      if (!timesheetSnap.exists) {
+        setState(() => _error = 'Tidkortet hittades inte.');
+        return;
+      }
+
+      final timesheetData = timesheetSnap.data() ?? {};
+      final studentUid = (timesheetData['studentUid'] ?? '').toString();
+
+      // Spara bedömning
+      await FirebaseFirestore.instance
+          .collection('assessments')
+          .doc(widget.assessmentId)
+          .set({
+            'timesheetId': widget.timesheetId,
+            'studentUid': studentUid,
+            'supervisorName': name,
+            'supervisorPhone': phone,
+            'supervisorCompany': company,
+            'feedback': feedback,
+            'submittedAt': FieldValue.serverTimestamp(),
+          });
+
+      setState(() {
+        _success = 'Bedömning inlämnad! Tack för ditt arbete.';
+        _nameCtrl.clear();
+        _phoneCtrl.clear();
+        _companyCtrl.clear();
+        _feedbackCtrl.clear();
+      });
+    } catch (e) {
+      setState(() => _error = 'Fel: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Bedömning'), centerTitle: true),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.assignment_turned_in,
+                        size: 40,
+                        color: Colors.orange.shade600,
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Bedömningsformulär',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Fyll i dina uppgifter för att slutföra bedömningen.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                TextField(
+                  controller: _nameCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Ditt namn *',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    prefixIcon: const Icon(Icons.person),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                TextField(
+                  controller: _phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Mobilnummer *',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    prefixIcon: const Icon(Icons.phone),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                TextField(
+                  controller: _companyCtrl,
+                  decoration: InputDecoration(
+                    labelText: 'Företag/Organisation *',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    prefixIcon: const Icon(Icons.business),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                TextField(
+                  controller: _feedbackCtrl,
+                  maxLines: 5,
+                  decoration: InputDecoration(
+                    labelText: 'Bedömning/Feedback (valfritt)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    hintText: 'Skriv dina kommentarer här...',
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                if (_error != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      border: Border.all(color: Colors.red.shade200),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(color: Colors.red.shade700),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                if (_success != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      border: Border.all(color: Colors.green.shade200),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green.shade700),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _success!,
+                            style: TextStyle(
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _loading ? null : _submitAssessment,
+                    icon: const Icon(Icons.send),
+                    label: _loading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : const Text('Skicka bedömning'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Aktivera offline persistence för bättre användarupplevelse
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
+
+  runApp(const AplApp());
+}
+
+class AplApp extends StatelessWidget {
+  const AplApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.orange,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.orange,
+          primary: Colors.orange,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.orange,
+          foregroundColor: Colors.white,
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: Colors.orange,
+        ),
+      ),
+      home: AuthGate(),
+      onGenerateRoute: (settings) {
+        // Hantera handledarlänkar: /supervisor/{requestId}?token={token}
+        if (settings.name?.startsWith('/supervisor/') ?? false) {
+          final parts = settings.name!
+              .replaceFirst('/supervisor/', '')
+              .split('?');
+          final requestId = parts[0];
+          String? token;
+
+          if (parts.length > 1) {
+            final queryParams = Uri.parse(
+              'http://dummy?${parts[1]}',
+            ).queryParameters;
+            token = queryParams['token'];
+          }
+
+          if (token != null) {
+            return MaterialPageRoute(
+              builder: (context) => SupervisorAssessmentPage(
+                requestId: requestId,
+                token: token!, // Assert non-null since we checked above
+              ),
+            );
+          }
+        }
+
+        // Hantera deep links: apl://assess/{assessmentId}
+        if (settings.name?.startsWith('/assess/') ?? false) {
+          final assessmentId = settings.name!.replaceFirst('/assess/', '');
+          // Vi hämtar timesheetId från assessments collection senare
+          return MaterialPageRoute(
+            builder: (context) =>
+                AssessmentFormPageFromDeepLink(assessmentId: assessmentId),
+          );
+        }
+        return null;
+      },
+    );
+  }
+}
+
+class StudentOnboardingScreen extends StatefulWidget {
+  const StudentOnboardingScreen({super.key});
+
+  @override
+  State<StudentOnboardingScreen> createState() =>
+      _StudentOnboardingScreenState();
+}
+
+class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
+  final _classCodeCtrl = TextEditingController();
+  String? _selectedSpecialization;
+  bool _loading = false;
+  String? _error;
+  int _step = 1; // 1 = klasskod, 2 = yrkesutgång
+
+  final specializations = [
+    'Träarbetare',
+    'Murare',
+    'Målare',
+    'Plåtslagare',
+    'Elektriker',
+    'VVS',
+    'Anläggare',
+  ];
+
+  @override
+  void dispose() {
+    _classCodeCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submitClassCode() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    final classCode = _classCodeCtrl.text.trim();
+    if (classCode.isEmpty) {
+      setState(() {
+        _error = 'Ange en klasskod';
+        _loading = false;
+      });
+      return;
+    }
+
+    try {
+      final user = FirebaseAuth.instance.currentUser!;
+
+      // Verifiera klasskod
+      final classDoc = await FirebaseFirestore.instance
+          .collection('classes')
+          .doc(classCode)
+          .get();
+
+      if (!classDoc.exists) {
+        setState(() => _error = 'Ogiltig klasskod');
+        return;
+      }
+
+      final classId = classDoc.id;
+      final teacherUid = classDoc.data()?['teacherUid'] as String?;
+      final userName =
+          (await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user.uid)
+                  .get())
+              .data()?['name'] ??
+          '';
+
+      // Uppdatera användare med klasskod
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
+        {'classId': classId, 'teacherUid': teacherUid},
+      );
+
+      // Lägg till i klassens students-subcollection
+      await FirebaseFirestore.instance
+          .collection('classes')
+          .doc(classId)
+          .collection('students')
+          .doc(user.uid)
+          .set({
+            'name': userName,
+            'email': user.email ?? '',
+            'addedAt': FieldValue.serverTimestamp(),
+          });
+
+      // Gå vidare till specialiseringsval
+      setState(() {
+        _step = 2;
+        _loading = false;
+        _error = null;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'Fel: $e';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _submitSpecialization() async {
+    if (_selectedSpecialization == null) {
+      setState(() => _error = 'Välj en yrkesutgång');
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser!;
+
+      // Uppdatera med yrkesutgång och markera onboarding som klar
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
+        {'specialization': _selectedSpecialization, 'onboardingComplete': true},
+      );
+
+      // Appen kommer automatiskt uppdatera sig via StreamBuilder
+    } catch (e) {
+      setState(() {
+        _error = 'Fel: $e';
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_step == 1 ? 'Välkommen!' : 'Nästan klar'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logga ut',
+            onPressed: () => FirebaseAuth.instance.signOut(),
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: _step == 1
+                ? _buildClassCodeStep()
+                : _buildSpecializationStep(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClassCodeStep() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Icon(Icons.school, size: 80, color: Colors.orange),
+        const SizedBox(height: 24),
+        const Text(
+          'Ange din klasskod',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Få klasskoden från din lärare för att komma igång',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey),
+        ),
+        const SizedBox(height: 32),
+        TextField(
+          controller: _classCodeCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Klasskod',
+            border: OutlineInputBorder(),
+            prefixIcon: Icon(Icons.vpn_key),
+          ),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 18, letterSpacing: 2),
+          textCapitalization: TextCapitalization.characters,
+        ),
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          onPressed: _loading
+              ? null
+              : () async {
+                  final result = await Navigator.push<String>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ClassCodeScannerPage(),
+                    ),
+                  );
+
+                  if (!mounted) return;
+
+                  final scannedCode = (result ?? '').trim();
+                  if (scannedCode.isEmpty) return;
+
+                  setState(() {
+                    _classCodeCtrl.text = scannedCode;
+                  });
+
+                  await _submitClassCode();
+                },
+          icon: const Icon(Icons.qr_code_scanner),
+          label: const Text('Skanna QR-kod istället'),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 16),
+          Text(
+            _error!,
+            style: const TextStyle(color: Colors.red),
+            textAlign: TextAlign.center,
+          ),
+        ],
+        const SizedBox(height: 24),
+        ElevatedButton(
+          onPressed: _loading ? null : _submitClassCode,
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+          ),
+          child: _loading
+              ? const CircularProgressIndicator()
+              : const Text('Fortsätt', style: TextStyle(fontSize: 16)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSpecializationStep() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Icon(Icons.construction, size: 80, color: Colors.orange),
+                const SizedBox(height: 24),
+                const Text(
+                  'Välj din yrkesutgång',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Din yrkesutgång avgör vilka arbetsmoment du ser i tidkorten',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 32),
+                ...specializations.map((spec) {
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: RadioListTile<String>(
+                      value: spec,
+                      groupValue: _selectedSpecialization,
+                      onChanged: _loading
+                          ? null
+                          : (value) {
+                              setState(() {
+                                _selectedSpecialization = value;
+                                _error = null;
+                              });
+                              _submitSpecialization();
+                            },
+                      title: Text(spec, style: const TextStyle(fontSize: 16)),
+                      controlAffinity: ListTileControlAffinity.trailing,
+                      activeColor: Colors.orange,
+                    ),
+                  );
+                }),
+                if (_error != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                if (_loading) ...[
+                  const SizedBox(height: 24),
+                  const Center(child: CircularProgressIndicator()),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class ClassCodeScannerPage extends StatefulWidget {
+  const ClassCodeScannerPage({super.key});
+
+  @override
+  State<ClassCodeScannerPage> createState() => _ClassCodeScannerPageState();
+}
+
+class _ClassCodeScannerPageState extends State<ClassCodeScannerPage> {
+  final MobileScannerController _controller = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+  );
+  bool _hasScanned = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _handleDetect(BarcodeCapture capture) {
+    if (_hasScanned) return;
+    if (capture.barcodes.isEmpty) return;
+    final code = capture.barcodes.first.rawValue;
+    if (code == null || code.trim().isEmpty) return;
+
+    _hasScanned = true;
+    Navigator.pop(context, code.trim());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Skanna QR-kod')),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          MobileScanner(controller: _controller, onDetect: _handleDetect),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              width: double.infinity,
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Rikta kameran mot klassens QR-kod',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, authSnap) {
+        if (authSnap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final user = authSnap.data;
+        if (user == null) return const LoginScreen();
+
+        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .snapshots(),
+          builder: (context, profileSnap) {
+            if (profileSnap.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            final data = profileSnap.data?.data();
+            final role = (data?['role'] ?? 'student')
+                .toString()
+                .trim()
+                .toLowerCase();
+
+            switch (role) {
+              case 'admin':
+                return const AdminScreen();
+
+              case 'teacher':
+                // Kolla om läraren är godkänd
+                final approved = data?['approved'] as bool? ?? false;
+                if (!approved) {
+                  return Scaffold(
+                    appBar: AppBar(
+                      title: const Text('Väntar på godkännande'),
+                      actions: [
+                        IconButton(
+                          icon: const Icon(Icons.logout),
+                          onPressed: () => FirebaseAuth.instance.signOut(),
+                        ),
+                      ],
+                    ),
+                    body: const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.hourglass_empty,
+                              size: 64,
+                              color: Colors.orange,
+                            ),
+                            SizedBox(height: 24),
+                            Text(
+                              'Ditt lärarkonto väntar på godkännande',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 16),
+                            Text(
+                              'En administratör kommer att granska din ansökan inom kort. Du får ett mejl när ditt konto godkänts.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return const MainNavigation();
+
+              default: // student
+                // Kolla om eleven har genomfört onboarding
+                final onboardingComplete =
+                    data?['onboardingComplete'] as bool? ?? false;
+                if (!onboardingComplete) {
+                  return const StudentOnboardingScreen();
+                }
+
+                final teacherUid = (data?['teacherUid'] ?? '')
+                    .toString()
+                    .trim();
+
+                if (teacherUid.isNotEmpty) {
+                  return const MainNavigation();
+                }
+                return StudentHome();
+            }
+          },
+        );
+      },
+    );
+  }
+}
+
+class ProfileSetupScreen extends StatefulWidget {
+  const ProfileSetupScreen({super.key});
+
+  @override
+  State<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
+}
+
+class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
+  final _nameCtrl = TextEditingController();
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        setState(() => _error = 'Du är inte inloggad.');
+        return;
+      }
+
+      final name = _nameCtrl.text.trim();
+      if (name.isEmpty) {
+        setState(() => _error = 'Skriv ditt namn.');
+        return;
+      }
+
+      // Spara i Firestore-profilen
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'displayName': name,
+      }, SetOptions(merge: true));
+
+      // (Valfritt men bra) Spara även i Firebase Auth-profilen
+      await user.updateDisplayName(name);
+    } catch (e) {
+      setState(() => _error = 'Fel: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Fyll i din profil'),
+        actions: [
+          IconButton(
+            tooltip: 'Logga ut',
+            onPressed: () => FirebaseAuth.instance.signOut(),
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Skriv ditt namn (det visas för lärare/elever).',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _nameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Namn',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (_error != null) ...[
+                  Text(_error!, style: const TextStyle(color: Colors.red)),
+                  const SizedBox(height: 12),
+                ],
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _loading ? null : _save,
+                    child: _loading
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Spara'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signIn() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailCtrl.text.trim(),
+        password: _passCtrl.text,
+      );
+    } on FirebaseAuthException catch (e) {
+      setState(() => _error = e.message ?? 'Inloggning misslyckades.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _showRegisterDialog() async {
+    // Först välja roll
+    final role = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Skapa konto'),
+        content: const Text('Välj din roll:'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Avbryt'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, 'student'),
+            icon: const Icon(Icons.school),
+            label: const Text('Elev'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, 'teacher'),
+            icon: const Icon(Icons.person),
+            label: const Text('Lärare'),
+          ),
+        ],
+      ),
+    );
+
+    if (role == null) return;
+
+    if (role == 'student') {
+      await _showStudentRegisterDialog();
+    } else {
+      await _showTeacherRegisterDialog();
+    }
+  }
+
+  Future<void> _showStudentRegisterDialog() async {
+    final firstNameCtrl = TextEditingController();
+    final lastNameCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+
+    try {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Skapa elevkonto'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 400,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: firstNameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Namn',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: lastNameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Efternamn',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Lösenord',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: emailCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'E-post',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Du kommer att ange klasskod och yrkesutgång efter att kontot skapats',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Avbryt'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final firstName = firstNameCtrl.text.trim();
+                final lastName = lastNameCtrl.text.trim();
+                final password = passCtrl.text;
+                final email = emailCtrl.text.trim();
+
+                if (firstName.isEmpty ||
+                    lastName.isEmpty ||
+                    password.isEmpty ||
+                    email.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Fyll i alla fält')),
+                  );
+                  return;
+                }
+
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
+
+                try {
+                  await _registerStudent(
+                    firstName: firstName,
+                    lastName: lastName,
+                    email: email,
+                    password: password,
+                  );
+                } catch (e) {
+                  // Fel hanteras i _registerStudent
+                }
+              },
+              child: const Text('Skapa konto'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      firstNameCtrl.dispose();
+      lastNameCtrl.dispose();
+      passCtrl.dispose();
+      emailCtrl.dispose();
+    }
+  }
+
+  Future<void> _showTeacherRegisterDialog() async {
+    final firstNameCtrl = TextEditingController();
+    final lastNameCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final schoolCtrl = TextEditingController();
+
+    try {
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Skapa lärarkonto'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 400,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: firstNameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Namn',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: lastNameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Efternamn',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Lösenord',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: emailCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'E-post',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: schoolCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Skola',
+                      border: OutlineInputBorder(),
+                      hintText: 'T.ex. Anderstorpsskolan',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Admin kommer att granska din ansökan innan du får tillgång',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Avbryt'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final firstName = firstNameCtrl.text.trim();
+                final lastName = lastNameCtrl.text.trim();
+                final password = passCtrl.text;
+                final email = emailCtrl.text.trim();
+                final school = schoolCtrl.text.trim();
+
+                if (firstName.isEmpty ||
+                    lastName.isEmpty ||
+                    password.isEmpty ||
+                    email.isEmpty ||
+                    school.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Fyll i alla fält')),
+                  );
+                  return;
+                }
+
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                }
+                await _registerTeacher(
+                  firstName: firstName,
+                  lastName: lastName,
+                  email: email,
+                  password: password,
+                  school: school,
+                );
+              },
+              child: const Text('Skapa konto'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      firstNameCtrl.dispose();
+      lastNameCtrl.dispose();
+      passCtrl.dispose();
+      emailCtrl.dispose();
+      schoolCtrl.dispose();
+    }
+  }
+
+  Future<void> _registerStudent({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String password,
+  }) async {
+    if (!mounted) return;
+    
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final uid = cred.user!.uid;
+      final fullName = '$firstName $lastName'.trim();
+
+      await cred.user!.updateDisplayName(fullName);
+
+      // Skapa elevkonto utan klasskod och yrkesutgång (kommer senare i onboarding)
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'name': fullName,
+        'displayName': fullName,
+        'firstName': firstName,
+        'lastName': lastName,
+        'email': email.toLowerCase(),
+        'role': 'student',
+        'createdAt': FieldValue.serverTimestamp(),
+        'onboardingComplete': false, // Viktig flagga
+      });
+
+      if (mounted) {
+        setState(() {
+          _error = null;
+          _loading = false;
+        });
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        setState(() => _error = e.message ?? 'Konto kunde inte skapas.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = 'Fel: $e');
+      }
+    }
+  }
+
+  Future<void> _registerTeacher({
+    required String firstName,
+    required String lastName,
+    required String email,
+    required String password,
+    required String school,
+  }) async {
+    if (!mounted) return;
+    
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final uid = cred.user!.uid;
+      final fullName = '$firstName $lastName'.trim();
+
+      await cred.user!.updateDisplayName(fullName);
+
+      // Skapa lärarkonto med pending-status
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'name': fullName,
+        'displayName': fullName,
+        'firstName': firstName,
+        'lastName': lastName,
+        'email': email.toLowerCase(),
+        'role': 'teacher',
+        'school': school,
+        'approved': false, // Väntar på admin-godkännande
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Skapa notis till admin
+      await FirebaseFirestore.instance.collection('adminNotifications').add({
+        'type': 'newTeacher',
+        'teacherId': uid,
+        'teacherName': fullName,
+        'teacherEmail': email,
+        'school': school,
+        'createdAt': FieldValue.serverTimestamp(),
+        'resolved': false,
+      });
+
+      if (mounted) {
+        setState(() {
+          _error = null;
+          _loading = false;
+        });
+
+        // Visa meddelande om att de måste vänta på godkännande
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Ditt lärarkonto har skapats men väntar på godkännande. Du får ett mejl när kontot godkänts.',
+            ),
+          ),
+        );
+
+        // Logga ut tills kontot godkänns
+        await FirebaseAuth.instance.signOut();
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        setState(() => _error = e.message ?? 'Konto kunde inte skapas.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = 'Fel: $e');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFFFF7ED), // orange-50
+              Color(0xFFFFEDD5), // orange-100
+            ],
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Card(
+                elevation: 8,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Rubrik
+                      const Text(
+                        'APL-appen',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFEA580C), // orange-600
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Logga in',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Color(0xFF6B7280), // gray-600
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      // E-post fält
+                      TextField(
+                        controller: _emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: InputDecoration(
+                          labelText: 'E-post',
+                          hintText: 'din@email.se',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFEA580C), // orange-600
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Lösenord fält
+                      TextField(
+                        controller: _passCtrl,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: 'Lösenord',
+                          hintText: '••••••••',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFEA580C), // orange-600
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Felmeddelande
+                      if (_error != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2), // red-50
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Color(0xFFDC2626), // red-600
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _error!,
+                                  style: const TextStyle(
+                                    color: Color(0xFFDC2626), // red-600
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Logga in knapp
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: _loading ? null : _signIn,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(
+                              0xFFEA580C,
+                            ), // orange-600
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: _loading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                              : const Text(
+                                  'Logga in',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Skapa konto knapp
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton(
+                          onPressed: _loading ? null : _showRegisterDialog,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(
+                              0xFFEA580C,
+                            ), // orange-600
+                            side: const BorderSide(
+                              color: Color(0xFFEA580C), // orange-600
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text(
+                            'Skapa konto',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class TeacherHome extends StatefulWidget {
+  const TeacherHome({super.key});
+
+  @override
+  State<TeacherHome> createState() => _TeacherHomeState();
+}
+
+class _TeacherHomeState extends State<TeacherHome> {
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final teacherUid = FirebaseAuth.instance.currentUser!.uid;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Översikt'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bar_chart),
+            tooltip: 'Statistik',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const StatisticsScreen()),
+              );
+            },
+          ),
+          IconButton(
+            tooltip: 'Logga ut',
+            onPressed: () => FirebaseAuth.instance.signOut(),
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('classes')
+            .where('teacherUid', isEqualTo: teacherUid)
+            .snapshots(),
+        builder: (context, classSnapshot) {
+          if (classSnapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final classes = classSnapshot.data?.docs ?? [];
+          
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .where('teacherUid', isEqualTo: teacherUid)
+                .where('role', isEqualTo: 'student')
+                .snapshots(),
+            builder: (context, studentSnapshot) {
+              if (studentSnapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final students = studentSnapshot.data?.docs ?? [];
+
+              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collection('assessmentRequests')
+                    .where('status', isEqualTo: 'pending')
+                    .snapshots(),
+                builder: (context, assessmentSnapshot) {
+                  final allPendingAssessments = assessmentSnapshot.data?.docs ?? [];
+                  
+                  // Filtrera bara bedömningar för denna lärares elever
+                  final pendingAssessments = allPendingAssessments.where((doc) {
+                    final studentUid = doc.data()['studentUid']?.toString() ?? '';
+                    return students.any((s) => s.id == studentUid);
+                  }).toList();
+
+                  return CustomScrollView(
+                    slivers: [
+                      // Dashboard statistik
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Dashboard',
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              
+                              // Statistikkort
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      icon: Icons.class_,
+                                      label: 'Klasser',
+                                      value: '${classes.length}',
+                                      color: Colors.blue,
+                                      onTap: () => _showClassManagement(context, teacherUid),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      icon: Icons.people,
+                                      label: 'Elever',
+                                      value: '${students.length}',
+                                      color: Colors.green,
+                                      onTap: null,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      icon: Icons.pending_actions,
+                                      label: 'Väntande',
+                                      value: '${pendingAssessments.length}',
+                                      color: Colors.orange,
+                                      onTap: pendingAssessments.isEmpty
+                                          ? null
+                                          : () => _showPendingAssessments(context, pendingAssessments, students),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              
+                              const SizedBox(height: 24),
+                              
+                              // Klassöversikt
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Mina klasser',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: () => _showClassManagement(context, teacherUid),
+                                    icon: const Icon(Icons.settings),
+                                    label: const Text('Hantera'),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // Klasskort
+                      if (classes.isEmpty)
+                        const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 16),
+                            child: Card(
+                              child: Padding(
+                                padding: EdgeInsets.all(32),
+                                child: Center(
+                                  child: Column(
+                                    children: [
+                                      Icon(Icons.class_, size: 48, color: Colors.grey),
+                                      SizedBox(height: 16),
+                                      Text(
+                                        'Inga klasser ännu',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'Tryck på + för att skapa din första klass',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          sliver: SliverGrid(
+                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 200,
+                              childAspectRatio: 1.3,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                            ),
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final classDoc = classes[index];
+                                final className = classDoc.data()['name']?.toString() ?? '';
+                                final classStudents = students.where(
+                                  (s) => s.data()['classId']?.toString() == className,
+                                ).toList();
+                                
+                                final classPending = pendingAssessments.where((a) {
+                                  final studentUid = a.data()['studentUid']?.toString() ?? '';
+                                  return classStudents.any((s) => s.id == studentUid);
+                                }).length;
+
+                                return _buildClassCard(
+                                  className: className,
+                                  studentCount: classStudents.length,
+                                  pendingCount: classPending,
+                                  onTap: () => _showClassDetails(context, className, classStudents),
+                                );
+                              },
+                              childCount: classes.length,
+                            ),
+                          ),
+                        ),
+
+                      // Elevlista
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Alla elever',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              
+                              // Sökfält
+                              TextField(
+                                controller: _searchController,
+                                decoration: InputDecoration(
+                                  hintText: 'Sök elev...',
+                                  prefixIcon: const Icon(Icons.search),
+                                  suffixIcon: _searchQuery.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.clear),
+                                          onPressed: () {
+                                            setState(() {
+                                              _searchController.clear();
+                                              _searchQuery = '';
+                                            });
+                                          },
+                                        )
+                                      : null,
+                                  border: const OutlineInputBorder(),
+                                ),
+                                onChanged: (value) {
+                                  setState(() {
+                                    _searchQuery = value.toLowerCase();
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // Filtrerad elevlista
+                      Builder(
+                        builder: (context) {
+                          final filtered = students.where((doc) {
+                            if (_searchQuery.isEmpty) return true;
+                            
+                            final data = doc.data();
+                            final name = (data['displayName'] ?? '').toString().toLowerCase();
+                            final email = (data['email'] ?? '').toString().toLowerCase();
+                            final classId = (data['classId'] ?? '').toString().toLowerCase();
+                            
+                            return name.contains(_searchQuery) ||
+                                   email.contains(_searchQuery) ||
+                                   classId.contains(_searchQuery);
+                          }).toList();
+
+                          // Sortera
+                          filtered.sort((a, b) {
+                            final aName = (a.data()['displayName'] ?? '').toString();
+                            final bName = (b.data()['displayName'] ?? '').toString();
+                            final aEmail = (a.data()['email'] ?? '').toString();
+                            final bEmail = (b.data()['email'] ?? '').toString();
+                            final ax = (aName.isEmpty ? aEmail : aName).toLowerCase();
+                            final bx = (bName.isEmpty ? bEmail : bName).toLowerCase();
+                            return ax.compareTo(bx);
+                          });
+
+                          if (filtered.isEmpty) {
+                            return SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.all(32),
+                                child: Center(
+                                  child: Text(
+                                    _searchQuery.isEmpty
+                                        ? 'Inga elever ännu\nLägg till elever via +-knappen'
+                                        : 'Inga elever matchade sökningen',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+
+                          return SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                            sliver: SliverList(
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  final doc = filtered[index];
+                                  final data = doc.data();
+                                  final studentUid = doc.id;
+                                  final name = (data['displayName'] ?? '').toString().trim();
+                                  final email = (data['email'] ?? '').toString();
+                                  final classId = (data['classId'] ?? '').toString().trim();
+
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    child: ListTile(
+                                      leading: CircleAvatar(
+                                        backgroundColor: Colors.blue.shade100,
+                                        child: Text(
+                                          name.isNotEmpty 
+                                              ? name[0].toUpperCase()
+                                              : email[0].toUpperCase(),
+                                          style: TextStyle(
+                                            color: Colors.blue.shade700,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      title: Text(name.isEmpty ? email : name),
+                                      subtitle: Row(
+                                        children: [
+                                          if (name.isNotEmpty)
+                                            Expanded(
+                                              child: Text(
+                                                email,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          if (classId.isNotEmpty) ...[
+                                            if (name.isNotEmpty) const Text(' • '),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.blue.shade50,
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                classId,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.blue.shade700,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      trailing: const Icon(Icons.chevron_right),
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => StudentDetailStatisticsScreen(
+                                              studentUid: studentUid,
+                                              studentName: name.isEmpty ? email : name,
+                                              classId: classId,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  );
+                                },
+                                childCount: filtered.length,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddMenu(context, teacherUid),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+
+  Widget _buildStatCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+    required VoidCallback? onTap,
+  }) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Icon(icon, color: color, size: 32),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildClassCard({
+    required String className,
+    required int studentCount,
+    required int pendingCount,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.class_, color: Colors.blue.shade700, size: 20),
+                  ),
+                  const Spacer(),
+                  if (pendingCount > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.orange,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$pendingCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                className,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                '$studentCount ${studentCount == 1 ? 'elev' : 'elever'}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAddMenu(BuildContext context, String teacherUid) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.class_),
+              title: const Text('Skapa ny klass'),
+              onTap: () {
+                Navigator.pop(context);
+                _showCreateClassDialog(context, teacherUid);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_add),
+              title: const Text('Lägg till elev (e-post)'),
+              onTap: () {
+                Navigator.pop(context);
+                _showAddStudentDialog(context, teacherUid);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.qr_code),
+              title: const Text('Generera kopplingskod'),
+              onTap: () {
+                Navigator.pop(context);
+                _showGenerateInviteDialog(context, teacherUid);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCreateClassDialog(BuildContext context, String teacherUid) {
+    final controller = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Skapa ny klass'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Klassnamn (t.ex. BA23)',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Avbryt'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+
+              final docId = '${teacherUid}_$name';
+              await FirebaseFirestore.instance.collection('classes').doc(docId).set({
+                'teacherUid': teacherUid,
+                'name': name,
+                'createdAt': FieldValue.serverTimestamp(),
+              });
+
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Klass "$name" skapad')),
+                );
+              }
+            },
+            child: const Text('Skapa'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddStudentDialog(BuildContext context, String teacherUid) async {
+    final emailController = TextEditingController();
+    String selectedClass = 'NONE';
+
+    // Hämta klasser
+    final classesSnapshot = await FirebaseFirestore.instance
+        .collection('classes')
+        .where('teacherUid', isEqualTo: teacherUid)
+        .get();
+
+    final classNames = classesSnapshot.docs
+        .map((d) => (d.data()['name'] ?? '').toString().trim())
+        .where((s) => s.isNotEmpty)
+        .toList()
+      ..sort();
+
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Lägg till elev'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Elevens e-post',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                autofocus: true,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                initialValue: selectedClass,
+                decoration: const InputDecoration(
+                  labelText: 'Klass',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem(value: 'NONE', child: Text('Ingen')),
+                  ...classNames.map((c) => DropdownMenuItem(value: c, child: Text(c))),
+                ],
+                onChanged: (v) => setState(() => selectedClass = v ?? 'NONE'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Avbryt'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final email = emailController.text.trim().toLowerCase();
+                if (email.isEmpty) return;
+
+                try {
+                  final q = await FirebaseFirestore.instance
+                      .collection('users')
+                      .where('email', isEqualTo: email)
+                      .limit(1)
+                      .get();
+
+                  if (q.docs.isEmpty) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Hittade ingen användare med den e-posten')),
+                      );
+                    }
+                    return;
+                  }
+
+                  final userDoc = q.docs.first;
+                  final role = (userDoc.data()['role'] ?? 'student').toString().trim().toLowerCase();
+                  
+                  if (role != 'student') {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Användaren är inte en elev')),
+                      );
+                    }
+                    return;
+                  }
+
+                  final classId = (selectedClass == 'NONE') ? '' : selectedClass;
+
+                  await userDoc.reference.set({
+                    'teacherUid': teacherUid,
+                    'classId': classId,
+                  }, SetOptions(merge: true));
+
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Elev tillagd')),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Fel: $e')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Lägg till'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showGenerateInviteDialog(BuildContext context, String teacherUid) async {
+    String selectedClass = 'NONE';
+    String? generatedCode;
+
+    // Hämta klasser
+    final classesSnapshot = await FirebaseFirestore.instance
+        .collection('classes')
+        .where('teacherUid', isEqualTo: teacherUid)
+        .get();
+
+    final classNames = classesSnapshot.docs
+        .map((d) => (d.data()['name'] ?? '').toString().trim())
+        .where((s) => s.isNotEmpty)
+        .toList()
+      ..sort();
+
+    if (classNames.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Skapa minst en klass först')),
+        );
+      }
+      return;
+    }
+
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Generera kopplingskod'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: selectedClass,
+                decoration: const InputDecoration(
+                  labelText: 'Klass',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  const DropdownMenuItem(value: 'NONE', child: Text('Ingen')),
+                  ...classNames.map((c) => DropdownMenuItem(value: c, child: Text(c))),
+                ],
+                onChanged: (v) => setState(() {
+                  selectedClass = v ?? 'NONE';
+                  generatedCode = null;
+                }),
+              ),
+              if (generatedCode != null) ...[
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        'Kopplingskod genererad!',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      SelectableText(
+                        generatedCode!,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Dela denna kod med eleven',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Stäng'),
+            ),
+            if (generatedCode == null)
+              ElevatedButton(
+                onPressed: () async {
+                  if (selectedClass == 'NONE') {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Välj en klass')),
+                    );
+                    return;
+                  }
+
+                  String code = '';
+                  final refCol = FirebaseFirestore.instance.collection('invites');
+                  
+                  for (int i = 0; i < 5; i++) {
+                    final candidate = generateInviteCode();
+                    final doc = await refCol.doc(candidate).get();
+                    if (!doc.exists) {
+                      code = candidate;
+                      await refCol.doc(code).set({
+                        'teacherUid': teacherUid,
+                        'classId': selectedClass,
+                        'used': false,
+                        'createdAt': FieldValue.serverTimestamp(),
+                      });
+                      break;
+                    }
+                  }
+
+                  if (code.isEmpty) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Kunde inte skapa kod, försök igen')),
+                      );
+                    }
+                    return;
+                  }
+
+                  setState(() => generatedCode = code);
+                },
+                child: const Text('Generera'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showClassManagement(BuildContext context, String teacherUid) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _ClassManagementScreen(teacherUid: teacherUid),
+      ),
+    );
+  }
+
+  void _showPendingAssessments(
+    BuildContext context,
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> assessments,
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> students,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 600),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade700,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.pending_actions, color: Colors.white),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Väntande bedömningar',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: assessments.length,
+                  itemBuilder: (context, index) {
+                    final assessment = assessments[index];
+                    final data = assessment.data();
+                    final studentUid = data['studentUid']?.toString() ?? '';
+                    final weeks = (data['weeks'] as List?)?.cast<String>().join(', ') ?? '';
+                    
+                    final student = students.firstWhere(
+                      (s) => s.id == studentUid,
+                      orElse: () => students.first,
+                    );
+                    
+                    final studentName = student.data()['displayName']?.toString() ?? 
+                                       student.data()['email']?.toString() ?? 
+                                       'Okänd';
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: const CircleAvatar(
+                          backgroundColor: Colors.orange,
+                          child: Icon(Icons.assignment, color: Colors.white),
+                        ),
+                        title: Text(studentName),
+                        subtitle: Text('Veckor: $weeks'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Navigator.pop(context);
+                          // Kan lägga till navigering till bedömningssidan här
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showClassDetails(
+    BuildContext context,
+    String className,
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> classStudents,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 600),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade700,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.class_, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            className,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            '${classStudents.length} ${classStudents.length == 1 ? 'elev' : 'elever'}',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: classStudents.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'Inga elever i denna klass',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: classStudents.length,
+                        itemBuilder: (context, index) {
+                          final student = classStudents[index];
+                          final data = student.data();
+                          final name = data['displayName']?.toString().trim() ?? '';
+                          final email = data['email']?.toString() ?? '';
+
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.blue.shade100,
+                                child: Text(
+                                  name.isNotEmpty 
+                                      ? name[0].toUpperCase()
+                                      : email[0].toUpperCase(),
+                                  style: TextStyle(
+                                    color: Colors.blue.shade700,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              title: Text(name.isEmpty ? email : name),
+                              subtitle: name.isNotEmpty ? Text(email) : null,
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () {
+                                Navigator.pop(context);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => StudentDetailStatisticsScreen(
+                                      studentUid: student.id,
+                                      studentName: name.isEmpty ? email : name,
+                                      classId: className,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ClassManagementScreen extends StatelessWidget {
+  final String teacherUid;
+
+  const _ClassManagementScreen({required this.teacherUid});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Hantera klasser'),
+      ),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('classes')
+            .where('teacherUid', isEqualTo: teacherUid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final classes = snapshot.data?.docs ?? [];
+
+          if (classes.isEmpty) {
+            return const Center(
+              child: Text(
+                'Inga klasser ännu\nSkapa en klass via +-knappen på föregående sida',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey),
+              ),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: classes.length,
+            itemBuilder: (context, index) {
+              final classDoc = classes[index];
+              final className = classDoc.data()['name']?.toString() ?? '';
+
+              return Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.class_, color: Colors.blue.shade700),
+                  ),
+                  title: Text(
+                    className,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Ta bort klass'),
+                          content: Text('Är du säker på att du vill ta bort klassen "$className"?\n\nEleverna kommer att behålla sin koppling till dig.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text('Avbryt'),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                              ),
+                              onPressed: () => Navigator.pop(context, true),
+                              child: const Text('Ta bort'),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (confirm == true) {
+                        // Ta bort klassen
+                        await classDoc.reference.delete();
+
+                        // Uppdatera elever som har denna klass
+                        final studentsInClass = await FirebaseFirestore.instance
+                            .collection('users')
+                            .where('teacherUid', isEqualTo: teacherUid)
+                            .where('classId', isEqualTo: className)
+                            .get();
+
+                        for (final student in studentsInClass.docs) {
+                          await student.reference.update({'classId': ''});
+                        }
+
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Klass "$className" borttagen')),
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+class StudentDetailScreen extends StatelessWidget {
+  final String studentUid;
+
+  const StudentDetailScreen({super.key, required this.studentUid});
+
+  @override
+  Widget build(BuildContext context) {
+    final docStream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(studentUid)
+        .snapshots();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Elev')),
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: docStream,
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snap.hasData || !snap.data!.exists) {
+            return const Center(child: Text('Eleven hittades inte.'));
+          }
+
+          final data = snap.data!.data()!;
+          final name = (data['displayName'] ?? '').toString().trim();
+          final email = (data['email'] ?? '').toString().trim();
+          final classId = (data['classId'] ?? '').toString().trim();
+
+          return SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Text(
+                    name.isEmpty ? 'Okänt namn' : name,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  if (email.isNotEmpty) Text('E-post: $email'),
+                  const SizedBox(height: 6),
+                  Text('Klass: ${classId.isEmpty ? 'Ingen' : classId}'),
+                  const SizedBox(height: 18),
+                  const Divider(),
+                  const SizedBox(height: 12),
+
+                  // Tidkort-knapp
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        final now = DateTime.now();
+                        final monday = now.subtract(
+                          Duration(days: now.weekday - DateTime.monday),
+                        );
+                        final nextMonday = monday.add(const Duration(days: 7));
+
+                        String ymd(DateTime d) =>
+                            '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => TeacherTimesheetPeriodScreen(
+                              studentUid: studentUid,
+                              weekStart1: ymd(monday),
+                              weekStart2: ymd(nextMonday),
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text('Se tidkort'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Bedömningar-sektion
+                  const Text(
+                    'Bedömningar',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+
+                  StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('assessments')
+                        .where('studentUid', isEqualTo: studentUid)
+                        .orderBy('submittedAt', descending: true)
+                        .snapshots(),
+                    builder: (context, assessmentSnap) {
+                      if (assessmentSnap.connectionState ==
+                          ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final assessments = assessmentSnap.data?.docs ?? [];
+
+                      if (assessments.isEmpty) {
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'Inga bedömningar än.',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        );
+                      }
+
+                      return ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: assessments.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (context, i) {
+                          final assessment = assessments[i].data();
+                          final supervisorName =
+                              (assessment['supervisorName'] ?? '').toString();
+                          final supervisorCompany =
+                              (assessment['supervisorCompany'] ?? '')
+                                  .toString();
+                          final feedback = (assessment['feedback'] ?? '')
+                              .toString();
+                          final phone = (assessment['supervisorPhone'] ?? '')
+                              .toString();
+                          final submittedAt =
+                              (assessment['submittedAt'] as Timestamp?)
+                                  ?.toDate();
+
+                          return Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.green.shade200),
+                              borderRadius: BorderRadius.circular(8),
+                              color: Colors.green.shade50,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          supervisorName,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          supervisorCompany,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade400,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        'Godkänd ✅',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                if (feedback.isNotEmpty)
+                                  Text(
+                                    feedback,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.phone,
+                                      size: 14,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      phone,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (submittedAt != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Inlämnad: ${submittedAt.day}/${submittedAt.month.toString().padLeft(2, '0')}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Bedömning kommer snart 🙂'),
+                          ),
+                        );
+                      },
+                      child: const Text('Exportera bedömningar'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class TeacherTimesheetPeriodScreen extends StatelessWidget {
+  final String studentUid;
+  final String weekStart1;
+  final String weekStart2; // kan vara '' om du vill
+
+  const TeacherTimesheetPeriodScreen({
+    super.key,
+    required this.studentUid,
+    required this.weekStart1,
+    required this.weekStart2,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final teacherUid = FirebaseAuth.instance.currentUser!.uid;
+
+    return DefaultTabController(
+      length: weekStart2.isEmpty ? 1 : 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Tidkort (lärare)'),
+          bottom: TabBar(
+            tabs: [
+              Tab(text: weekStart1),
+              if (weekStart2.isNotEmpty) Tab(text: weekStart2),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            WeeklyTimesheetScreen(
+              studentUid: studentUid,
+              teacherUid: teacherUid,
+              weekStart: weekStart1,
+              readOnly: true, // lärare kan inte skriva i tider
+            ),
+            if (weekStart2.isNotEmpty)
+              WeeklyTimesheetScreen(
+                studentUid: studentUid,
+                teacherUid: teacherUid,
+                weekStart: weekStart2,
+                readOnly: true,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class StudentHome extends StatefulWidget {
+  const StudentHome({super.key});
+
+  @override
+  State<StudentHome> createState() => _StudentHomeState();
+}
+
+class _StudentHomeState extends State<StudentHome> {
+  final _codeCtrl = TextEditingController();
+  String? _msg;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _codeCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _connectToTeacher() async {
+    setState(() {
+      _loading = true;
+      _msg = null;
+    });
+
+    try {
+      final studentUid = FirebaseAuth.instance.currentUser!.uid;
+      final code = _codeCtrl.text.trim().toUpperCase();
+
+      if (code.isEmpty) {
+        setState(() => _msg = 'Skriv en kod.');
+        return;
+      }
+
+      final inviteRef = FirebaseFirestore.instance
+          .collection('invites')
+          .doc(code);
+
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final inviteSnap = await tx.get(inviteRef);
+        if (!inviteSnap.exists) throw Exception('Koden finns inte.');
+
+        final data = inviteSnap.data() as Map<String, dynamic>;
+        final used = (data['used'] ?? false) as bool;
+        if (used) throw Exception('Koden är redan använd.');
+
+        final teacherUid = (data['teacherUid'] ?? '').toString();
+        if (teacherUid.isEmpty) {
+          throw Exception('Koden är trasig (saknar lärare).');
+        }
+
+        // 1) Koppla eleven till läraren
+        final studentRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(studentUid);
+        tx.update(studentRef, {'teacherUid': teacherUid});
+
+        // 2) Markera koden som använd
+        tx.update(inviteRef, {
+          'used': true,
+          'usedBy': studentUid,
+          'usedAt': FieldValue.serverTimestamp(),
+        });
+      });
+
+      setState(() => _msg = 'Klart! Du är nu kopplad till din lärare.');
+    } catch (e) {
+      setState(() => _msg = 'Fel: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Elev'),
+        actions: [
+          IconButton(
+            tooltip: 'Logga ut',
+            onPressed: () => FirebaseAuth.instance.signOut(),
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Ange kopplingskod från din lärare',
+                  style: TextStyle(fontSize: 18),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _codeCtrl,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'Kod (t.ex. 7F3K2Q)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _loading ? null : _connectToTeacher,
+                    child: _loading
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Koppla'),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (_msg != null) Text(_msg!, textAlign: TextAlign.center),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class StudentTimesheetOverview extends StatelessWidget {
+  const StudentTimesheetOverview({super.key});
+
+  int _sumEntries(Map<String, dynamic> entries) {
+    int sum = 0;
+    for (final row in entries.values) {
+      if (row is Map) {
+        for (final v in row.values) {
+          sum += (v is int) ? v : int.tryParse(v.toString()) ?? 0;
+        }
+      }
+    }
+    return sum;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser!;
+    final userDocStream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots();
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: userDocStream,
+      builder: (context, userSnap) {
+        if (userSnap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final userData = userSnap.data?.data() ?? {};
+        final displayName = (userData['displayName'] ?? '').toString().trim();
+
+        final timesheetQuery = FirebaseFirestore.instance
+            .collection('timesheets')
+            .where('studentUid', isEqualTo: user.uid);
+
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: timesheetQuery.snapshots(),
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            final docs = snap.data?.docs ?? [];
+
+            // Beräkna denna veckas timmar
+            final now = DateTime.now();
+            final monday = now.subtract(
+              Duration(days: now.weekday - DateTime.monday),
+            );
+            final weekStart = _ymd(monday);
+
+            int thisWeekHours = 0;
+            int totalHours = 0;
+            int approvedCount = 0;
+            bool thisWeekExists = false;
+
+            for (final d in docs) {
+              final data = d.data();
+              final entries =
+                  (data['entries'] as Map?)?.cast<String, dynamic>() ?? {};
+              final sum = _sumEntries(entries);
+              totalHours += sum;
+
+              if ((data['approved'] ?? false) == true) approvedCount++;
+
+              String ws = (data['weekStart'] ?? '').toString().trim();
+              if (ws == weekStart) {
+                thisWeekHours = sum;
+                thisWeekExists = true;
+              }
+            }
+
+            return Scaffold(
+              body: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Välkomsthälsning
+                      Text(
+                        'Hej ${displayName.isEmpty ? 'där' : displayName}! 👋',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Här är din vecka',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Denna veckas status — stor kort
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.orange.shade400,
+                              Colors.orange.shade600,
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.orange.shade200,
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Denna vecka',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '$thisWeekHours h',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 36,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.timer,
+                                    color: Colors.white,
+                                    size: 28,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              thisWeekExists
+                                  ? 'Tidkort påstartat'
+                                  : 'Deadline: Fredag kl 23:59',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Snabbgenvägar — 3 stora knappar
+                      const Text(
+                        'Snabbgenvägar',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Column(
+                        children: [
+                          _QuickActionButton(
+                            icon: Icons.edit_calendar,
+                            color: Colors.orange,
+                            title: 'Logga tid nu',
+                            onPressed: () {
+                              final now = DateTime.now();
+                              final monday = now.subtract(
+                                Duration(days: now.weekday - DateTime.monday),
+                              );
+                              final nextMonday = monday.add(
+                                const Duration(days: 7),
+                              );
+
+                              String ymd(DateTime d) =>
+                                  '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => TimesheetPeriodScreen(
+                                    weekStart1: ymd(monday),
+                                    weekStart2: ymd(nextMonday),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          _QuickActionButton(
+                            icon: Icons.checklist,
+                            color: Colors.orange,
+                            title: 'Se bedömning',
+                            onPressed: () {
+                              // Navigera till bedömnings-flik
+                              // TODO: Implementera navigation till bedömnings-flik
+                            },
+                          ),
+                          const SizedBox(height: 10),
+                          _QuickActionButton(
+                            icon: Icons.restaurant,
+                            color: Colors.green,
+                            title: 'Lunch och reseersättning',
+                            onPressed: () {
+                              // Navigera till ersättnings-flik
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Denna veckan — progress card
+                      if (thisWeekExists) ...[
+                        const Text(
+                          'Denna veckans tidkort',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Vecka ${DateTime.now().day < 7 ? '1' : '2'}', // enkel veckonummer
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.shade100,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        'Pågående',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.orange,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  '$thisWeekHours av ~40 timmar',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: LinearProgressIndicator(
+                                    value: (thisWeekHours / 40).clamp(0.0, 1.0),
+                                    minHeight: 8,
+                                    backgroundColor: Colors.grey.shade200,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.orange.shade500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+
+                      // Notifieringar från läraren
+                      if (approvedCount > 0) ...[
+                        const Text(
+                          'Status',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            border: Border.all(color: Colors.green.shade200),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.check_circle,
+                                color: Colors.green.shade600,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  '$approvedCount tidkort godkänd av läraren ✅',
+                                  style: TextStyle(
+                                    color: Colors.green.shade700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+
+                      // Totalt
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Totalt loggade timmar',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              '$totalHours h',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _QuickActionButton extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final VoidCallback onPressed;
+
+  const _QuickActionButton({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          decoration: BoxDecoration(
+            border: Border.all(color: color.withOpacity(0.3)),
+            borderRadius: BorderRadius.circular(12),
+            color: color.withOpacity(0.08),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const Spacer(),
+              Icon(
+                Icons.arrow_forward_ios,
+                size: 14,
+                color: Colors.grey.shade400,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class StudentClassView extends StatelessWidget {
+  final String classId;
+
+  const StudentClassView({super.key, required this.classId});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser!;
+    final userDocStream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots();
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: userDocStream,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final userData = snap.data?.data() ?? {};
+        final teacherUid = (userData['teacherUid'] ?? '').toString().trim();
+
+        if (teacherUid.isEmpty) {
+          return const Scaffold(
+            body: Center(child: Text('Ingen lärare kopplad.')),
+          );
+        }
+
+        // Hämta klassinfo
+        final classDocStream = FirebaseFirestore.instance
+            .collection('classes')
+            .where('teacherUid', isEqualTo: teacherUid)
+            .snapshots();
+
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: classDocStream,
+          builder: (context, classSnap) {
+            if (classSnap.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            final classDocs = classSnap.data?.docs ?? [];
+            String className = classId;
+            for (final doc in classDocs) {
+              if (doc.id == '${teacherUid}_$classId') {
+                className = (doc.data()['name'] ?? classId).toString();
+                break;
+              }
+            }
+
+            // Hämta alla elever i denna klass
+            final studentsQuery = FirebaseFirestore.instance
+                .collection('users')
+                .where('teacherUid', isEqualTo: teacherUid)
+                .where('classId', isEqualTo: classId);
+
+            return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: studentsQuery.snapshots(),
+              builder: (context, studentSnap) {
+                if (studentSnap.connectionState == ConnectionState.waiting) {
+                  return const Scaffold(
+                    body: Center(child: CircularProgressIndicator()),
+                  );
+                }
+
+                final students = studentSnap.data?.docs ?? [];
+                final studentNames = students
+                    .map((d) {
+                      final name = (d.data()['displayName'] ?? '')
+                          .toString()
+                          .trim();
+                      final email = (d.data()['email'] ?? '').toString().trim();
+                      return name.isEmpty ? email : name;
+                    })
+                    .where((s) => s.isNotEmpty)
+                    .toList();
+
+                return Scaffold(
+                  appBar: AppBar(
+                    title: Text('Klass: $className'),
+                    actions: [
+                      IconButton(
+                        tooltip: 'Logga ut',
+                        onPressed: () => FirebaseAuth.instance.signOut(),
+                        icon: const Icon(Icons.logout),
+                      ),
+                    ],
+                  ),
+                  body: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Klassmedlemmar (${studentNames.length})',
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: studentNames.isEmpty
+                              ? const Center(
+                                  child: Text('Inga klassmedlemmar än.'),
+                                )
+                              : ListView.separated(
+                                  itemCount: studentNames.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(height: 6),
+                                  itemBuilder: (context, i) {
+                                    return Card(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        child: Text(studentNames[i]),
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Divider(),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              final now = DateTime.now();
+                              final monday = now.subtract(
+                                Duration(days: now.weekday - DateTime.monday),
+                              );
+                              final nextMonday = monday.add(
+                                const Duration(days: 7),
+                              );
+
+                              String ymd(DateTime d) =>
+                                  '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => TimesheetPeriodScreen(
+                                    weekStart1: ymd(monday),
+                                    weekStart2: ymd(nextMonday),
+                                  ),
+                                ),
+                              );
+                            },
+                            child: const Text('Öppna tidkort'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class TimesheetPeriodScreen extends StatelessWidget {
+  final String weekStart1;
+  final String weekStart2; // kan vara '' om bara en vecka
+
+  const TimesheetPeriodScreen({
+    super.key,
+    required this.weekStart1,
+    required this.weekStart2,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser!;
+    final userDocStream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots();
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: userDocStream,
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final data = snap.data?.data() ?? {};
+        final teacherUid = (data['teacherUid'] ?? '').toString().trim();
+
+        if (teacherUid.isEmpty) {
+          return const Scaffold(
+            body: Center(child: Text('Ingen lärare kopplad.')),
+          );
+        }
+
+        return DefaultTabController(
+          length: weekStart2.isEmpty ? 1 : 2,
+          child: Scaffold(
+            appBar: AppBar(
+              title: const Text('Tidkort'),
+              bottom: TabBar(
+                tabs: [
+                  Tab(text: weekStart1),
+                  if (weekStart2.isNotEmpty) Tab(text: weekStart2),
+                ],
+              ),
+            ),
+            body: TabBarView(
+              children: [
+                WeeklyTimesheetScreen(
+                  studentUid: user.uid,
+                  teacherUid: teacherUid,
+                  weekStart: weekStart1,
+                  readOnly: false,
+                ),
+                if (weekStart2.isNotEmpty)
+                  WeeklyTimesheetScreen(
+                    studentUid: user.uid,
+                    teacherUid: teacherUid,
+                    weekStart: weekStart2,
+                    readOnly: false,
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+String generateInviteCode({int length = 6}) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // inga O/0, I/1
+  final rnd = Random.secure();
+  return List.generate(length, (_) => chars[rnd.nextInt(chars.length)]).join();
+}
+
+String generateAssessmentId({int length = 16}) {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  final rnd = Random.secure();
+  return List.generate(length, (_) => chars[rnd.nextInt(chars.length)]).join();
+}
+
+// Helper för att beräkna veckonummer
+int _getWeekNumberForAssessment(DateTime date) {
+  final jan4 = DateTime(date.year, 1, 4);
+  final monday = jan4.subtract(Duration(days: jan4.weekday - DateTime.monday));
+  final weekNum = date.difference(monday).inDays ~/ 7 + 1;
+  return weekNum;
+}
+
+// Helper för att formatera kort datum
+String _formatShortDateForAssessment(DateTime date) {
+  return '${date.day}/${date.month}';
+}
+
+class AssessmentScreen extends StatelessWidget {
+  const AssessmentScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser!;
+    final timesheetsQuery = FirebaseFirestore.instance
+        .collection('timesheets')
+        .where('studentUid', isEqualTo: user.uid)
+        .orderBy('weekStart', descending: true);
+
+    return Scaffold(
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: timesheetsQuery.snapshots(),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final timesheets = snap.data?.docs ?? [];
+
+          if (timesheets.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.assignment,
+                      size: 48,
+                      color: Colors.orange.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Inget tidkort ännu',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Bedömningar visas när du\nhar skrivit dina tidkort.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Bedömningar',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: timesheets.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, i) {
+                      final doc = timesheets[i];
+                      final data = doc.data();
+                      final weekStart = (data['weekStart'] ?? '').toString();
+                      final approved = (data['approved'] ?? false) == true;
+
+                      // Beräkna veckonummer och datumintervall
+                      String weekDisplayTitle = 'Vecka: $weekStart';
+                      String weekDisplaySubtitle = '';
+                      try {
+                        final weekStartDate = DateTime.parse(weekStart);
+                        final weekNumber = _getWeekNumberForAssessment(
+                          weekStartDate,
+                        );
+                        final weekEndDate = weekStartDate.add(
+                          const Duration(days: 4),
+                        ); // Fredag
+                        final dateRange =
+                            '${_formatShortDateForAssessment(weekStartDate)} - ${_formatShortDateForAssessment(weekEndDate)}';
+                        weekDisplayTitle = 'V. $weekNumber';
+                        weekDisplaySubtitle = dateRange;
+                      } catch (e) {
+                        weekDisplayTitle = 'Vecka: $weekStart';
+                      }
+
+                      return StreamBuilder<DocumentSnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('assessments')
+                            .where('timesheetId', isEqualTo: doc.id)
+                            .limit(1)
+                            .snapshots()
+                            .map(
+                              (snap) =>
+                                  snap.docs.isNotEmpty ? snap.docs.first : null,
+                            )
+                            .where((doc) => doc != null)
+                            .cast<DocumentSnapshot>(),
+                        builder: (context, assessmentSnap) {
+                          final hasAssessment =
+                              assessmentSnap.hasData &&
+                              assessmentSnap.data != null &&
+                              assessmentSnap.data!.exists;
+
+                          // Om ingen assessment finns ännu, skapa en platshållare
+                          final assessmentId =
+                              assessmentSnap.hasData &&
+                                  assessmentSnap.data != null &&
+                                  assessmentSnap.data!.exists
+                              ? assessmentSnap.data!.id
+                              : null;
+
+                          return Container(
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: approved
+                                    ? Colors.green.shade200
+                                    : Colors.orange.shade200,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          weekDisplayTitle,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        if (weekDisplaySubtitle.isNotEmpty)
+                                          Text(
+                                            weekDisplaySubtitle,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey,
+                                            ),
+                                          ),
+                                        const SizedBox(height: 4),
+                                        if (hasAssessment)
+                                          Text(
+                                            'Bedömd ✅',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.green.shade700,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          )
+                                        else
+                                          const Text(
+                                            'Inväntar bedömning',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.orange,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    if (!hasAssessment)
+                                      _QRCodeDisplay(
+                                        timesheetId: doc.id,
+                                        studentName:
+                                            user.displayName ?? 'Student',
+                                        assessmentId: assessmentId,
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _QRCodeDisplay extends StatelessWidget {
+  final String timesheetId;
+  final String studentName;
+  final String? assessmentId; // Redan existerande assessment ID
+
+  const _QRCodeDisplay({
+    required this.timesheetId,
+    required this.studentName,
+    this.assessmentId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: _getOrCreateAssessmentId(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+
+        if (!snapshot.hasData) {
+          return const SizedBox.shrink();
+        }
+
+        final finalAssessmentId = snapshot.data!;
+        final qrData = 'apl://assess/$finalAssessmentId'; // Deep link format
+
+        return GestureDetector(
+          onTap: () {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('QR-kod för bedömning'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 250,
+                      height: 250,
+                      color: Colors.white,
+                      child: CustomPaint(painter: _QrPainter(qrData)),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'ID: $finalAssessmentId',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Stäng'),
+                  ),
+                ],
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Container(
+              width: 80,
+              height: 80,
+              color: Colors.white,
+              child: CustomPaint(painter: _QrPainter(qrData)),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Hämta eller skapa assessment ID
+  Future<String> _getOrCreateAssessmentId() async {
+    // Om vi redan har ett assessment ID från Firestore, använd det
+    if (assessmentId != null && assessmentId!.isNotEmpty) {
+      return assessmentId!;
+    }
+
+    // Annars, skapa ett nytt
+    final newId = generateAssessmentId();
+
+    // Spara det i Firestore som en platshållare
+    await FirebaseFirestore.instance.collection('assessments').doc(newId).set({
+      'timesheetId': timesheetId,
+      'studentUid': FirebaseAuth.instance.currentUser!.uid,
+      'createdAt': FieldValue.serverTimestamp(),
+      // Övriga fält (supervisorName, etc.) fylls när handledaren skickar
+    }, SetOptions(merge: true));
+
+    return newId;
+  }
+}
+
+class _QrPainter extends CustomPainter {
+  final String data;
+
+  _QrPainter(this.data);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final qrPainter = QrPainter(
+      data: data,
+      version: QrVersions.auto,
+      emptyColor: Colors.white,
+      color: Colors.black,
+    );
+    qrPainter.paint(canvas, size);
+  }
+
+  @override
+  bool shouldRepaint(_QrPainter oldDelegate) {
+    return oldDelegate.data != data;
+  }
+}
+
+class MainNavigation extends StatefulWidget {
+  const MainNavigation({super.key});
+
+  @override
+  State<MainNavigation> createState() => _MainNavigationState();
+}
+
+class _MainNavigationState extends State<MainNavigation> {
+  int _currentIndex = 0;
+  bool _isTeacher = false;
+  bool _isLoading = true;
+  int _pendingTimesheetsCount = 0; // För badge-räknare
+  StreamSubscription<QuerySnapshot>? _pendingTimesheetsSubscription; // Lagra subscription för cleanup
+
+  @override
+  void initState() {
+    super.initState();
+    print('DEBUG: initState() called for MainNavigation');
+    _checkUserRole();
+  }
+
+  @override
+  void dispose() {
+    // Avbryt StreamSubscription för att förhindra minnes-läcka
+    _pendingTimesheetsSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _checkUserRole() async {
+    final user = FirebaseAuth.instance.currentUser;
+    print('DEBUG: Checking user role for ${user?.uid}');
+
+    if (user != null) {
+      try {
+        // Läs användarens roll från Firestore
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        final userData = doc.data();
+        print('DEBUG: User document data: $userData');
+
+        final role = (userData?['role'] as String? ?? '').trim().toLowerCase();
+        print('DEBUG: Extracted role: "$role" (length: ${role.length})');
+
+        final isTeacher = role == 'teacher';
+        print('DEBUG: isTeacher = $isTeacher');
+
+        if (mounted) {
+          setState(() {
+            _isTeacher = isTeacher;
+            _isLoading = false;
+            print('DEBUG: setState called, _isTeacher is now $_isTeacher');
+          });
+
+          // Om lärare, lyssna på ogranskade tidkort för badge
+          if (isTeacher) {
+            _listenToPendingTimesheets(user.uid);
+          }
+        }
+      } catch (e) {
+        print('DEBUG: Error getting user role: $e');
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      }
+    } else {
+      print('DEBUG: No current user');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _listenToPendingTimesheets(String teacherUid) {
+    // Avbryt tidigare subscription om det finns
+    _pendingTimesheetsSubscription?.cancel();
+    
+    // Lyssna på alla tidkort som inte är godkända för denna lärare
+    _pendingTimesheetsSubscription = FirebaseFirestore.instance
+        .collection('timesheets')
+        .where('teacherUid', isEqualTo: teacherUid)
+        .where('approved', isEqualTo: false)
+        .snapshots()
+        .listen((snapshot) {
+          if (mounted) {
+            setState(() {
+              _pendingTimesheetsCount = snapshot.docs.length;
+            });
+          }
+        });
+  }
+
+  Widget _buildBadgeIcon(IconData icon, int count) {
+    if (count == 0) {
+      return Icon(icon);
+    }
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(icon),
+        Positioned(
+          right: -8,
+          top: -8,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.red,
+              shape: BoxShape.circle,
+            ),
+            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+            child: Center(
+              child: Text(
+                count > 99 ? '99+' : count.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _getScreens() {
+    print('DEBUG: _getScreens() called, _isTeacher=$_isTeacher');
+    if (_isTeacher) {
+      print('DEBUG: Returning TEACHER screens');
+      return [
+        TeacherDashboardScreen(
+          onNavigateToApproval: () {
+            setState(() {
+              _currentIndex = 2; // Index för Godkännande-fliken
+            });
+          },
+        ),
+        const StudentRegistrationScreen(),
+        const ApprovalAndAssessmentScreen(showAllClasses: true),
+        const StatisticsScreen(),
+        const WeekManagementScreen(),
+      ];
+    } else {
+      print('DEBUG: Returning STUDENT screens');
+      return const [
+        StartScreen(),
+        TidkortScreen(),
+        BedomningScreen(),
+        ErsattningScreen(),
+      ];
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    print(
+      'DEBUG: MainNavigation.build() called, _isTeacher=$_isTeacher, _isLoading=$_isLoading',
+    );
+
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('APL-appen')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final screens = _getScreens();
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('APL-appen'),
+        actions: [
+          // DEBUG: Visa aktuell roll
+          Tooltip(
+            message: _isTeacher ? 'Du är lärare' : 'Du är elev',
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Center(
+                child: Text(
+                  _isTeacher ? '👨‍🏫' : '👨‍🎓',
+                  style: const TextStyle(fontSize: 20),
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: 'Logga ut',
+            onPressed: () => FirebaseAuth.instance.signOut(),
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: screens[_currentIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        type: BottomNavigationBarType.fixed,
+        showUnselectedLabels: true,
+        items: _isTeacher
+            ? [
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.dashboard),
+                  label: 'Startsida',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.person_add),
+                  label: 'Elever',
+                ),
+                BottomNavigationBarItem(
+                  icon: _buildBadgeIcon(
+                    Icons.check_circle,
+                    _pendingTimesheetsCount,
+                  ),
+                  label: 'Godkännande',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.analytics),
+                  label: 'Statistik',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.calendar_today),
+                  label: 'Veckor',
+                ),
+              ]
+            : [
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.home),
+                  label: 'Hem',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.access_time),
+                  label: 'Tidkort',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.checklist),
+                  label: 'Bedömning',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.analytics),
+                  label: 'Statistik',
+                ),
+              ],
+      ),
+    );
+  }
+}

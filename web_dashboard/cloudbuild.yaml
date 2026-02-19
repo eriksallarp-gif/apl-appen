@@ -1,0 +1,27 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web:latest'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyCAFtTbCOtaRmepRutWup3q8x0Ye5vrFLI'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=apl-appen-aa472.firebaseapp.com'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_FIREBASE_PROJECT_ID=apl-appen-aa472'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=apl-appen-aa472.firebasestorage.app'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=103324730349'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_FIREBASE_APP_ID=1:103324730349:web:b76e135a4a5673d1bc1de4'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web:latest'
+
+images:
+  - 'europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web:latest'

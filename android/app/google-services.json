@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "103324730349",
+    "project_id": "apl-appen-aa472",
+    "storage_bucket": "apl-appen-aa472.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:103324730349:android:c8465b86143f8a50bc1de4",
+        "android_client_info": {
+          "package_name": "com.example.apl_appen"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyClELJgKkXJWbD32yDxHrP0iMw8nNilcM8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

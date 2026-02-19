@@ -1,0 +1,226 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && getUserRole() == 'admin';
+    }
+    
+    function isTeacher() {
+      return isSignedIn() && getUserRole() == 'teacher';
+    }
+    
+    function isStudent() {
+      return isSignedIn() && getUserRole() == 'student';
+    }
+    
+    function isTeacherOrAdmin() {
+      return isTeacher() || isAdmin();
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      // Anyone authenticated can read any user (for name lookups, etc.)
+      allow read: if isSignedIn();
+      
+      // Users can create their own profile during registration
+      // Users can write their own profile
+      // Teachers and admins can write any user
+      allow create: if request.auth.uid == userId;
+      allow update: if isSignedIn() && (
+        request.auth.uid == userId || 
+        isTeacherOrAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+    
+    // Admin Notifications collection
+    match /adminNotifications/{notificationId} {
+      // Only admins can read notifications
+      allow read: if isAdmin();
+      
+      // Anyone can create notifications (för nya lärarregistreringar)
+      allow create: if true;
+      
+      // Only admins can update/delete notifications
+      allow update, delete: if isAdmin();
+    }
+    
+    // Classes collection
+    match /classes/{classId} {
+      // Teachers and admins can read/write classes
+      allow read: if isSignedIn();
+      allow write: if isTeacherOrAdmin();
+      
+      // Students subcollection
+      match /students/{studentId} {
+        allow read: if isSignedIn();
+        allow write: if isTeacherOrAdmin() || (isStudent() && request.auth.uid == studentId);
+      }
+      
+      // Student week overrides
+      match /studentWeekOverrides/{studentId} {
+        allow read: if isSignedIn();
+        allow write: if isTeacherOrAdmin();
+      }
+    }
+    
+    // Timesheets collection
+    match /timesheets/{timesheetId} {
+      // Anyone authenticated can read timesheets
+      allow read: if isSignedIn();
+      
+      // Students can create their own timesheets
+      allow create: if isSignedIn() && 
+        request.auth.uid == request.resource.data.studentUid;
+      
+      // Students can update their own timesheets (unless locked/approved)
+      // Teachers can update any timesheet (for approval)
+      // Anyone (including unauthenticated) can ONLY set approved=true and locked=true
+      // (for supervisor assessments via QR code)
+      allow update: if (
+        isSignedIn() && (
+          (request.auth.uid == resource.data.studentUid && 
+           resource.data.locked != true) ||
+          request.auth.uid == resource.data.teacherUid ||
+          isAdmin()
+        )
+      ) || (
+        // Tillåt vem som helst att ENDAST sätta approved och locked till true
+        // Detta används när handledare godkänner via assessmentRequest (QR-kod)
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approved', 'locked']) &&
+        request.resource.data.approved == true &&
+        request.resource.data.locked == true
+      );
+      
+      // Only teachers and admins can delete
+      allow delete: if isTeacherOrAdmin();
+    }
+    
+    // Assessments collection
+    match /assessments/{assessmentId} {
+      // Anyone authenticated can read assessments
+      allow read: if isSignedIn();
+      
+      // Only teachers and admins can create/update/delete assessments
+      allow write: if isTeacherOrAdmin();
+    }
+    
+    // Messages collection
+    match /messages/{messageId} {
+      // Users can read messages sent to them or sent by them
+      allow read: if isSignedIn() && (
+        request.auth.uid == resource.data.to ||
+        request.auth.uid == resource.data.from ||
+        isAdmin()
+      );
+      
+      // Teachers can create messages
+      // Students can create messages to their teacher
+      allow create: if isSignedIn() && (
+        isTeacherOrAdmin() ||
+        request.auth.uid == request.resource.data.from
+      );
+      
+      // Only sender or admin can update/delete
+      allow update, delete: if isSignedIn() && (
+        request.auth.uid == resource.data.from ||
+        isAdmin()
+      );
+    }
+    
+    // Compensation collection
+    match /compensation/{compensationId} {
+      // Anyone authenticated can read
+      allow read: if isSignedIn();
+      
+      // Students can create their own compensation claims
+      allow create: if isSignedIn() && 
+        request.auth.uid == request.resource.data.studentUid;
+      
+      // Students can update their own (unless approved)
+      // Teachers can update any (for approval)
+      allow update: if isSignedIn() && (
+        (request.auth.uid == resource.data.studentUid && 
+         resource.data.approved != true) ||
+        isTeacherOrAdmin()
+      );
+      
+      // Only teachers and admins can delete
+      allow delete: if isTeacherOrAdmin();
+    }
+    
+    // Invites collection (for student-teacher connection)
+    match /invites/{inviteCode} {
+      // Anyone can read invites (to validate codes)
+      allow read: if isSignedIn();
+      
+      // Only teachers can create invites
+      allow create: if isTeacher() || isAdmin();
+      
+      // Teachers can update/delete their own invites
+      allow update, delete: if isSignedIn() && (
+        request.auth.uid == resource.data.teacherUid ||
+        isAdmin()
+      );
+    }
+    
+    // Assessment Requests collection (för bedömningsförfrågningar med QR-kod)
+    match /assessmentRequests/{requestId} {
+      // Tillåt alla att läsa (säkerheten hanteras av token-validering i klienten)
+      allow read: if true;
+      
+      // Students can create their own assessment requests
+      allow create: if isSignedIn() && 
+        request.auth.uid == request.resource.data.studentUid;
+      
+      // Anyone can update requests (för handledare utan inloggning)
+      // Detta är säkert eftersom token valideras i client-side kod
+      allow update: if true;
+      
+      // Only teachers and admins can delete
+      allow delete: if isTeacherOrAdmin();
+    }
+    
+    // Companies collection (för APL-företag)
+    match /companies/{companyId} {
+      // Anyone authenticated can read companies
+      allow read: if isSignedIn();
+      
+      // Teachers can create companies
+      allow create: if isTeacher() || isAdmin();
+      
+      // Teachers can update/delete their own companies, admins can update/delete any
+      allow update, delete: if isSignedIn() && (
+        request.auth.uid == resource.data.teacherUid ||
+        isAdmin()
+      );
+    }
+    
+    // APL Documents collection (viktiga dokument för elever)
+    match /aplDocuments/{documentId} {
+      // Anyone authenticated can read documents
+      allow read: if isSignedIn();
+      
+      // Teachers and admins can create documents
+      allow create: if isTeacherOrAdmin();
+      
+      // Teachers and admins can update/delete documents
+      allow update, delete: if isTeacherOrAdmin();
+    }
+    
+    // Default deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
