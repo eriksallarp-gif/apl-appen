@@ -35,3 +35,6 @@ steps:
 images:
   - 'europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web:latest'
   - 'europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web:$COMMIT_SHA'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
