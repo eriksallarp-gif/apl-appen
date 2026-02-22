@@ -156,8 +156,7 @@ class _StudentDetailStatisticsScreenState
       final data = doc.data();
       final weeks = (data['weeks'] as List?)?.cast<String>() ?? [];
       for (final week in weeks) {
-        final weekNum =
-            int.tryParse(week.replaceAll(RegExp(r'[^0-9]'), ''));
+        final weekNum = int.tryParse(week.replaceAll(RegExp(r'[^0-9]'), ''));
         if (weekNum != null) {
           approvedWeeks.add(weekNum);
         }
@@ -438,10 +437,14 @@ class _StudentDetailStatisticsScreenState
                   itemBuilder: (context, index) {
                     final doc = sorted[index];
                     final data = doc.data();
-                    final weeks = (data['weeks'] as List?)?.cast<String>() ?? [];
-                    final submittedAt = (data['submittedAt'] as Timestamp?)?.toDate();
-                    final supervisorName = (data['supervisorName'] ?? '').toString();
-                    final averageRating = (data['averageRating'] ?? '0').toString();
+                    final weeks =
+                        (data['weeks'] as List?)?.cast<String>() ?? [];
+                    final submittedAt = (data['submittedAt'] as Timestamp?)
+                        ?.toDate();
+                    final supervisorName = (data['supervisorName'] ?? '')
+                        .toString();
+                    final averageRating = (data['averageRating'] ?? '0')
+                        .toString();
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -483,7 +486,11 @@ class _StudentDetailStatisticsScreenState
                         trailing: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.star, color: Colors.orange, size: 20),
+                            const Icon(
+                              Icons.star,
+                              color: Colors.orange,
+                              size: 20,
+                            ),
                             Text(
                               '$averageRating/5',
                               style: const TextStyle(
@@ -512,8 +519,10 @@ class _StudentDetailStatisticsScreenState
     final data = assessment.data();
     final weeks = (data['weeks'] as List?)?.cast<String>().join(', ') ?? '-';
     final timesheetIds = (data['timesheetIds'] as List?)?.cast<String>() ?? [];
-    final self = (data['studentSelfAssessment'] as Map?)?.cast<String, dynamic>() ?? {};
-    final assessmentData = (data['assessmentData'] as Map?)?.cast<String, dynamic>() ?? {};
+    final self =
+        (data['studentSelfAssessment'] as Map?)?.cast<String, dynamic>() ?? {};
+    final assessmentData =
+        (data['assessmentData'] as Map?)?.cast<String, dynamic>() ?? {};
     final averageRating = (data['averageRating'] ?? '0').toString();
     final supervisorName = (data['supervisorName'] ?? '').toString();
     final supervisorCompany = (data['supervisorCompany'] ?? '').toString();
@@ -521,13 +530,16 @@ class _StudentDetailStatisticsScreenState
     final travelApproved = (data['travelApproved'] ?? 0).toString();
     final images = (data['images'] as List?)?.cast<dynamic>() ?? [];
     final imageComments =
-      (data['imageComments'] as Map?)?.cast<String, dynamic>() ?? {};
+        (data['imageComments'] as Map?)?.cast<String, dynamic>() ?? {};
 
     // Hämta tidkort för dessa veckor
     final timesheetDocs = <Map<String, dynamic>>[];
     for (final id in timesheetIds) {
       try {
-        final doc = await FirebaseFirestore.instance.collection('timesheets').doc(id).get();
+        final doc = await FirebaseFirestore.instance
+            .collection('timesheets')
+            .doc(id)
+            .get();
         if (doc.exists) {
           timesheetDocs.add(doc.data()!);
         }
@@ -615,15 +627,23 @@ class _StudentDetailStatisticsScreenState
                         )
                       else
                         ...timesheetDocs.map((timesheetData) {
-                          final entries = (timesheetData['entries'] as Map?)?.cast<String, dynamic>() ?? {};
+                          final entries =
+                              (timesheetData['entries'] as Map?)
+                                  ?.cast<String, dynamic>() ??
+                              {};
                           final weekStart = timesheetData['weekStart'] ?? '';
-                          final comments = (timesheetData['comments'] as Map?)?.cast<String, dynamic>() ?? {};
-                          
+                          final comments =
+                              (timesheetData['comments'] as Map?)
+                                  ?.cast<String, dynamic>() ??
+                              {};
+
                           int totalHours = 0;
                           for (var entry in entries.values) {
                             if (entry is Map) {
                               for (var hours in entry.values) {
-                                totalHours += (hours is int) ? hours : int.tryParse(hours.toString()) ?? 0;
+                                totalHours += (hours is int)
+                                    ? hours
+                                    : int.tryParse(hours.toString()) ?? 0;
                               }
                             }
                           }
@@ -636,7 +656,8 @@ class _StudentDetailStatisticsScreenState
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(
                                         'Vecka: $weekStart',
@@ -658,29 +679,40 @@ class _StudentDetailStatisticsScreenState
                                   const Divider(),
                                   ...entries.entries.map((activityEntry) {
                                     final activity = activityEntry.key;
-                                    final days = (activityEntry.value as Map?)?.cast<String, dynamic>() ?? {};
-                                    
+                                    final days =
+                                        (activityEntry.value as Map?)
+                                            ?.cast<String, dynamic>() ??
+                                        {};
+
                                     int activityTotal = 0;
                                     for (var hours in days.values) {
-                                      activityTotal += (hours is int) ? hours : int.tryParse(hours.toString()) ?? 0;
+                                      activityTotal += (hours is int)
+                                          ? hours
+                                          : int.tryParse(hours.toString()) ?? 0;
                                     }
-                                    
-                                    if (activityTotal == 0) return const SizedBox.shrink();
-                                    
-                                    final activityComment = comments[activity]?.toString() ?? '';
-                                    
+
+                                    if (activityTotal == 0)
+                                      return const SizedBox.shrink();
+
+                                    final activityComment =
+                                        comments[activity]?.toString() ?? '';
+
                                     return Padding(
                                       padding: const EdgeInsets.only(bottom: 8),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
                                             children: [
                                               Expanded(
                                                 child: Text(
                                                   activity,
-                                                  style: const TextStyle(fontWeight: FontWeight.w600),
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
                                                 ),
                                               ),
                                               Text('${activityTotal}h'),
@@ -688,7 +720,10 @@ class _StudentDetailStatisticsScreenState
                                           ),
                                           if (activityComment.isNotEmpty)
                                             Padding(
-                                              padding: const EdgeInsets.only(left: 8, top: 4),
+                                              padding: const EdgeInsets.only(
+                                                left: 8,
+                                                top: 4,
+                                              ),
                                               child: Text(
                                                 'Kommentar: $activityComment',
                                                 style: TextStyle(
@@ -707,9 +742,9 @@ class _StudentDetailStatisticsScreenState
                             ),
                           );
                         }),
-                      
+
                       const SizedBox(height: 24),
-                      
+
                       // Ersättning
                       const Text(
                         'Ersättning',
@@ -727,11 +762,16 @@ class _StudentDetailStatisticsScreenState
                               Expanded(
                                 child: Column(
                                   children: [
-                                    const Icon(Icons.restaurant, color: Colors.deepOrange),
+                                    const Icon(
+                                      Icons.restaurant,
+                                      color: Colors.deepOrange,
+                                    ),
                                     const SizedBox(height: 4),
                                     Text(
                                       '$lunchApproved luncher',
-                                      style: const TextStyle(fontWeight: FontWeight.w600),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -739,11 +779,16 @@ class _StudentDetailStatisticsScreenState
                               Expanded(
                                 child: Column(
                                   children: [
-                                    const Icon(Icons.directions_car, color: Colors.purple),
+                                    const Icon(
+                                      Icons.directions_car,
+                                      color: Colors.purple,
+                                    ),
                                     const SizedBox(height: 4),
                                     Text(
                                       '$travelApproved km',
-                                      style: const TextStyle(fontWeight: FontWeight.w600),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -752,9 +797,9 @@ class _StudentDetailStatisticsScreenState
                           ),
                         ),
                       ),
-                      
+
                       const SizedBox(height: 24),
-                      
+
                       if (images.isNotEmpty) ...[
                         const Text(
                           'Bifogade bilder',
@@ -771,8 +816,7 @@ class _StudentDetailStatisticsScreenState
                               ? (imageData['url'] ?? '').toString()
                               : imageData.toString();
                           final comment =
-                              imageComments[index.toString()]?.toString() ??
-                                  '';
+                              imageComments[index.toString()]?.toString() ?? '';
 
                           if (imageUrl.isEmpty) {
                             return const SizedBox.shrink();
@@ -797,23 +841,24 @@ class _StudentDetailStatisticsScreenState
                                       fit: BoxFit.cover,
                                       loadingBuilder:
                                           (context, child, progress) {
-                                        if (progress == null) return child;
-                                        return const SizedBox(
-                                          height: 220,
-                                          child: Center(
-                                            child: CircularProgressIndicator(),
-                                          ),
-                                        );
-                                      },
+                                            if (progress == null) return child;
+                                            return const SizedBox(
+                                              height: 220,
+                                              child: Center(
+                                                child:
+                                                    CircularProgressIndicator(),
+                                              ),
+                                            );
+                                          },
                                       errorBuilder:
                                           (context, error, stackTrace) {
-                                        return const SizedBox(
-                                          height: 220,
-                                          child: Center(
-                                            child: Icon(Icons.broken_image),
-                                          ),
-                                        );
-                                      },
+                                            return const SizedBox(
+                                              height: 220,
+                                              child: Center(
+                                                child: Icon(Icons.broken_image),
+                                              ),
+                                            );
+                                          },
                                     ),
                                   ),
                                 ),
@@ -877,21 +922,24 @@ class _StudentDetailStatisticsScreenState
                               ),
                               _buildSelfAssessmentRow(
                                 '4. Vad kunde du som elev gjort annorlunda?',
-                                self['whatCouldYouDoDifferently']?.toString() ?? '',
+                                self['whatCouldYouDoDifferently']?.toString() ??
+                                    '',
                               ),
                               _buildSelfAssessmentRow(
                                 '5. Betyg (1-10)',
                                 self['overallRating']?.toString() ?? '',
                               ),
-                              if (self.values.every((v) => v == null || v.toString().trim().isEmpty))
+                              if (self.values.every(
+                                (v) => v == null || v.toString().trim().isEmpty,
+                              ))
                                 const Text('Ingen självskattning ifylld'),
                             ],
                           ),
                         ),
                       ),
-                      
+
                       const SizedBox(height: 24),
-                      
+
                       // Handledarens bedömning
                       const Text(
                         'Handledarens bedömning',
@@ -914,12 +962,17 @@ class _StudentDetailStatisticsScreenState
                                   final key = entry.key.toString();
                                   final value = entry.value;
                                   if (value is Map) {
-                                    final rating = value['rating']?.toString() ?? '-';
-                                    final comment = value['comment']?.toString() ?? '';
+                                    final rating =
+                                        value['rating']?.toString() ?? '-';
+                                    final comment =
+                                        value['comment']?.toString() ?? '';
                                     return Padding(
-                                      padding: const EdgeInsets.only(bottom: 12),
+                                      padding: const EdgeInsets.only(
+                                        bottom: 12,
+                                      ),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             '$key: $rating/5',
@@ -930,7 +983,9 @@ class _StudentDetailStatisticsScreenState
                                           ),
                                           if (comment.isNotEmpty)
                                             Padding(
-                                              padding: const EdgeInsets.only(top: 4),
+                                              padding: const EdgeInsets.only(
+                                                top: 4,
+                                              ),
                                               child: Text(
                                                 comment,
                                                 style: TextStyle(
@@ -944,9 +999,12 @@ class _StudentDetailStatisticsScreenState
                                   }
                                   if (key == 'Övrigt') {
                                     return Padding(
-                                      padding: const EdgeInsets.only(bottom: 12),
+                                      padding: const EdgeInsets.only(
+                                        bottom: 12,
+                                      ),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Text(
                                             'Övrigt',
@@ -956,7 +1014,9 @@ class _StudentDetailStatisticsScreenState
                                             ),
                                           ),
                                           Padding(
-                                            padding: const EdgeInsets.only(top: 4),
+                                            padding: const EdgeInsets.only(
+                                              top: 4,
+                                            ),
                                             child: Text(value.toString()),
                                           ),
                                         ],
@@ -970,7 +1030,10 @@ class _StudentDetailStatisticsScreenState
                                   const SizedBox(height: 8),
                                   Row(
                                     children: [
-                                      const Icon(Icons.star, color: Colors.orange),
+                                      const Icon(
+                                        Icons.star,
+                                        color: Colors.orange,
+                                      ),
                                       const SizedBox(width: 8),
                                       Text(
                                         'Snittbetyg: $averageRating/5',
@@ -1006,10 +1069,7 @@ class _StudentDetailStatisticsScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           Text(value),
         ],

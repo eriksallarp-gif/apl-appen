@@ -15,6 +15,7 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { usePathname } from 'next/navigation';
 
 interface AplDocument {
   id: string;
@@ -46,6 +47,7 @@ export default function DocumentsPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [documentTitle, setDocumentTitle] = useState('');
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -208,187 +210,210 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">APL-dokument</h1>
-          <p className="text-gray-600 mt-2">
-            Hantera viktiga dokument som delas med eleverna
-          </p>
+    <div className="min-h-screen bg-white">
+      <aside className="fixed left-0 top-0 h-screen w-56 bg-gradient-to-br from-orange-50 to-white border-r border-orange-100/50 flex flex-col py-8 px-6 z-10">
+        <div className="mb-10">
+          <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
+          <p className="text-xs text-orange-400 mt-1">Hem</p>
         </div>
-        <button
-          onClick={() => setShowUploadModal(true)}
-          className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center gap-2"
-        >
-          <span className="text-xl">+</span>
-          Ladda upp dokument
-        </button>
-      </div>
-
-      {/* Category overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-        {CATEGORIES.map(cat => {
-          const count = documents.filter(d => d.category === cat.id).length;
-          return (
-            <div key={cat.id} className="bg-white p-6 rounded-lg border-2 border-gray-200">
-              <div className="text-4xl mb-2">{cat.icon}</div>
-              <h3 className="font-semibold text-gray-900">{cat.name}</h3>
-              <p className="text-sm text-gray-600 mt-1">
-                {count} {count === 1 ? 'dokument' : 'dokument'}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Documents list */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Alla dokument</h2>
+        <nav className="flex-1 space-y-4">
+          <a href="/dashboard" className={`block font-semibold rounded-lg px-3 py-2 transition ${pathname === '/dashboard' ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Hem</a>
+          <a href="/dashboard/students" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/students') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Elever</a>
+          <a href="/dashboard/companies" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/companies') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Företag</a>
+          <a href="/dashboard/documents" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/documents') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Dokument</a>
+          <a href="/dashboard/settings" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/settings') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Inställningar</a>
+        </nav>
+        <div className="mt-auto pt-8">
+          <button
+            onClick={async () => { await import('firebase/auth').then(({ signOut }) => signOut(auth)); router.push('/login'); }}
+            className="w-full bg-orange-600 text-white rounded-lg py-2 font-semibold hover:bg-orange-700 transition"
+          >
+            Logga ut
+          </button>
         </div>
-        
-        {documents.length === 0 ? (
-          <div className="p-12 text-center">
-            <div className="text-6xl mb-4">📁</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              Inga dokument ännu
-            </h3>
-            <p className="text-gray-600 mb-6">
-              Ladda upp ditt första dokument för att komma igång
+      </aside>
+      <main className="ml-56 max-w-7xl mx-auto px-8 py-12">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">APL-dokument</h1>
+            <p className="text-gray-600 mt-2">
+              Hantera viktiga dokument som delas med eleverna
             </p>
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
-            >
-              Ladda upp dokument
-            </button>
           </div>
-        ) : (
-          <div className="divide-y divide-gray-200">
-            {documents.map(doc => (
-              <div key={doc.id} className="p-6 hover:bg-gray-50 transition-colors">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-4 flex-1">
-                    <div className="text-4xl">{getFileIcon(doc.fileType)}</div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 text-lg">
-                        {doc.title}
-                      </h3>
-                      <div className="flex items-center gap-3 mt-2 text-sm text-gray-600">
-                        <span className="flex items-center gap-1">
-                          {getCategoryIcon(doc.category)}
-                          {getCategoryName(doc.category)}
-                        </span>
-                        <span>•</span>
-                        <span>{formatDate(doc.uploadedAt)}</span>
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center gap-2"
+          >
+            <span className="text-xl">+</span>
+            Ladda upp dokument
+          </button>
+        </div>
+
+        {/* Category overview */}
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+          {CATEGORIES.map(cat => {
+            const count = documents.filter(d => d.category === cat.id).length;
+            return (
+              <div key={cat.id} className="bg-white p-6 rounded-lg border-2 border-gray-200">
+                <div className="text-4xl mb-2">{cat.icon}</div>
+                <h3 className="font-semibold text-gray-900">{cat.name}</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  {count} {count === 1 ? 'dokument' : 'dokument'}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Documents list */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900">Alla dokument</h2>
+          </div>
+          
+          {documents.length === 0 ? (
+            <div className="p-12 text-center">
+              <div className="text-6xl mb-4">📁</div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Inga dokument ännu
+              </h3>
+              <p className="text-gray-600 mb-6">
+                Ladda upp ditt första dokument för att komma igång
+              </p>
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+              >
+                Ladda upp dokument
+              </button>
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200">
+              {documents.map(doc => (
+                <div key={doc.id} className="p-6 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-4 flex-1">
+                      <div className="text-4xl">{getFileIcon(doc.fileType)}</div>
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 text-lg">
+                          {doc.title}
+                        </h3>
+                        <div className="flex items-center gap-3 mt-2 text-sm text-gray-600">
+                          <span className="flex items-center gap-1">
+                            {getCategoryIcon(doc.category)}
+                            {getCategoryName(doc.category)}
+                          </span>
+                          <span>•</span>
+                          <span>{formatDate(doc.uploadedAt)}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={doc.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
-                    >
-                      Öppna
-                    </a>
-                    <button
-                      onClick={() => handleDelete(doc)}
-                      className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium"
-                    >
-                      Radera
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
+                      >
+                        Öppna
+                      </a>
+                      <button
+                        onClick={() => handleDelete(doc)}
+                        className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium"
+                      >
+                        Radera
+                      </button>
+                    </div>
                   </div>
                 </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Upload Modal */}
+        {showUploadModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-2xl w-full p-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                Ladda upp dokument
+              </h2>
+              
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Dokumenttitel *
+                  </label>
+                  <input
+                    type="text"
+                    value={documentTitle}
+                    onChange={(e) => setDocumentTitle(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    placeholder="T.ex. Försäkringsinformation 2025"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Kategori *
+                  </label>
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  >
+                    <option value="">Välj kategori...</option>
+                    {CATEGORIES.map(cat => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.icon} {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Fil *
+                  </label>
+                  <input
+                    type="file"
+                    onChange={handleFileSelect}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                  />
+                  {selectedFile && (
+                    <p className="mt-2 text-sm text-gray-600">
+                      Vald fil: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                    </p>
+                  )}
+                </div>
               </div>
-            ))}
+
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={() => {
+                    setShowUploadModal(false);
+                    setSelectedFile(null);
+                    setDocumentTitle('');
+                    setSelectedCategory('');
+                  }}
+                  disabled={uploading}
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold transition-colors disabled:opacity-50"
+                >
+                  Avbryt
+                </button>
+                <button
+                  onClick={handleUpload}
+                  disabled={uploading || !selectedFile || !selectedCategory || !documentTitle.trim()}
+                  className="flex-1 px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {uploading ? 'Laddar upp...' : 'Ladda upp'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
-      </div>
-
-      {/* Upload Modal */}
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">
-              Ladda upp dokument
-            </h2>
-            
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Dokumenttitel *
-                </label>
-                <input
-                  type="text"
-                  value={documentTitle}
-                  onChange={(e) => setDocumentTitle(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  placeholder="T.ex. Försäkringsinformation 2025"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Kategori *
-                </label>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                >
-                  <option value="">Välj kategori...</option>
-                  {CATEGORIES.map(cat => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.icon} {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Fil *
-                </label>
-                <input
-                  type="file"
-                  onChange={handleFileSelect}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                />
-                {selectedFile && (
-                  <p className="mt-2 text-sm text-gray-600">
-                    Vald fil: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex gap-4 mt-8">
-              <button
-                onClick={() => {
-                  setShowUploadModal(false);
-                  setSelectedFile(null);
-                  setDocumentTitle('');
-                  setSelectedCategory('');
-                }}
-                disabled={uploading}
-                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold transition-colors disabled:opacity-50"
-              >
-                Avbryt
-              </button>
-              <button
-                onClick={handleUpload}
-                disabled={uploading || !selectedFile || !selectedCategory || !documentTitle.trim()}
-                className="flex-1 px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {uploading ? 'Laddar upp...' : 'Ladda upp'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      </main>
     </div>
   );
 }

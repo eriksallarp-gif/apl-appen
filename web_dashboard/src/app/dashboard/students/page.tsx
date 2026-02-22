@@ -6,6 +6,7 @@ import { auth, db, functions } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
+import { usePathname } from 'next/navigation';
 
 interface Student {
   id: string;
@@ -37,6 +38,7 @@ export default function StudentsPage() {
   const [savingSpecialization, setSavingSpecialization] = useState(false);
   const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
 
   const specializationOptions = [
     'Träarbetare',
@@ -219,9 +221,30 @@ export default function StudentsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center gap-4">
+    <div className="min-h-screen bg-white">
+      <aside className="fixed left-0 top-0 h-screen w-56 bg-gradient-to-br from-orange-50 to-white border-r border-orange-100/50 flex flex-col py-8 px-6 z-10">
+        <div className="mb-10">
+          <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
+          <p className="text-xs text-orange-400 mt-1">Hem</p>
+        </div>
+        <nav className="flex-1 space-y-4">
+          <a href="/dashboard" className={`block font-semibold rounded-lg px-3 py-2 transition ${pathname === '/dashboard' ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Hem</a>
+          <a href="/dashboard/students" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/students') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Elever</a>
+          <a href="/dashboard/companies" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/companies') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Företag</a>
+          <a href="/dashboard/documents" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/documents') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Dokument</a>
+          <a href="/dashboard/settings" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/settings') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Inställningar</a>
+        </nav>
+        <div className="mt-auto pt-8">
+          <button
+            onClick={async () => { await import('firebase/auth').then(({ signOut }) => signOut(auth)); router.push('/login'); }}
+            className="w-full bg-orange-600 text-white rounded-lg py-2 font-semibold hover:bg-orange-700 transition"
+          >
+            Logga ut
+          </button>
+        </div>
+      </aside>
+      <main className="ml-56 max-w-7xl mx-auto px-8 py-12">
+        <div className="flex items-center gap-4 mb-8">
           <button
             onClick={() => router.push('/dashboard')}
             className="text-orange-600 hover:text-orange-700 font-medium"
@@ -230,9 +253,6 @@ export default function StudentsPage() {
           </button>
           <h1 className="text-2xl font-bold text-gray-900">Elever</h1>
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Class Filter */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">

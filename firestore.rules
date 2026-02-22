@@ -8,7 +8,8 @@ service cloud.firestore {
     }
     
     function getUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      let userRef = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return userRef != null ? userRef.data.get('role', null) : null;
     }
     
     function isAdmin() {
@@ -89,9 +90,9 @@ service cloud.firestore {
       // (for supervisor assessments via QR code)
       allow update: if (
         isSignedIn() && (
-          (request.auth.uid == resource.data.studentUid && 
-           resource.data.locked != true) ||
-          request.auth.uid == resource.data.teacherUid ||
+          (request.auth.uid == resource.data.get('studentUid', '') && 
+           resource.data.get('locked', false) != true) ||
+          request.auth.uid == resource.data.get('teacherUid', '') ||
           isAdmin()
         )
       ) || (
@@ -193,8 +194,8 @@ service cloud.firestore {
     
     // Companies collection (för APL-företag)
     match /companies/{companyId} {
-      // Anyone authenticated can read companies
-      allow read: if isSignedIn();
+      // Teachers/admins can read all, students can read only their linked company
+      allow read: if isTeacherOrAdmin() || (isStudent() && resource.data.studentId == request.auth.uid);
       
       // Teachers can create companies
       allow create: if isTeacher() || isAdmin();

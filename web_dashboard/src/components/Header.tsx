@@ -50,12 +50,6 @@ export default function Header() {
                   {auth.currentUser.email}
                 </span>
               )}
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition font-medium"
-              >
-                Logga ut
-              </button>
             </>
           ) : (
             <>

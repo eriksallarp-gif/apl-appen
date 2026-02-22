@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { usePathname } from 'next/navigation';
 
 interface Stats {
   totalStudents: number;
@@ -15,6 +16,7 @@ interface Stats {
   pendingAssessments: number;
   submittedAssessments: number;
   totalHours: number;
+  totalCompanies: number;
 }
 
 interface ClassData {
@@ -46,6 +48,7 @@ export default function DashboardPage() {
     pendingAssessments: 0,
     submittedAssessments: 0,
     totalHours: 0,
+    totalCompanies: 0,
   });
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('ALL');
@@ -54,6 +57,7 @@ export default function DashboardPage() {
   const [rawData, setRawData] = useState<RawData | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -82,8 +86,11 @@ export default function DashboardPage() {
       const classesSnapshot = await getDocs(collection(db, 'classes'));
       const timesheetsSnapshot = await getDocs(collection(db, 'timesheets'));
       const assessmentsSnapshot = await getDocs(collection(db, 'assessmentRequests'));
+      const companiesSnapshot = await getDocs(collection(db, 'companies'));
 
       const isTeacher = role === 'teacher';
+      console.log('DEBUG: currentUserId', currentUserId, 'role', role);
+      console.log('DEBUG: companies', companiesSnapshot.docs.map(doc => doc.data()));
       const classDocs = isTeacher
         ? classesSnapshot.docs.filter(c => c.data().teacherUid === currentUserId)
         : classesSnapshot.docs;
@@ -137,8 +144,16 @@ export default function DashboardPage() {
         assessments: assessments.map(doc => ({ id: doc.id, ...doc.data() })),
       };
       setRawData(raw);
-      
+
+      const companyCount = isTeacher
+        ? companiesSnapshot.docs.filter(doc => doc.data().teacherUid === currentUserId).length
+        : companiesSnapshot.docs.length;
+      console.log('DEBUG: companyCount', companyCount);
       // Update stats
+      setStats(prev => ({
+        ...prev,
+        totalCompanies: companyCount,
+      }));
       const tempStats = {
         totalStudents: studentSummaries.length,
         totalTimesheets: timesheets.length,
@@ -148,8 +163,8 @@ export default function DashboardPage() {
         pendingAssessments: 0,
         submittedAssessments: 0,
         totalHours: 0,
+        totalCompanies: companyCount,
       };
-      
       applyClassFilter(selectedClassId, studentSummaries, raw, tempStats);
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -189,16 +204,17 @@ export default function DashboardPage() {
     const submittedAssessments = assessments.filter(a => a.status === 'submitted');
 
     setFilteredStudents(activeStudents);
-    setStats({
-      totalStudents: activeStudents.length,
-      totalTimesheets: timesheets.length,
-      pendingTimesheets: pending.length,
-      approvedTimesheets: approved.length,
-      totalAssessments: assessments.length,
-      pendingAssessments: pendingAssessments.length,
-      submittedAssessments: submittedAssessments.length,
-      totalHours,
-    });
+      setStats(prev => ({
+        totalStudents: activeStudents.length,
+        totalTimesheets: timesheets.length,
+        pendingTimesheets: pending.length,
+        approvedTimesheets: approved.length,
+        totalAssessments: assessments.length,
+        pendingAssessments: pendingAssessments.length,
+        submittedAssessments: submittedAssessments.length,
+        totalHours,
+        totalCompanies: prev.totalCompanies, // behåll alltid det totala antalet företag
+      }));
   };
 
   useEffect(() => {
@@ -220,60 +236,46 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-4 p-4 bg-blue-100 border-l-4 border-blue-600 rounded">
-          <p className="text-blue-800 font-bold">✅ UPPDATERAD VERSION 2026-02-19</p>
+    <div className="min-h-screen bg-white">
+      <aside className="fixed left-0 top-0 h-screen w-56 bg-gradient-to-br from-orange-50 to-white border-r border-orange-100/50 flex flex-col py-8 px-6 z-10">
+        <div className="mb-10">
+          <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
+          <p className="text-xs text-orange-400 mt-1">Hem</p>
         </div>
-        {/* Admin Access */}
-        {userRole === 'admin' && (
-          <div className="mb-8">
-            <button
-              onClick={() => router.push('/dashboard/admin')}
-              className="w-full bg-gradient-to-r from-red-600 to-red-700 text-white p-6 rounded-lg shadow-lg hover:shadow-xl transition group"
-            >
-              <div className="flex items-center justify-between">
-                <div className="text-left">
-                  <h3 className="text-xl font-bold mb-1">🔐 Admin Panel</h3>
-                  <p className="text-red-100">Hantera lärare, visa statistik och systemöversikt</p>
-                </div>
-                <svg className="w-8 h-8 group-hover:translate-x-2 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                </svg>
-              </div>
-            </button>
+        <nav className="flex-1 space-y-4">
+          <a href="/dashboard" className={`block font-semibold rounded-lg px-3 py-2 transition ${pathname === '/dashboard' ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Hem</a>
+          <a href="/dashboard/students" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/students') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Elever</a>
+          <a href="/dashboard/companies" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/companies') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Företag</a>
+          <a href="/dashboard/documents" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/documents') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Dokument</a>
+          <a href="/dashboard/settings" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/settings') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Inställningar</a>
+        </nav>
+        <div className="mt-auto pt-8">
+          <button onClick={handleLogout} className="w-full bg-orange-600 text-white rounded-lg py-2 font-semibold hover:bg-orange-700 transition">Logga ut</button>
+        </div>
+      </aside>
+      <main className="ml-56 max-w-7xl mx-auto px-8 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+          <div className="bg-gradient-to-br from-orange-400 to-orange-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="bg-white/30 rounded-full p-2 text-xl">🎓</span>
+              <span className="text-base font-semibold">Elever</span>
+            </div>
+            <div className="text-2xl font-bold">{stats.totalStudents}</div>
           </div>
-        )}
-
-        {/* Main Cards - Elever & Dokument */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <button
-            onClick={() => router.push('/dashboard/students')}
-            className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition text-left group"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xl font-bold group-hover:text-orange-600 transition">Elever</h3>
-              <svg className="w-6 h-6 text-gray-400 group-hover:text-orange-600 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
+          <div className="bg-gradient-to-br from-purple-400 to-purple-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="bg-white/30 rounded-full p-2 text-xl">👨‍🏫</span>
+              <span className="text-base font-semibold">Bedömningar</span>
             </div>
-            <p className="text-gray-600">Se alla elever och deras APL-information</p>
-            <p className="text-3xl font-bold text-orange-600 mt-3">{stats.totalStudents}</p>
-          </button>
-
-          <button
-            onClick={() => router.push('/dashboard/documents')}
-            className="bg-white p-6 rounded-lg shadow-lg hover:shadow-xl transition text-left group"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xl font-bold group-hover:text-green-600 transition">APL-dokument</h3>
-              <svg className="w-6 h-6 text-gray-400 group-hover:text-green-600 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
+            <div className="text-2xl font-bold">{stats.totalAssessments}</div>
+          </div>
+          <div className="bg-gradient-to-br from-blue-400 to-blue-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="bg-white/30 rounded-full p-2 text-xl">🏢</span>
+              <span className="text-base font-semibold">Företag</span>
             </div>
-            <p className="text-gray-600">Dela viktiga dokument med eleverna</p>
-            <div className="text-3xl font-bold text-green-600 mt-3">📁</div>
-          </button>
+            <div className="text-2xl font-bold">{stats.totalCompanies}</div>
+          </div>
         </div>
       </main>
     </div>
