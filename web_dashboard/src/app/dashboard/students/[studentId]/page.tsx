@@ -17,6 +17,8 @@ interface Assessment {
   totalHours?: number;
   attachments?: string[];
   weekStart?: string;
+  lunchApproved?: number;
+  travelApproved?: number;
 }
 
 interface Timesheet {
