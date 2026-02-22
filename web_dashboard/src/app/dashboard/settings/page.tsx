@@ -63,7 +63,11 @@ export default function SettingsPage() {
         </nav>
         <div className="mt-auto pt-8">
           <button
-            onClick={async () => { const { signOut } = await import('firebase/auth'); signOut(); window.location.href = '/login'; }}
+            onClick={async () => {
+              const { signOut, getAuth } = await import('firebase/auth');
+              await signOut(getAuth());
+              window.location.href = '/login';
+            }}
             className="w-full bg-orange-600 text-white rounded-lg py-2 font-semibold hover:bg-orange-700 transition"
           >
             Logga ut
