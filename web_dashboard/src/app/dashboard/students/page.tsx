@@ -433,7 +433,7 @@ export default function StudentsPage() {
         <div className="bg-white p-4 rounded-lg shadow">
           <p className="text-sm text-gray-600">Inskickade bedömningar</p>
           <p className="text-2xl font-bold text-purple-600">
-            {filteredStudents.reduce((sum, s) => sum + s.assessmentCount, 0)}
+            {filteredStudents.reduce((sum, s) => sum + (s.assessmentCount ?? 0), 0)}
           </p>
         </div>
       </div>
