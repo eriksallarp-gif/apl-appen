@@ -4,7 +4,7 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc, getDocs, query, orderBy } from "firebase/firestore";
 
 export default function SchoolsPage() {
-  const [schools, setSchools] = useState([]);
+  const [schools, setSchools] = useState<Array<{ id: string; name: string }>>([]);
   const [schoolName, setSchoolName] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");

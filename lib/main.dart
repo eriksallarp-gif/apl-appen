@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,7 +18,8 @@ import 'Screens/supervisor_assessment_page.dart';
 import 'Screens/bedomning_screen.dart';
 import 'Screens/ersattning_screen.dart';
 import 'Screens/admin_screen.dart';
-import 'Screens/student_detail_statistics_screen.dart';
+import 'Screens/schools_screen.dart';
+import 'Screens/settings_screen.dart';
 
 // Tidkortmallar för olika specialiseringar
 const activityTemplateTrabetare = <Map<String, dynamic>>[
@@ -306,9 +307,15 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
       for (final day in _days) {
         final raw = entry.value[day]!.text.trim();
         final val = int.tryParse(raw);
-        dayMap[day] = val ?? 0;
+        // Bara lägg till värden som faktiskt har värde (inte 0 eller null)
+        if (val != null && val > 0) {
+          dayMap[day] = val;
+        }
       }
-      out[activity] = dayMap;
+      // Bara lägg till aktiviteten om den har minst en dag med tid
+      if (dayMap.isNotEmpty) {
+        out[activity] = dayMap;
+      }
     }
     return out;
   }
@@ -346,8 +353,13 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
         .doc(docId)
         .get();
     final approved = (snap.data()?['approved'] ?? false) == true;
-    if (approved) {
-      setState(() => _msg = 'Tidkortet är godkänt och låst.');
+    final locked = (snap.data()?['locked'] ?? false) == true;
+    
+    if (approved || locked) {
+      setState(() {
+        _msg = 'Tidkortet är godkänt och låst.';
+        _saving = false;
+      });
       return;
     }
 
@@ -363,20 +375,48 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
       }
 
       final docId = '${widget.studentUid}_${widget.weekStart}';
-      await FirebaseFirestore.instance.collection('timesheets').doc(docId).set({
-        'studentUid': widget.studentUid,
-        'teacherUid': widget.teacherUid,
-        'classId': classId,
-        'weekStart': widget.weekStart,
-        'entries': _buildEntries(),
-        'comments': _buildComments(),
-        'updatedAt': FieldValue.serverTimestamp(),
-        // approved hanteras av lärare, men vi lämnar fältet om det finns
-      }, SetOptions(merge: true));
+      
+      // Debug: Logga vad vi försöker spara
+      print('DEBUG: Försöker spara tidkort');
+      print('  docId: $docId');
+      print('  studentUid: ${widget.studentUid}');
+      print('  auth.uid: ${FirebaseAuth.instance.currentUser?.uid}');
+      print('  classId: $classId');
+      
+      // Hämta befintlig data för att behålla approved/locked status
+      final existingDoc = await FirebaseFirestore.instance
+          .collection('timesheets')
+          .doc(docId)
+          .get();
+      
+      final existingData = existingDoc.data() ?? {};
+      
+      await FirebaseFirestore.instance.collection('timesheets').doc(docId).set(
+        {
+          'studentUid': widget.studentUid,
+          'teacherUid': widget.teacherUid,
+          'classId': classId,
+          'weekStart': widget.weekStart,
+          'entries': _buildEntries(), // Skriv över helt - tar bort gamla 0:or
+          'comments': _buildComments(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          // Behåll approved/locked status om de finns
+          if (existingData.containsKey('approved')) 
+            'approved': existingData['approved'],
+          if (existingData.containsKey('locked'))
+            'locked': existingData['locked'],
+        },
+        SetOptions(merge: true),
+      );
 
       setState(() => _msg = 'Sparat ✅');
     } catch (e) {
-      setState(() => _msg = 'Fel: $e');
+      // Visa tydligare felmeddelande för permission-denied
+      String errorMsg = 'Fel: $e';
+      if (e.toString().contains('permission-denied')) {
+        errorMsg = 'Kan inte spara: Du saknar rättigheter att redigera detta tidkort. Kontakta din lärare.';
+      }
+      setState(() => _msg = errorMsg);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -408,7 +448,16 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
             final locked = (data?['locked'] ?? false) as bool;
             final effectiveReadOnly = widget.readOnly || approved || locked;
 
-            // Fyll controllers från Firestore när data finns
+            // FÖRST: Töm alla controllers (viktigt för att ta bort gamla värden)
+            for (final row in _controllers.values) {
+              for (final day in _days) {
+                if (row[day]!.text.isNotEmpty) {
+                  row[day]!.text = '';
+                }
+              }
+            }
+            
+            // SEDAN: Fyll controllers från Firestore (bara icke-noll värden)
             if (entries != null) {
               for (final e in entries.entries) {
                 final activity = e.key;
@@ -416,8 +465,12 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
                 final row = _controllers[activity];
                 if (row != null) {
                   for (final day in _days) {
-                    final v = (dayMap[day] ?? 0).toString();
-                    if (row[day]!.text != v) row[day]!.text = v;
+                    final rawValue = dayMap[day];
+                    // Bara sätt värde om det finns OCH inte är 0
+                    if (rawValue != null && rawValue != 0) {
+                      final v = rawValue.toString();
+                      if (row[day]!.text != v) row[day]!.text = v;
+                    }
                   }
                 }
               }
@@ -1036,217 +1089,30 @@ class _AssessmentFormPageState extends State<AssessmentFormPage> {
       final feedback = _feedbackCtrl.text.trim();
 
       if (name.isEmpty || phone.isEmpty || company.isEmpty) {
-        setState(
-          () => _error = 'Namn, mobilnummer och företag är obligatoriska.',
-        );
+        setState(() {
+          _error = 'Namn, mobilnummer och företag är obligatoriska.';
+        });
         return;
       }
-
-      // Hämta timesheetData för att få studentUid
-      final timesheetSnap = await FirebaseFirestore.instance
-          .collection('timesheets')
-          .doc(widget.timesheetId)
-          .get();
-
-      if (!timesheetSnap.exists) {
-        setState(() => _error = 'Tidkortet hittades inte.');
-        return;
-      }
-
-      final timesheetData = timesheetSnap.data() ?? {};
-      final studentUid = (timesheetData['studentUid'] ?? '').toString();
-
-      // Spara bedömning
-      await FirebaseFirestore.instance
-          .collection('assessments')
-          .doc(widget.assessmentId)
-          .set({
-            'timesheetId': widget.timesheetId,
-            'studentUid': studentUid,
-            'supervisorName': name,
-            'supervisorPhone': phone,
-            'supervisorCompany': company,
-            'feedback': feedback,
-            'submittedAt': FieldValue.serverTimestamp(),
-          });
-
-      setState(() {
-        _success = 'Bedömning inlämnad! Tack för ditt arbete.';
-        _nameCtrl.clear();
-        _phoneCtrl.clear();
-        _companyCtrl.clear();
-        _feedbackCtrl.clear();
-      });
+      // ...lägg till logik för att spara bedömning här...
     } catch (e) {
-      setState(() => _error = 'Fel: $e');
+      setState(() {
+        _error = 'Fel: $e';
+        _loading = false;
+      });
     } finally {
-      if (mounted) setState(() => _loading = false);
+      setState(() {
+        _loading = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // TODO: Bygg UI för AssessmentFormPage här
     return Scaffold(
-      appBar: AppBar(title: const Text('Bedömning'), centerTitle: true),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.assignment_turned_in,
-                        size: 40,
-                        color: Colors.orange.shade600,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Bedömningsformulär',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Fyll i dina uppgifter för att slutföra bedömningen.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                TextField(
-                  controller: _nameCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Ditt namn *',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    prefixIcon: const Icon(Icons.person),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                TextField(
-                  controller: _phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  decoration: InputDecoration(
-                    labelText: 'Mobilnummer *',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    prefixIcon: const Icon(Icons.phone),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                TextField(
-                  controller: _companyCtrl,
-                  decoration: InputDecoration(
-                    labelText: 'Företag/Organisation *',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    prefixIcon: const Icon(Icons.business),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                TextField(
-                  controller: _feedbackCtrl,
-                  maxLines: 5,
-                  decoration: InputDecoration(
-                    labelText: 'Bedömning/Feedback (valfritt)',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    hintText: 'Skriv dina kommentarer här...',
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                if (_error != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      border: Border.all(color: Colors.red.shade200),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _error!,
-                      style: TextStyle(color: Colors.red.shade700),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                if (_success != null) ...[
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      border: Border.all(color: Colors.green.shade200),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.check_circle, color: Colors.green.shade700),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            _success!,
-                            style: TextStyle(
-                              color: Colors.green.shade700,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _loading ? null : _submitAssessment,
-                    icon: const Icon(Icons.send),
-                    label: _loading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
-                          )
-                        : const Text('Skicka bedömning'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
+      appBar: AppBar(title: const Text('Bedömning')),
+      body: Center(child: Text('AssessmentFormPage UI här')),
     );
   }
 }
@@ -1966,7 +1832,10 @@ class _LoginScreenState extends State<LoginScreen> {
             label: const Text('Elev'),
           ),
           ElevatedButton.icon(
-            onPressed: () => Navigator.pop(ctx, 'teacher'),
+            onPressed: () {
+              print('Lärarknapp tryckt');
+              Navigator.pop(ctx, 'teacher');
+            },
             icon: const Icon(Icons.person),
             label: const Text('Lärare'),
           ),
@@ -1979,7 +1848,27 @@ class _LoginScreenState extends State<LoginScreen> {
     if (role == 'student') {
       await _showStudentRegisterDialog();
     } else {
-      await _showTeacherRegisterDialog();
+      print('Försöker visa lärarregistreringsdialog');
+      try {
+        await _showTeacherRegisterDialog();
+      } catch (e) {
+        print('Kunde inte visa lärarregistreringsdialog: $e');
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Fel'),
+              content: Text('Kunde inte visa lärarregistreringsdialog: $e'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -2093,11 +1982,19 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _showTeacherRegisterDialog() async {
+      print('Inne i _showTeacherRegisterDialog');
     final firstNameCtrl = TextEditingController();
     final lastNameCtrl = TextEditingController();
     final passCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
-    final schoolCtrl = TextEditingController();
+    String? selectedSchool;
+
+    // Hämta skolor från Firestore
+    final schoolsSnap = await FirebaseFirestore.instance
+      .collection('schools')
+      .orderBy('name')
+      .get();
+    final schools = schoolsSnap.docs.map((d) => d['name'].toString()).toList();
 
     try {
       await showDialog(
@@ -2144,12 +2041,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: schoolCtrl,
+                  DropdownButtonFormField<String>(
+                    value: selectedSchool,
+                    items: schools
+                        .map((s) => DropdownMenuItem(
+                              value: s,
+                              child: Text(s),
+                            ))
+                        .toList(),
+                    onChanged: (v) => selectedSchool = v,
                     decoration: const InputDecoration(
                       labelText: 'Skola',
                       border: OutlineInputBorder(),
-                      hintText: 'T.ex. Anderstorpsskolan',
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -2172,7 +2075,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 final lastName = lastNameCtrl.text.trim();
                 final password = passCtrl.text;
                 final email = emailCtrl.text.trim();
-                final school = schoolCtrl.text.trim();
+                final school = selectedSchool ?? '';
 
                 if (firstName.isEmpty ||
                     lastName.isEmpty ||
@@ -2180,7 +2083,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     email.isEmpty ||
                     school.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Fyll i alla fält')),
+                    const SnackBar(
+                      content: Text(
+                        'Fyll i alla fält',
+                      ),
+                    ),
                   );
                   return;
                 }
@@ -2206,7 +2113,6 @@ class _LoginScreenState extends State<LoginScreen> {
       lastNameCtrl.dispose();
       passCtrl.dispose();
       emailCtrl.dispose();
-      schoolCtrl.dispose();
     }
   }
 
@@ -2546,33 +2452,161 @@ class TeacherHome extends StatefulWidget {
 }
 
 class _TeacherHomeState extends State<TeacherHome> {
-  final _searchController = TextEditingController();
-  String _searchQuery = '';
+  final _newClassCtrl = TextEditingController();
+  String _filterClass = 'ALL'; // ALL = alla
+  final _addStudentEmailCtrl = TextEditingController();
+  String _addStudentClass = 'NONE';
+  String? _msg;
+  String _inviteForClass = 'NONE';
+  String? _lastInviteCode;
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _newClassCtrl.dispose();
+    _addStudentEmailCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _createClass(String teacherUid) async {
+    final name = _newClassCtrl.text.trim();
+    if (name.isEmpty) return;
+
+    // classDocId: vi använder name + teacherUid för enkelhet (unik per lärare)
+    final docId = '${teacherUid}_$name';
+
+    await FirebaseFirestore.instance.collection('classes').doc(docId).set({
+      'teacherUid': teacherUid,
+      'name': name,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    _newClassCtrl.clear();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _setStudentClass({
+    required String studentUid,
+    required String? className, // null = ingen klass
+  }) async {
+    await FirebaseFirestore.instance.collection('users').doc(studentUid).set({
+      'classId': className ?? '',
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> _addStudentToClass(
+    String teacherUid,
+    List<String> classNames,
+  ) async {
+    setState(() => _msg = null);
+    try {
+      final email = _addStudentEmailCtrl.text.trim().toLowerCase();
+      if (email.isEmpty) {
+        setState(() => _msg = 'Skriv en elevs e-post.');
+        return;
+      }
+
+      final q = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+
+      if (q.docs.isEmpty) {
+        setState(() => _msg = 'Hittade ingen användare med den e-posten.');
+        return;
+      }
+
+      final userDoc = q.docs.first;
+      final role = (userDoc.data()['role'] ?? 'student')
+          .toString()
+          .trim()
+          .toLowerCase();
+      if (role != 'student') {
+        setState(() => _msg = 'Användaren är inte en elev.');
+        return;
+      }
+
+      final classId = (_addStudentClass == 'NONE') ? '' : _addStudentClass;
+
+      await userDoc.reference.set({
+        'teacherUid': teacherUid,
+        'classId': classId,
+      }, SetOptions(merge: true));
+
+      setState(() {
+        _msg = 'Elev tillagd/uppdaterad.';
+        _addStudentEmailCtrl.clear();
+        _addStudentClass = 'NONE';
+      });
+    } catch (e) {
+      setState(() => _msg = 'Fel: $e');
+    }
+  }
+
+  Future<void> _createInvite(String teacherUid, List<String> classNames) async {
+    setState(() {
+      _msg = null;
+      _lastInviteCode = null;
+    });
+
+    try {
+      if (classNames.isEmpty) {
+        setState(() => _msg = 'Skapa minst en klass först.');
+        return;
+      }
+
+      if (_inviteForClass == 'NONE') {
+        setState(() => _msg = 'Välj en klass för koden.');
+        return;
+      }
+
+      String code = '';
+      final refCol = FirebaseFirestore.instance.collection('invites');
+      for (int i = 0; i < 5; i++) {
+        final candidate = generateInviteCode();
+        final doc = await refCol.doc(candidate).get();
+        if (!doc.exists) {
+          code = candidate;
+          await refCol.doc(code).set({
+            'teacherUid': teacherUid,
+            'classId': _inviteForClass == 'NONE' ? '' : _inviteForClass,
+            'used': false,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          break;
+        }
+      }
+
+      if (code.isEmpty) {
+        setState(() => _msg = 'Kunde inte skapa unik kod, försök igen.');
+        return;
+      }
+
+      setState(() {
+        _lastInviteCode = code;
+        _msg = 'Kod skapad. Dela den med eleven.';
+      });
+    } catch (e) {
+      setState(() => _msg = 'Fel: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final teacherUid = FirebaseAuth.instance.currentUser!.uid;
 
+    final classesQuery = FirebaseFirestore.instance
+        .collection('classes')
+        .where('teacherUid', isEqualTo: teacherUid);
+
+    final studentsQuery = FirebaseFirestore.instance
+        .collection('users')
+        .where('teacherUid', isEqualTo: teacherUid);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Översikt'),
+        title: const Text('Lärare'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.bar_chart),
-            tooltip: 'Statistik',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const StatisticsScreen()),
-              );
-            },
-          ),
           IconButton(
             tooltip: 'Logga ut',
             onPressed: () => FirebaseAuth.instance.signOut(),
@@ -2580,1157 +2614,320 @@ class _TeacherHomeState extends State<TeacherHome> {
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('classes')
-            .where('teacherUid', isEqualTo: teacherUid)
-            .snapshots(),
-        builder: (context, classSnapshot) {
-          if (classSnapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: classesQuery.snapshots(),
+          builder: (context, classSnap) {
+            if (classSnap.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          final classes = classSnapshot.data?.docs ?? [];
-          
-          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('users')
-                .where('teacherUid', isEqualTo: teacherUid)
-                .where('role', isEqualTo: 'student')
-                .snapshots(),
-            builder: (context, studentSnapshot) {
-              if (studentSnapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+            final classDocs = classSnap.data?.docs ?? [];
+            final classNames =
+                classDocs
+                    .map((d) => (d.data()['name'] ?? '').toString().trim())
+                    .where((s) => s.isNotEmpty)
+                    .toList()
+                  ..sort();
 
-              final students = studentSnapshot.data?.docs ?? [];
+            final filterOptions = ['ALL', ...classNames];
 
-              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection('assessmentRequests')
-                    .where('status', isEqualTo: 'pending')
-                    .snapshots(),
-                builder: (context, assessmentSnapshot) {
-                  final allPendingAssessments = assessmentSnapshot.data?.docs ?? [];
-                  
-                  // Filtrera bara bedömningar för denna lärares elever
-                  final pendingAssessments = allPendingAssessments.where((doc) {
-                    final studentUid = doc.data()['studentUid']?.toString() ?? '';
-                    return students.any((s) => s.id == studentUid);
-                  }).toList();
+            // Se till att vald filterklass finns
+            if (!filterOptions.contains(_filterClass)) {
+              _filterClass = 'ALL';
+            }
 
-                  return CustomScrollView(
-                    slivers: [
-                      // Dashboard statistik
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'Dashboard',
-                                style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              
-                              // Statistikkort
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildStatCard(
-                                      icon: Icons.class_,
-                                      label: 'Klasser',
-                                      value: '${classes.length}',
-                                      color: Colors.blue,
-                                      onTap: () => _showClassManagement(context, teacherUid),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: _buildStatCard(
-                                      icon: Icons.people,
-                                      label: 'Elever',
-                                      value: '${students.length}',
-                                      color: Colors.green,
-                                      onTap: null,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: _buildStatCard(
-                                      icon: Icons.pending_actions,
-                                      label: 'Väntande',
-                                      value: '${pendingAssessments.length}',
-                                      color: Colors.orange,
-                                      onTap: pendingAssessments.isEmpty
-                                          ? null
-                                          : () => _showPendingAssessments(context, pendingAssessments, students),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              
-                              const SizedBox(height: 24),
-                              
-                              // Klassöversikt
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text(
-                                    'Mina klasser',
-                                    style: TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  TextButton.icon(
-                                    onPressed: () => _showClassManagement(context, teacherUid),
-                                    icon: const Icon(Icons.settings),
-                                    label: const Text('Hantera'),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                            ],
-                          ),
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Klasser',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+
+                // Skapa klass
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _newClassCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Ny klass (t.ex. BA23)',
+                          border: OutlineInputBorder(),
                         ),
                       ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () => _createClass(teacherUid),
+                      child: const Text('Lägg till'),
+                    ),
+                  ],
+                ),
 
-                      // Klasskort
-                      if (classes.isEmpty)
-                        const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(horizontal: 16),
-                            child: Card(
-                              child: Padding(
-                                padding: EdgeInsets.all(32),
-                                child: Center(
-                                  child: Column(
-                                    children: [
-                                      Icon(Icons.class_, size: 48, color: Colors.grey),
-                                      SizedBox(height: 16),
-                                      Text(
-                                        'Inga klasser ännu',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                      SizedBox(height: 8),
-                                      Text(
-                                        'Tryck på + för att skapa din första klass',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        )
-                      else
-                        SliverPadding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          sliver: SliverGrid(
-                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 200,
-                              childAspectRatio: 1.3,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 12,
-                            ),
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                                final classDoc = classes[index];
-                                final className = classDoc.data()['name']?.toString() ?? '';
-                                final classStudents = students.where(
-                                  (s) => s.data()['classId']?.toString() == className,
-                                ).toList();
-                                
-                                final classPending = pendingAssessments.where((a) {
-                                  final studentUid = a.data()['studentUid']?.toString() ?? '';
-                                  return classStudents.any((s) => s.id == studentUid);
-                                }).length;
+                const SizedBox(height: 12),
 
-                                return _buildClassCard(
-                                  className: className,
-                                  studentCount: classStudents.length,
-                                  pendingCount: classPending,
-                                  onTap: () => _showClassDetails(context, className, classStudents),
-                                );
-                              },
-                              childCount: classes.length,
+                // Filter
+                Row(
+                  children: [
+                    const Text('Filter: '),
+                    const SizedBox(width: 8),
+                    DropdownButton<String>(
+                      value: _filterClass,
+                      items: filterOptions
+                          .map(
+                            (c) => DropdownMenuItem(
+                              value: c,
+                              child: Text(c == 'ALL' ? 'Alla klasser' : c),
                             ),
-                          ),
-                        ),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          setState(() => _filterClass = v ?? 'ALL'),
+                    ),
+                  ],
+                ),
 
-                      // Elevlista
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Alla elever',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              
-                              // Sökfält
-                              TextField(
-                                controller: _searchController,
-                                decoration: InputDecoration(
-                                  hintText: 'Sök elev...',
-                                  prefixIcon: const Icon(Icons.search),
-                                  suffixIcon: _searchQuery.isNotEmpty
-                                      ? IconButton(
-                                          icon: const Icon(Icons.clear),
-                                          onPressed: () {
-                                            setState(() {
-                                              _searchController.clear();
-                                              _searchQuery = '';
-                                            });
-                                          },
-                                        )
-                                      : null,
-                                  border: const OutlineInputBorder(),
-                                ),
-                                onChanged: (value) {
-                                  setState(() {
-                                    _searchQuery = value.toLowerCase();
-                                  });
-                                },
-                              ),
-                              const SizedBox(height: 12),
-                            ],
-                          ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Lägg till elev via e-post',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _addStudentEmailCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Elevens e-post',
+                          border: OutlineInputBorder(),
                         ),
                       ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 150,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _addStudentClass,
+                        decoration: const InputDecoration(
+                          labelText: 'Klass',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'NONE',
+                            child: Text('Ingen'),
+                          ),
+                          ...classNames.map(
+                            (c) => DropdownMenuItem(value: c, child: Text(c)),
+                          ),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _addStudentClass = v ?? 'NONE'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () =>
+                          _addStudentToClass(teacherUid, classNames),
+                      child: const Text('Lägg till'),
+                    ),
+                  ],
+                ),
+                if (_msg != null) ...[
+                  const SizedBox(height: 8),
+                  Text(_msg!, style: const TextStyle(color: Colors.green)),
+                ],
+                const SizedBox(height: 12),
+                const Text(
+                  'Generera kopplingskod',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 220,
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _inviteForClass,
+                        decoration: const InputDecoration(
+                          labelText: 'Klass (kod gäller för)',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'NONE',
+                            child: Text('Ingen'),
+                          ),
+                          ...classNames.map(
+                            (c) => DropdownMenuItem(value: c, child: Text(c)),
+                          ),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _inviteForClass = v ?? 'NONE'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () => _createInvite(teacherUid, classNames),
+                      child: const Text('Generera kod'),
+                    ),
+                    const SizedBox(width: 12),
+                    if (_lastInviteCode != null)
+                      SelectableText('Kod: $_lastInviteCode'),
+                  ],
+                ),
 
-                      // Filtrerad elevlista
-                      Builder(
-                        builder: (context) {
-                          final filtered = students.where((doc) {
-                            if (_searchQuery.isEmpty) return true;
-                            
-                            final data = doc.data();
-                            final name = (data['displayName'] ?? '').toString().toLowerCase();
-                            final email = (data['email'] ?? '').toString().toLowerCase();
-                            final classId = (data['classId'] ?? '').toString().toLowerCase();
-                            
-                            return name.contains(_searchQuery) ||
-                                   email.contains(_searchQuery) ||
-                                   classId.contains(_searchQuery);
-                          }).toList();
+                const SizedBox(height: 12),
 
-                          // Sortera
-                          filtered.sort((a, b) {
-                            final aName = (a.data()['displayName'] ?? '').toString();
-                            final bName = (b.data()['displayName'] ?? '').toString();
-                            final aEmail = (a.data()['email'] ?? '').toString();
-                            final bEmail = (b.data()['email'] ?? '').toString();
-                            final ax = (aName.isEmpty ? aEmail : aName).toLowerCase();
-                            final bx = (bName.isEmpty ? bEmail : bName).toLowerCase();
-                            return ax.compareTo(bx);
-                          });
+                const Text(
+                  'Mina elever',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
 
-                          if (filtered.isEmpty) {
-                            return SliverToBoxAdapter(
-                              child: Padding(
-                                padding: const EdgeInsets.all(32),
-                                child: Center(
-                                  child: Text(
-                                    _searchQuery.isEmpty
-                                        ? 'Inga elever ännu\nLägg till elever via +-knappen'
-                                        : 'Inga elever matchade sökningen',
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }
+                Expanded(
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: studentsQuery.snapshots(),
+                    builder: (context, studentSnap) {
+                      if (studentSnap.connectionState ==
+                          ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (studentSnap.hasError) {
+                        return Center(child: Text('Fel: ${studentSnap.error}'));
+                      }
 
-                          return SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                            sliver: SliverList(
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  final doc = filtered[index];
-                                  final data = doc.data();
-                                  final studentUid = doc.id;
-                                  final name = (data['displayName'] ?? '').toString().trim();
-                                  final email = (data['email'] ?? '').toString();
-                                  final classId = (data['classId'] ?? '').toString().trim();
+                      final docs = studentSnap.data?.docs ?? [];
 
-                                  return Card(
-                                    margin: const EdgeInsets.only(bottom: 8),
-                                    child: ListTile(
-                                      leading: CircleAvatar(
-                                        backgroundColor: Colors.blue.shade100,
-                                        child: Text(
-                                          name.isNotEmpty 
-                                              ? name[0].toUpperCase()
-                                              : email[0].toUpperCase(),
-                                          style: TextStyle(
-                                            color: Colors.blue.shade700,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
+                      // Bara elever
+                      final students = docs.where((d) {
+                        final role = (d.data()['role'] ?? '')
+                            .toString()
+                            .trim()
+                            .toLowerCase();
+                        return role == 'student';
+                      }).toList();
+
+                      // Filter på klass
+                      final filtered = students.where((d) {
+                        if (_filterClass == 'ALL') return true;
+                        final classId = (d.data()['classId'] ?? '')
+                            .toString()
+                            .trim();
+                        return classId == _filterClass;
+                      }).toList();
+
+                      if (filtered.isEmpty) {
+                        return const Center(
+                          child: Text(
+                            'Inga elever i detta filter.\nBe elever koppla sig eller ändra klass.',
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
+
+                      // sortera på namn/email för snyggare lista
+                      filtered.sort((a, b) {
+                        final an = (a.data()['displayName'] ?? '').toString();
+                        final bn = (b.data()['displayName'] ?? '').toString();
+                        final ae = (a.data()['email'] ?? '').toString();
+                        final be = (b.data()['email'] ?? '').toString();
+                        final ax = (an.isEmpty ? ae : an).toLowerCase();
+                        final bx = (bn.isEmpty ? be : bn).toLowerCase();
+                        return ax.compareTo(bx);
+                      });
+
+                      return ListView.separated(
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, i) {
+                          final doc = filtered[i];
+                          final data = doc.data();
+                          final studentUid = doc.id;
+
+                          final email = (data['email'] ?? '').toString();
+                          final name = (data['displayName'] ?? '')
+                              .toString()
+                              .trim();
+                          final currentClass = (data['classId'] ?? '')
+                              .toString()
+                              .trim();
+
+                          final studentTitle = name.isEmpty ? email : name;
+
+                          return Card(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 6),
+                              child: ListTile(
+                                title: Text(studentTitle),
+                                subtitle: Text(name.isEmpty ? 'Elev' : email),
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => StudentDetailScreen(
+                                        studentUid: studentUid,
                                       ),
-                                      title: Text(name.isEmpty ? email : name),
-                                      subtitle: Row(
-                                        children: [
-                                          if (name.isNotEmpty)
-                                            Expanded(
-                                              child: Text(
-                                                email,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          if (classId.isNotEmpty) ...[
-                                            if (name.isNotEmpty) const Text(' • '),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 2,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.blue.shade50,
-                                                borderRadius: BorderRadius.circular(12),
-                                              ),
-                                              child: Text(
-                                                classId,
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.blue.shade700,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                      trailing: const Icon(Icons.chevron_right),
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => StudentDetailStatisticsScreen(
-                                              studentUid: studentUid,
-                                              studentName: name.isEmpty ? email : name,
-                                              classId: classId,
-                                            ),
-                                          ),
-                                        );
-                                      },
                                     ),
                                   );
                                 },
-                                childCount: filtered.length,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  );
-                },
-              );
-            },
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddMenu(context, teacherUid),
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
 
-  Widget _buildStatCard({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-    required VoidCallback? onTap,
-  }) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Icon(icon, color: color, size: 32),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildClassCard({
-    required String className,
-    required int studentCount,
-    required int pendingCount,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(Icons.class_, color: Colors.blue.shade700, size: 20),
-                  ),
-                  const Spacer(),
-                  if (pendingCount > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.orange,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '$pendingCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                className,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                '$studentCount ${studentCount == 1 ? 'elev' : 'elever'}',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showAddMenu(BuildContext context, String teacherUid) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.class_),
-              title: const Text('Skapa ny klass'),
-              onTap: () {
-                Navigator.pop(context);
-                _showCreateClassDialog(context, teacherUid);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person_add),
-              title: const Text('Lägg till elev (e-post)'),
-              onTap: () {
-                Navigator.pop(context);
-                _showAddStudentDialog(context, teacherUid);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.qr_code),
-              title: const Text('Generera kopplingskod'),
-              onTap: () {
-                Navigator.pop(context);
-                _showGenerateInviteDialog(context, teacherUid);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showCreateClassDialog(BuildContext context, String teacherUid) {
-    final controller = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Skapa ny klass'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Klassnamn (t.ex. BA23)',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Avbryt'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final name = controller.text.trim();
-              if (name.isEmpty) return;
-
-              final docId = '${teacherUid}_$name';
-              await FirebaseFirestore.instance.collection('classes').doc(docId).set({
-                'teacherUid': teacherUid,
-                'name': name,
-                'createdAt': FieldValue.serverTimestamp(),
-              });
-
-              if (context.mounted) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Klass "$name" skapad')),
-                );
-              }
-            },
-            child: const Text('Skapa'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAddStudentDialog(BuildContext context, String teacherUid) async {
-    final emailController = TextEditingController();
-    String selectedClass = 'NONE';
-
-    // Hämta klasser
-    final classesSnapshot = await FirebaseFirestore.instance
-        .collection('classes')
-        .where('teacherUid', isEqualTo: teacherUid)
-        .get();
-
-    final classNames = classesSnapshot.docs
-        .map((d) => (d.data()['name'] ?? '').toString().trim())
-        .where((s) => s.isNotEmpty)
-        .toList()
-      ..sort();
-
-    if (!context.mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Lägg till elev'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Elevens e-post',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.emailAddress,
-                autofocus: true,
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: selectedClass,
-                decoration: const InputDecoration(
-                  labelText: 'Klass',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  const DropdownMenuItem(value: 'NONE', child: Text('Ingen')),
-                  ...classNames.map((c) => DropdownMenuItem(value: c, child: Text(c))),
-                ],
-                onChanged: (v) => setState(() => selectedClass = v ?? 'NONE'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Avbryt'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final email = emailController.text.trim().toLowerCase();
-                if (email.isEmpty) return;
-
-                try {
-                  final q = await FirebaseFirestore.instance
-                      .collection('users')
-                      .where('email', isEqualTo: email)
-                      .limit(1)
-                      .get();
-
-                  if (q.docs.isEmpty) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Hittade ingen användare med den e-posten')),
-                      );
-                    }
-                    return;
-                  }
-
-                  final userDoc = q.docs.first;
-                  final role = (userDoc.data()['role'] ?? 'student').toString().trim().toLowerCase();
-                  
-                  if (role != 'student') {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Användaren är inte en elev')),
-                      );
-                    }
-                    return;
-                  }
-
-                  final classId = (selectedClass == 'NONE') ? '' : selectedClass;
-
-                  await userDoc.reference.set({
-                    'teacherUid': teacherUid,
-                    'classId': classId,
-                  }, SetOptions(merge: true));
-
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Elev tillagd')),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Fel: $e')),
-                    );
-                  }
-                }
-              },
-              child: const Text('Lägg till'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showGenerateInviteDialog(BuildContext context, String teacherUid) async {
-    String selectedClass = 'NONE';
-    String? generatedCode;
-
-    // Hämta klasser
-    final classesSnapshot = await FirebaseFirestore.instance
-        .collection('classes')
-        .where('teacherUid', isEqualTo: teacherUid)
-        .get();
-
-    final classNames = classesSnapshot.docs
-        .map((d) => (d.data()['name'] ?? '').toString().trim())
-        .where((s) => s.isNotEmpty)
-        .toList()
-      ..sort();
-
-    if (classNames.isEmpty) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Skapa minst en klass först')),
-        );
-      }
-      return;
-    }
-
-    if (!context.mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Generera kopplingskod'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                initialValue: selectedClass,
-                decoration: const InputDecoration(
-                  labelText: 'Klass',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  const DropdownMenuItem(value: 'NONE', child: Text('Ingen')),
-                  ...classNames.map((c) => DropdownMenuItem(value: c, child: Text(c))),
-                ],
-                onChanged: (v) => setState(() {
-                  selectedClass = v ?? 'NONE';
-                  generatedCode = null;
-                }),
-              ),
-              if (generatedCode != null) ...[
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.green),
-                  ),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'Kopplingskod genererad!',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      SelectableText(
-                        generatedCode!,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Dela denna kod med eleven',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Stäng'),
-            ),
-            if (generatedCode == null)
-              ElevatedButton(
-                onPressed: () async {
-                  if (selectedClass == 'NONE') {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Välj en klass')),
-                    );
-                    return;
-                  }
-
-                  String code = '';
-                  final refCol = FirebaseFirestore.instance.collection('invites');
-                  
-                  for (int i = 0; i < 5; i++) {
-                    final candidate = generateInviteCode();
-                    final doc = await refCol.doc(candidate).get();
-                    if (!doc.exists) {
-                      code = candidate;
-                      await refCol.doc(code).set({
-                        'teacherUid': teacherUid,
-                        'classId': selectedClass,
-                        'used': false,
-                        'createdAt': FieldValue.serverTimestamp(),
-                      });
-                      break;
-                    }
-                  }
-
-                  if (code.isEmpty) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Kunde inte skapa kod, försök igen')),
-                      );
-                    }
-                    return;
-                  }
-
-                  setState(() => generatedCode = code);
-                },
-                child: const Text('Generera'),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showClassManagement(BuildContext context, String teacherUid) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => _ClassManagementScreen(teacherUid: teacherUid),
-      ),
-    );
-  }
-
-  void _showPendingAssessments(
-    BuildContext context,
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> assessments,
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> students,
-  ) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 600),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade700,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4),
-                    topRight: Radius.circular(4),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.pending_actions, color: Colors.white),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Väntande bedömningar',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: assessments.length,
-                  itemBuilder: (context, index) {
-                    final assessment = assessments[index];
-                    final data = assessment.data();
-                    final studentUid = data['studentUid']?.toString() ?? '';
-                    final weeks = (data['weeks'] as List?)?.cast<String>().join(', ') ?? '';
-                    
-                    final student = students.firstWhere(
-                      (s) => s.id == studentUid,
-                      orElse: () => students.first,
-                    );
-                    
-                    final studentName = student.data()['displayName']?.toString() ?? 
-                                       student.data()['email']?.toString() ?? 
-                                       'Okänd';
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: const CircleAvatar(
-                          backgroundColor: Colors.orange,
-                          child: Icon(Icons.assignment, color: Colors.white),
-                        ),
-                        title: Text(studentName),
-                        subtitle: Text('Veckor: $weeks'),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          Navigator.pop(context);
-                          // Kan lägga till navigering till bedömningssidan här
-                        },
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showClassDetails(
-    BuildContext context,
-    String className,
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> classStudents,
-  ) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 600),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade700,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4),
-                    topRight: Radius.circular(4),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.class_, color: Colors.white),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            className,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            '${classStudents.length} ${classStudents.length == 1 ? 'elev' : 'elever'}',
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: classStudents.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'Inga elever i denna klass',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: classStudents.length,
-                        itemBuilder: (context, index) {
-                          final student = classStudents[index];
-                          final data = student.data();
-                          final name = data['displayName']?.toString().trim() ?? '';
-                          final email = data['email']?.toString() ?? '';
-
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: Colors.blue.shade100,
-                                child: Text(
-                                  name.isNotEmpty 
-                                      ? name[0].toUpperCase()
-                                      : email[0].toUpperCase(),
-                                  style: TextStyle(
-                                    color: Colors.blue.shade700,
-                                    fontWeight: FontWeight.bold,
+                                trailing: SizedBox(
+                                  width: 170,
+                                  child: DropdownButtonFormField<String>(
+                                    initialValue: currentClass.isEmpty
+                                        ? 'NONE'
+                                        : currentClass,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Klass',
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    items: [
+                                      const DropdownMenuItem(
+                                        value: 'NONE',
+                                        child: Text('Ingen'),
+                                      ),
+                                      ...classNames.map(
+                                        (c) => DropdownMenuItem(
+                                          value: c,
+                                          child: Text(c),
+                                        ),
+                                      ),
+                                    ],
+                                    onChanged: (v) async {
+                                      final newClass =
+                                          (v == null || v == 'NONE') ? null : v;
+                                      await _setStudentClass(
+                                        studentUid: studentUid,
+                                        className: newClass,
+                                      );
+                                    },
                                   ),
                                 ),
                               ),
-                              title: Text(name.isEmpty ? email : name),
-                              subtitle: name.isNotEmpty ? Text(email) : null,
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () {
-                                Navigator.pop(context);
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => StudentDetailStatisticsScreen(
-                                      studentUid: student.id,
-                                      studentName: name.isEmpty ? email : name,
-                                      classId: className,
-                                    ),
-                                  ),
-                                );
-                              },
                             ),
                           );
                         },
-                      ),
-              ),
-            ],
-          ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _ClassManagementScreen extends StatelessWidget {
-  final String teacherUid;
-
-  const _ClassManagementScreen({required this.teacherUid});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Hantera klasser'),
-      ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('classes')
-            .where('teacherUid', isEqualTo: teacherUid)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final classes = snapshot.data?.docs ?? [];
-
-          if (classes.isEmpty) {
-            return const Center(
-              child: Text(
-                'Inga klasser ännu\nSkapa en klass via +-knappen på föregående sida',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
-              ),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: classes.length,
-            itemBuilder: (context, index) {
-              final classDoc = classes[index];
-              final className = classDoc.data()['name']?.toString() ?? '';
-
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: ListTile(
-                  leading: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(Icons.class_, color: Colors.blue.shade700),
-                  ),
-                  title: Text(
-                    className,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Ta bort klass'),
-                          content: Text('Är du säker på att du vill ta bort klassen "$className"?\n\nEleverna kommer att behålla sin koppling till dig.'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: const Text('Avbryt'),
-                            ),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                              ),
-                              onPressed: () => Navigator.pop(context, true),
-                              child: const Text('Ta bort'),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirm == true) {
-                        // Ta bort klassen
-                        await classDoc.reference.delete();
-
-                        // Uppdatera elever som har denna klass
-                        final studentsInClass = await FirebaseFirestore.instance
-                            .collection('users')
-                            .where('teacherUid', isEqualTo: teacherUid)
-                            .where('classId', isEqualTo: className)
-                            .get();
-
-                        for (final student in studentsInClass.docs) {
-                          await student.reference.update({'classId': ''});
-                        }
-
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Klass "$className" borttagen')),
-                          );
-                        }
-                      }
-                    },
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
 class StudentDetailScreen extends StatelessWidget {
   final String studentUid;
 
@@ -4229,7 +3426,6 @@ class StudentTimesheetOverview extends StatelessWidget {
             final weekStart = _ymd(monday);
 
             int thisWeekHours = 0;
-            int totalHours = 0;
             int approvedCount = 0;
             bool thisWeekExists = false;
 
@@ -4238,9 +3434,11 @@ class StudentTimesheetOverview extends StatelessWidget {
               final entries =
                   (data['entries'] as Map?)?.cast<String, dynamic>() ?? {};
               final sum = _sumEntries(entries);
-              totalHours += sum;
-
-              if ((data['approved'] ?? false) == true) approvedCount++;
+              final approved = (data['approved'] ?? false) == true;
+              
+              if (approved) {
+                approvedCount++;
+              }
 
               String ws = (data['weekStart'] ?? '').toString().trim();
               if (ws == weekStart) {
@@ -4311,38 +3509,44 @@ class StudentTimesheetOverview extends StatelessWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  '$thisWeekHours h',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 36,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '$thisWeekHours h',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 36,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: const Icon(
+                                        Icons.timer,
+                                        color: Colors.white,
+                                        size: 28,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(
-                                    Icons.timer,
-                                    color: Colors.white,
-                                    size: 28,
+                                const SizedBox(height: 12),
+                                Text(
+                                  thisWeekExists
+                                      ? 'Tidkort påstartat'
+                                      : 'Deadline: Fredag kl 23:59',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
                                   ),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 12),
-                            Text(
-                              thisWeekExists
-                                  ? 'Tidkort påstartat'
-                                  : 'Deadline: Fredag kl 23:59',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -4525,34 +3729,6 @@ class StudentTimesheetOverview extends StatelessWidget {
                         ),
                         const SizedBox(height: 24),
                       ],
-
-                      // Totalt
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Totalt loggade timmar',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            Text(
-                              '$totalHours h',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -4820,9 +3996,7 @@ class TimesheetPeriodScreen extends StatelessWidget {
       stream: userDocStream,
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const Center(child: CircularProgressIndicator());
         }
 
         final data = snap.data?.data() ?? {};
@@ -4885,7 +4059,9 @@ String generateAssessmentId({int length = 16}) {
 // Helper för att beräkna veckonummer
 int _getWeekNumberForAssessment(DateTime date) {
   final jan4 = DateTime(date.year, 1, 4);
-  final monday = jan4.subtract(Duration(days: jan4.weekday - DateTime.monday));
+  final monday = jan4.subtract(
+    Duration(days: jan4.weekday - DateTime.monday),
+  );
   final weekNum = date.difference(monday).inDays ~/ 7 + 1;
   return weekNum;
 }
@@ -5185,7 +4361,7 @@ class _QRCodeDisplay extends StatelessWidget {
 
   // Hämta eller skapa assessment ID
   Future<String> _getOrCreateAssessmentId() async {
-    // Om vi redan har ett assessment ID från Firestore, använd det
+    // Om vi redan har ett assessment ID från widget, använd det
     if (assessmentId != null && assessmentId!.isNotEmpty) {
       return assessmentId!;
     }
@@ -5237,6 +4413,7 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
   bool _isTeacher = false;
+  bool _isAdmin = false;
   bool _isLoading = true;
   int _pendingTimesheetsCount = 0; // För badge-räknare
   StreamSubscription<QuerySnapshot>? _pendingTimesheetsSubscription; // Lagra subscription för cleanup
@@ -5274,17 +4451,19 @@ class _MainNavigationState extends State<MainNavigation> {
         print('DEBUG: Extracted role: "$role" (length: ${role.length})');
 
         final isTeacher = role == 'teacher';
-        print('DEBUG: isTeacher = $isTeacher');
+        final isAdmin = role == 'admin';
+        print('DEBUG: isTeacher = $isTeacher, isAdmin = $isAdmin');
 
         if (mounted) {
           setState(() {
             _isTeacher = isTeacher;
+            _isAdmin = isAdmin;
             _isLoading = false;
-            print('DEBUG: setState called, _isTeacher is now $_isTeacher');
+            print('DEBUG: setState called, _isTeacher is now $_isTeacher, _isAdmin is now $_isAdmin');
           });
 
-          // Om lärare, lyssna på ogranskade tidkort för badge
-          if (isTeacher) {
+          // Om lärare eller admin, lyssna på ogranskade tidkort för badge
+          if (isTeacher || isAdmin) {
             _listenToPendingTimesheets(user.uid);
           }
         }
@@ -5361,9 +4540,9 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 
   List<Widget> _getScreens() {
-    print('DEBUG: _getScreens() called, _isTeacher=$_isTeacher');
-    if (_isTeacher) {
-      print('DEBUG: Returning TEACHER screens');
+    print('DEBUG: _getScreens() called, _isTeacher=$_isTeacher, _isAdmin=$_isAdmin');
+    if (_isTeacher || _isAdmin) {
+      print('DEBUG: Returning TEACHER/ADMIN screens');
       return [
         TeacherDashboardScreen(
           onNavigateToApproval: () {
@@ -5376,6 +4555,8 @@ class _MainNavigationState extends State<MainNavigation> {
         const ApprovalAndAssessmentScreen(showAllClasses: true),
         const StatisticsScreen(),
         const WeekManagementScreen(),
+        if (_isAdmin) SchoolsScreen(), // Skolor-flik för admin
+        SettingsScreen(),
       ];
     } else {
       print('DEBUG: Returning STUDENT screens');
@@ -5408,12 +4589,12 @@ class _MainNavigationState extends State<MainNavigation> {
         actions: [
           // DEBUG: Visa aktuell roll
           Tooltip(
-            message: _isTeacher ? 'Du är lärare' : 'Du är elev',
+            message: _isTeacher ? 'Du är lärare' : _isAdmin ? 'Du är admin' : 'Du är elev',
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Center(
                 child: Text(
-                  _isTeacher ? '👨‍🏫' : '👨‍🎓',
+                  _isTeacher ? '👨‍🏫' : _isAdmin ? '🛠️' : '👨‍🎓',
                   style: const TextStyle(fontSize: 20),
                 ),
               ),
@@ -5432,11 +4613,11 @@ class _MainNavigationState extends State<MainNavigation> {
         onTap: (index) => setState(() => _currentIndex = index),
         type: BottomNavigationBarType.fixed,
         showUnselectedLabels: true,
-        items: _isTeacher
+        items: (_isTeacher || _isAdmin)
             ? [
                 const BottomNavigationBarItem(
                   icon: Icon(Icons.dashboard),
-                  label: 'Startsida',
+                  label: 'Hem',
                 ),
                 const BottomNavigationBarItem(
                   icon: Icon(Icons.person_add),
@@ -5456,6 +4637,15 @@ class _MainNavigationState extends State<MainNavigation> {
                 const BottomNavigationBarItem(
                   icon: Icon(Icons.calendar_today),
                   label: 'Veckor',
+                ),
+                if (_isAdmin)
+                  const BottomNavigationBarItem(
+                    icon: Icon(Icons.school),
+                    label: 'Skolor',
+                  ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.settings),
+                  label: 'Inställningar',
                 ),
               ]
             : [

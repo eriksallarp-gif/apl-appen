@@ -1,6 +1,18 @@
+    // ClassCodes collection (för klasskoder kopplade till klasser)
+    match /classCodes/{codeId} {
+      allow read: if isTeacherOrAdmin();
+      allow create: if isTeacherOrAdmin();
+      allow update, delete: if isTeacherOrAdmin();
+    }
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Schools collection - tillåt alla att läsa skolor (för registrering)
+    match /schools/{schoolId} {
+      allow read: if true;
+      // Skrivregler kan vara mer restriktiva
+    }
     
     // Helper functions
     function isSignedIn() {
@@ -217,6 +229,12 @@ service cloud.firestore {
       
       // Teachers and admins can update/delete documents
       allow update, delete: if isTeacherOrAdmin();
+    }
+    
+    // Schools collection
+    match /schools/{schoolId} {
+      // Only admins can read/write schools
+      allow read, write: if isAdmin();
     }
     
     // Default deny everything else
