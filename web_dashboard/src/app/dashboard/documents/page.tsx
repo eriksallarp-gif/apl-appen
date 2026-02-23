@@ -141,7 +141,7 @@ export default function DocumentsPage() {
       setSelectedCategory('');
       
       // Refresh documents list
-      await fetchDocuments(user.uid, userRole);
+      await fetchDocuments(user.uid, userRole || 'student');
       alert('Dokument uppladdat!');
     } catch (error) {
       console.error('Error uploading document:', error);
@@ -169,7 +169,7 @@ export default function DocumentsPage() {
       await deleteDoc(doc(db, 'aplDocuments', document.id));
       
       // Refresh list
-      await fetchDocuments(user.uid, userRole);
+      await fetchDocuments(user.uid, userRole || 'student');
       alert('Dokument raderat!');
     } catch (error) {
       console.error('Error deleting document:', error);
