@@ -13,7 +13,15 @@ export default function SchoolsPage() {
     setLoading(true);
     const q = query(collection(db, "schools"), orderBy("name"));
     const snap = await getDocs(q);
-    setSchools(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    setSchools(
+      snap.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          name: data.name ?? "", // fallback till tom sträng om name saknas
+        };
+      })
+    );
     setLoading(false);
   };
 
