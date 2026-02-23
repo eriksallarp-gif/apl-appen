@@ -427,7 +427,7 @@ export default function StudentsPage() {
         <div className="bg-white p-4 rounded-lg shadow">
           <p className="text-sm text-gray-600">Total arbetstid</p>
           <p className="text-2xl font-bold text-green-600">
-            {filteredStudents.reduce((sum, s) => sum + s.totalHours, 0)}h
+            {filteredStudents.reduce((sum, s) => sum + (s.totalHours ?? 0), 0)}h
           </p>
         </div>
         <div className="bg-white p-4 rounded-lg shadow">
