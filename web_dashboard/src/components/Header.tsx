@@ -2,21 +2,35 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { auth } from '@/lib/firebase';
+
+import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { useState, useEffect } from 'react';
+
 
 export default function Header() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setIsLoggedIn(!!user);
+      if (user) {
+        // Hämta roll från Firestore
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          setIsAdmin(userDoc.exists() && userDoc.data().role === 'admin');
+        } catch {
+          setIsAdmin(false);
+        }
+      } else {
+        setIsAdmin(false);
+      }
       setIsLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db, functions } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -164,37 +165,6 @@ export default function AdminPage() {
         schoolCounts.set(teacher.school, current + 1);
       });
 
-      setStats({
-        totalSchools: schoolSet.size,
-        totalTeachers: teachers.length,
-        totalStudents: students.length,
-        pendingTeachers: pending.length,
-        approvedTeachers: approved.length,
-      });
-
-      setPendingTeachers(pending.map(mapTeacher));
-      setApprovedTeachers(approved.map(mapTeacher));
-      setStudents(students.map(mapStudent));
-      setAllTeachers(
-        teachers.map((teacher: any) => ({
-          id: teacher.id,
-          name: teacher.name || teacher.displayName || 'Okant namn',
-          email: teacher.email || '',
-          role: teacher.role || 'teacher',
-          school: teacher.school || '',
-        }))
-      );
-      setAllStudents(
-        students.map((student: any) => ({
-          id: student.id,
-          name: student.name || student.displayName || 'Okant namn',
-          email: student.email || '',
-          role: student.role || 'student',
-          classId: student.classId || '',
-          teacherUid: student.teacherUid || '',
-          specialization: student.specialization || '',
-        }))
-      );
       setClasses(
         classesSnapshot.docs.map(doc => ({
           id: doc.id,
@@ -207,6 +177,7 @@ export default function AdminPage() {
           .map(([name, teacherCount]) => ({ name, teacherCount }))
           .sort((a, b) => a.name.localeCompare(b.name, 'sv-SE'))
       );
+      // Lägg till övriga setState-anrop här om det behövs
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
@@ -355,8 +326,26 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="min-h-screen bg-white">
+      <aside className="fixed left-0 top-0 h-screen w-56 bg-gradient-to-br from-orange-50 to-white border-r border-orange-100/50 flex flex-col py-8 px-6 z-10">
+        <div className="mb-10">
+          <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
+          <p className="text-xs text-orange-400 mt-1">Hem</p>
+        </div>
+        <nav className="flex-1 space-y-4">
+          <Link href="/dashboard" className={`block font-semibold rounded-lg px-3 py-2 transition`}>Hem</Link>
+          <Link href="/dashboard/students" className={`block font-medium rounded-lg px-3 py-2 transition`}>Elever</Link>
+          <Link href="/dashboard/companies" className={`block font-medium rounded-lg px-3 py-2 transition`}>Företag</Link>
+          <Link href="/dashboard/documents" className={`block font-medium rounded-lg px-3 py-2 transition`}>Dokument</Link>
+          <Link href="/dashboard/schools" className={`block font-medium rounded-lg px-3 py-2 transition`}>Skolor</Link>
+          <Link href="/dashboard/admin" className={`block font-medium rounded-lg px-3 py-2 transition bg-orange-100/60 text-orange-600 ring-2 ring-orange-400`}>Lärare</Link>
+          <Link href="/dashboard/settings" className={`block font-medium rounded-lg px-3 py-2 transition ${typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/settings') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : ''}`}>Inställningar</Link>
+        </nav>
+        <div className="mt-auto pt-8">
+          <button onClick={async () => { await signOut(auth); window.location.href = '/login'; }} className="w-full bg-orange-600 text-white rounded-lg py-2 font-semibold hover:bg-orange-700 transition">Logga ut</button>
+        </div>
+      </aside>
+      <main className="ml-56 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <button

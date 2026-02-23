@@ -50,6 +50,7 @@ export default function DocumentsPage() {
   const pathname = usePathname();
 
   useEffect(() => {
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
         router.push('/login');
@@ -57,13 +58,13 @@ export default function DocumentsPage() {
       }
 
       setUser(currentUser);
-      
+
       // Check user role
       const userDocRef = doc(db, 'users', currentUser.uid);
       const userDoc = await getDocs(query(collection(db, 'users')));
       const userData = userDoc.docs.find(d => d.id === currentUser.uid)?.data();
       const role = userData?.role || 'student';
-      
+
       setUserRole(role);
 
       if (role !== 'teacher' && role !== 'admin') {
@@ -71,21 +72,25 @@ export default function DocumentsPage() {
         return;
       }
 
-      await fetchDocuments();
+      await fetchDocuments(currentUser.uid, role);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [router]);
 
-  const fetchDocuments = async () => {
+
+  const fetchDocuments = async (uid: string, role: string) => {
     try {
       const q = query(collection(db, 'aplDocuments'), orderBy('uploadedAt', 'desc'));
       const snapshot = await getDocs(q);
-      const docs = snapshot.docs.map(doc => ({
+      let docs = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as AplDocument));
+      if (role === 'teacher') {
+        docs = docs.filter(doc => doc.uploadedBy === uid);
+      }
       setDocuments(docs);
     } catch (error) {
       console.error('Error fetching documents:', error);
@@ -210,34 +215,12 @@ export default function DocumentsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <aside className="fixed left-0 top-0 h-screen w-56 bg-gradient-to-br from-orange-50 to-white border-r border-orange-100/50 flex flex-col py-8 px-6 z-10">
-        <div className="mb-10">
-          <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
-          <p className="text-xs text-orange-400 mt-1">Hem</p>
-        </div>
-        <nav className="flex-1 space-y-4">
-          <a href="/dashboard" className={`block font-semibold rounded-lg px-3 py-2 transition ${pathname === '/dashboard' ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Hem</a>
-          <a href="/dashboard/students" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/students') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Elever</a>
-          <a href="/dashboard/companies" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/companies') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Företag</a>
-          <a href="/dashboard/documents" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/documents') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Dokument</a>
-          <a href="/dashboard/settings" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/settings') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Inställningar</a>
-        </nav>
-        <div className="mt-auto pt-8">
-          <button
-            onClick={async () => { await import('firebase/auth').then(({ signOut }) => signOut(auth)); router.push('/login'); }}
-            className="w-full bg-orange-600 text-white rounded-lg py-2 font-semibold hover:bg-orange-700 transition"
-          >
-            Logga ut
-          </button>
-        </div>
-      </aside>
-      <main className="ml-56 max-w-7xl mx-auto px-8 py-12">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">APL-dokument</h1>
-            <p className="text-gray-600 mt-2">
-              Hantera viktiga dokument som delas med eleverna
+    <main className="max-w-7xl mx-auto px-8 py-12">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">APL-dokument</h1>
+          <p className="text-gray-600 mt-2">
+            Hantera viktiga dokument som delas med eleverna
             </p>
           </div>
           <button
@@ -414,6 +397,5 @@ export default function DocumentsPage() {
           </div>
         )}
       </main>
-    </div>
   );
 }

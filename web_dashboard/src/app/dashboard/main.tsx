@@ -9,6 +9,7 @@ import { usePathname } from 'next/navigation';
 
 interface Stats {
   totalStudents: number;
+  totalTeachers: number;
   totalTimesheets: number;
   pendingTimesheets: number;
   approvedTimesheets: number;
@@ -17,6 +18,7 @@ interface Stats {
   submittedAssessments: number;
   totalHours: number;
   totalCompanies: number;
+  totalSchools: number;
 }
 
 interface ClassData {
@@ -41,6 +43,7 @@ export default function DashboardPage() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats>({
     totalStudents: 0,
+    totalTeachers: 0,
     totalTimesheets: 0,
     pendingTimesheets: 0,
     approvedTimesheets: 0,
@@ -49,6 +52,7 @@ export default function DashboardPage() {
     submittedAssessments: 0,
     totalHours: 0,
     totalCompanies: 0,
+    totalSchools: 0,
   });
   const [classes, setClasses] = useState<ClassData[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('ALL');
@@ -87,6 +91,7 @@ export default function DashboardPage() {
       const timesheetsSnapshot = await getDocs(collection(db, 'timesheets'));
       const assessmentsSnapshot = await getDocs(collection(db, 'assessmentRequests'));
       const companiesSnapshot = await getDocs(collection(db, 'companies'));
+      const schoolsSnapshot = await getDocs(collection(db, 'schools'));
 
       const isTeacher = role === 'teacher';
       console.log('DEBUG: currentUserId', currentUserId, 'role', role);
@@ -102,6 +107,7 @@ export default function DashboardPage() {
       setClasses(classesData);
 
       const allStudents = usersSnapshot.docs.filter(doc => doc.data().role === 'student');
+      const allTeachers = usersSnapshot.docs.filter(doc => doc.data().role === 'teacher');
       const students = isTeacher
         ? allStudents.filter(doc => {
             const data = doc.data();
@@ -149,13 +155,17 @@ export default function DashboardPage() {
         ? companiesSnapshot.docs.filter(doc => doc.data().teacherUid === currentUserId).length
         : companiesSnapshot.docs.length;
       console.log('DEBUG: companyCount', companyCount);
+      const schoolsCount = schoolsSnapshot.docs.length;
       // Update stats
       setStats(prev => ({
         ...prev,
         totalCompanies: companyCount,
+        totalSchools: schoolsCount,
+        totalTeachers: allTeachers.length,
       }));
       const tempStats = {
         totalStudents: studentSummaries.length,
+        totalTeachers: allTeachers.length,
         totalTimesheets: timesheets.length,
         pendingTimesheets: 0,
         approvedTimesheets: 0,
@@ -164,6 +174,7 @@ export default function DashboardPage() {
         submittedAssessments: 0,
         totalHours: 0,
         totalCompanies: companyCount,
+        totalSchools: schoolsCount,
       };
       applyClassFilter(selectedClassId, studentSummaries, raw, tempStats);
     } catch (error) {
@@ -205,6 +216,7 @@ export default function DashboardPage() {
 
     setFilteredStudents(activeStudents);
       setStats(prev => ({
+        ...prev,
         totalStudents: activeStudents.length,
         totalTimesheets: timesheets.length,
         pendingTimesheets: pending.length,
@@ -213,7 +225,6 @@ export default function DashboardPage() {
         pendingAssessments: pendingAssessments.length,
         submittedAssessments: submittedAssessments.length,
         totalHours,
-        totalCompanies: prev.totalCompanies, // behåll alltid det totala antalet företag
       }));
   };
 
@@ -236,32 +247,25 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <aside className="fixed left-0 top-0 h-screen w-56 bg-gradient-to-br from-orange-50 to-white border-r border-orange-100/50 flex flex-col py-8 px-6 z-10">
-        <div className="mb-10">
-          <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
-          <p className="text-xs text-orange-400 mt-1">Hem</p>
+    <div className="max-w-7xl mx-auto px-8 py-12">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+        <div className="bg-gradient-to-br from-orange-400 to-orange-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="bg-white/30 rounded-full p-2 text-xl">🎓</span>
+            <span className="text-base font-semibold">Elever</span>
+          </div>
+          <div className="text-2xl font-bold">{stats.totalStudents}</div>
         </div>
-        <nav className="flex-1 space-y-4">
-          <a href="/dashboard" className={`block font-semibold rounded-lg px-3 py-2 transition ${pathname === '/dashboard' ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Hem</a>
-          <a href="/dashboard/students" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/students') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Elever</a>
-          <a href="/dashboard/companies" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/companies') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Företag</a>
-          <a href="/dashboard/documents" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/documents') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Dokument</a>
-          <a href="/dashboard/settings" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/settings') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Inställningar</a>
-        </nav>
-        <div className="mt-auto pt-8">
-          <button onClick={handleLogout} className="w-full bg-orange-600 text-white rounded-lg py-2 font-semibold hover:bg-orange-700 transition">Logga ut</button>
-        </div>
-      </aside>
-      <main className="ml-56 max-w-7xl mx-auto px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        {/* Visa "Lärare" istället för "Bedömningar" för admin */}
+        {userRole === 'admin' ? (
           <div className="bg-gradient-to-br from-orange-400 to-orange-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
             <div className="flex items-center gap-3 mb-2">
-              <span className="bg-white/30 rounded-full p-2 text-xl">🎓</span>
-              <span className="text-base font-semibold">Elever</span>
+              <span className="bg-white/30 rounded-full p-2 text-xl">👨‍🏫</span>
+              <span className="text-base font-semibold">Lärare</span>
             </div>
-            <div className="text-2xl font-bold">{stats.totalStudents}</div>
+            <div className="text-2xl font-bold">{typeof stats.totalTeachers === 'number' ? stats.totalTeachers : '—'}</div>
           </div>
+        ) : (
           <div className="bg-gradient-to-br from-purple-400 to-purple-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
             <div className="flex items-center gap-3 mb-2">
               <span className="bg-white/30 rounded-full p-2 text-xl">👨‍🏫</span>
@@ -269,15 +273,25 @@ export default function DashboardPage() {
             </div>
             <div className="text-2xl font-bold">{stats.totalAssessments}</div>
           </div>
-          <div className="bg-gradient-to-br from-blue-400 to-blue-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
-            <div className="flex items-center gap-3 mb-2">
-              <span className="bg-white/30 rounded-full p-2 text-xl">🏢</span>
-              <span className="text-base font-semibold">Företag</span>
-            </div>
-            <div className="text-2xl font-bold">{stats.totalCompanies}</div>
+        )}
+        <div className="bg-gradient-to-br from-blue-400 to-blue-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="bg-white/30 rounded-full p-2 text-xl">🏢</span>
+            <span className="text-base font-semibold">Företag</span>
           </div>
+          <div className="text-2xl font-bold">{stats.totalCompanies}</div>
         </div>
-      </main>
+        {/* Skolor endast för admin */}
+        {userRole === 'admin' && (
+          <div className="bg-gradient-to-br from-green-400 to-green-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="bg-white/30 rounded-full p-2 text-xl">🏫</span>
+              <span className="text-base font-semibold">Skolor</span>
+            </div>
+            <div className="text-2xl font-bold">{stats.totalSchools ?? 0}</div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
