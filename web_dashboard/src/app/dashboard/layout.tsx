@@ -34,6 +34,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const menuItems = [
     { href: '/dashboard', label: 'Hem', match: (p: string) => p === '/dashboard', bold: true },
     { href: '/dashboard/students', label: 'Elever', match: (p: string) => p.startsWith('/dashboard/students') },
+    // Veckohantering och Klasser för lärare
+    ...(isTeacher ? [
+      { href: '/dashboard/veckohanterare', label: 'Veckohanterare', match: (p: string) => p.startsWith('/dashboard/veckohanterare') },
+      { href: '/dashboard/klasser', label: 'Klasser', match: (p: string) => p.startsWith('/dashboard/klasser') },
+    ] : []),
     { href: '/dashboard/companies', label: 'Företag', match: (p: string) => p.startsWith('/dashboard/companies') },
     { href: '/dashboard/documents', label: 'Dokument', match: (p: string) => p.startsWith('/dashboard/documents') },
     // Skolor endast för admin

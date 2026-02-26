@@ -7,6 +7,7 @@ import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { db, auth, functions } from '../../../lib/firebase';
+import WeekAccessManager from './WeekAccessManager';
 
 type Student = {
   id: string;
@@ -40,21 +41,27 @@ export default function StudentsPage() {
       }
       setCreatingClass(true);
       try {
-        // Skapa klass i Firestore
-        const { addDoc, collection } = await import('firebase/firestore');
-        const classRef = await addDoc(collection(db, 'classes'), {
+        // Use the same docId strategy as the Flutter app: `${teacherUid}_${className}`
+        const teacherUid = auth.currentUser?.uid || '';
+        const classId = `${teacherUid}_${newClassName.trim()}`;
+        const { setDoc, doc: docRef } = await import('firebase/firestore');
+        // Ensure createdAt and teacherUid exist, write with the exact doc id
+        await setDoc(docRef(db, 'classes', classId), {
           name: newClassName.trim(),
-          teacherUid: auth.currentUser?.uid,
+          teacherUid,
           createdAt: new Date(),
-        });
-        // Generera klasskod (slumpmässig 6-siffrig kod)
+        }, { merge: true });
+
+        // Generera klasskod (slumpmässig 6-siffrig kod) and store as doc keyed by code
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-        await addDoc(collection(db, 'classCodes'), {
-          classId: classRef.id,
+        const { setDoc: setDoc2, doc: docRef2 } = await import('firebase/firestore');
+        await setDoc2(docRef2(db, 'classCodes', code), {
+          classId,
           code,
           createdAt: new Date(),
-          teacherUid: auth.currentUser?.uid,
-        });
+          teacherUid,
+        }, { merge: true });
+
         setNewClassName('');
         await fetchClasses(auth.currentUser?.uid || '', userRole || undefined);
         await fetchClassCodes();
@@ -77,6 +84,57 @@ export default function StudentsPage() {
         setClassCodes(codes);
       } catch (err) {
         setClassCodes([]);
+      }
+    };
+
+    // One-time migration: copy any classes that were created with auto-IDs
+    // to the Flutter-compatible docId `${teacherUid}_${className}` and update classCodes.
+    const handleMigrateClassesForTeacher = async () => {
+      if (!confirm('Utför migration av befintliga klasser till korrekt docId? Detta påverkar endast dina klasser.')) return;
+      try {
+        const teacherUid = auth.currentUser?.uid || '';
+        const { getDocs, collection, doc: docRef, getDoc, setDoc, updateDoc, deleteDoc, query, where } = await import('firebase/firestore');
+        // Fetch classes that have this teacherUid
+        const classesSnap = await getDocs(query(collection(db, 'classes'), where('teacherUid', '==', teacherUid)));
+        for (const c of classesSnap.docs) {
+          const oldId = c.id;
+          // If already matches pattern teacherUid_*, skip
+          if (oldId.startsWith(`${teacherUid}_`)) continue;
+          const data = c.data();
+          const name = (data.name || '').toString().trim();
+          if (!name) continue;
+          const newId = `${teacherUid}_${name}`;
+          // Copy to new doc if not exists
+          const newDocSnap = await getDoc(docRef(db, 'classes', newId));
+          if (!newDocSnap.exists()) {
+            await setDoc(docRef(db, 'classes', newId), { ...data, migratedFrom: oldId }, { merge: true });
+          }
+
+          // Migrate any classCodes that reference the oldId
+          const classCodesSnap = await getDocs(query(collection(db, 'classCodes'), where('classId', '==', oldId)));
+          for (const cc of classCodesSnap.docs) {
+            const ccData = cc.data();
+            const code = (ccData.code || '').toString();
+            if (!code) continue;
+            // Create/overwrite doc keyed by code with updated classId
+            await setDoc(docRef(db, 'classCodes', code), { ...ccData, classId: newId, teacherUid }, { merge: true });
+            // Delete old classCodes doc if its id isn't the code
+            if (cc.id !== code) {
+              await deleteDoc(docRef(db, 'classCodes', cc.id));
+            }
+          }
+
+          // Mark old class doc as migrated (do not delete automatically)
+          await updateDoc(docRef(db, 'classes', oldId), { migratedTo: newId });
+        }
+
+        // Refresh lists
+        await fetchClasses(auth.currentUser?.uid || '', userRole || undefined);
+        await fetchClassCodes();
+        alert('Migration slutförd (gamla dokument markeras som migrerade).');
+      } catch (e) {
+        console.error('Migration failed', e);
+        alert('Migration misslyckades. Se konsolen för detaljer.');
       }
     };
 
@@ -128,11 +186,27 @@ export default function StudentsPage() {
 
   const fetchClasses = async (currentUserId: string, role?: string) => {
     try {
-      const classesSnapshot = await getDocs(collection(db, 'classes'));
-      const filteredClasses = role === 'teacher'
-        ? classesSnapshot.docs.filter(doc => doc.data().teacherUid === currentUserId)
-        : classesSnapshot.docs;
-      const classesData = filteredClasses.map(doc => ({
+      // If teacher, query Firestore for classes owned by this teacher to avoid showing foreign classes
+      let classesSnapshot: any;
+      if (role === 'teacher') {
+        const { query, where, collection } = await import('firebase/firestore');
+        classesSnapshot = await getDocs(query(collection(db, 'classes'), where('teacherUid', '==', currentUserId)));
+      } else {
+        classesSnapshot = await getDocs(collection(db, 'classes'));
+      }
+
+      // Exclude legacy docs that have been marked as migrated (they contain a 'migratedTo' field)
+      const allDocs = classesSnapshot.docs.filter((d: any) => !d.data().migratedTo);
+
+      // Dev-only debug logs to help trace unexpected classes (doc.id, name, teacherUid)
+      if (process.env.NODE_ENV !== 'production') {
+        for (const d of allDocs) {
+          const dd = d.data();
+          console.log('CLASS LIST DEBUG:', { id: d.id, name: dd?.name || null, teacherUid: dd?.teacherUid || null });
+        }
+      }
+
+      const classesData = allDocs.map(doc => ({
         id: doc.id,
         name: doc.data().name || 'Okänd klass',
       }));
@@ -145,11 +219,25 @@ export default function StudentsPage() {
   const fetchStudents = async (currentUserId: string, role?: string) => {
     try {
       const usersSnapshot = await getDocs(collection(db, 'users'));
-      const classesSnapshot = await getDocs(collection(db, 'classes'));
+      // Only fetch classes owned by teacher when role === 'teacher'
+      let classesSnapshot: any;
+      if (role === 'teacher') {
+        const { query, where, collection } = await import('firebase/firestore');
+        classesSnapshot = await getDocs(query(collection(db, 'classes'), where('teacherUid', '==', currentUserId)));
+      } else {
+        classesSnapshot = await getDocs(collection(db, 'classes'));
+      }
+      // Dev logs for class snapshots
+      if (process.env.NODE_ENV !== 'production') {
+        for (const d of classesSnapshot.docs) {
+          const dd = d.data();
+          console.log('CLASS SNAPSHOT DEBUG:', { id: d.id, name: dd?.name || null, teacherUid: dd?.teacherUid || null });
+        }
+      }
       const isTeacher = role === 'teacher';
       const classIds = isTeacher
         ? new Set(classesSnapshot.docs
-            .filter(doc => doc.data().teacherUid === currentUserId)
+            .filter(doc => !doc.data().migratedTo)
             .map(doc => doc.id))
         : new Set(classesSnapshot.docs.map(doc => doc.id));
       
@@ -314,6 +402,15 @@ export default function StudentsPage() {
             >
               {creatingClass ? 'Skapar...' : 'Skapa klass & kod'}
             </button>
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={handleMigrateClassesForTeacher}
+                className="text-sm bg-white border border-gray-200 px-3 py-2 rounded-lg hover:bg-gray-50"
+              >
+                Migrera befintliga klasser (one-time)
+              </button>
+            </div>
             {classError && <div className="text-red-600 mt-2">{classError}</div>}
           </div>
           {/* Höger: Hantera klasser */}
@@ -367,6 +464,63 @@ export default function StudentsPage() {
           </div>
         </div>
       )}
+        {/* Visa elevhantering först när en specifik klass är vald */}
+        {selectedClassId !== 'ALL' ? (
+          <>
+            {/* Filter, sök, statistik, tabell, veckohantering */}
+            {/* Class Filter */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Välj klass
+              </label>
+              <select
+                value={selectedClassId}
+                onChange={(e) => setSelectedClassId(e.target.value)}
+                className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+              >
+                <option value="ALL">Alla klasser</option>
+                {classes.map(cls => (
+                  <option key={cls.id} value={cls.id}>
+                    {cls.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {/* Search */}
+            <div className="mb-6">
+              <input
+                type="text"
+                placeholder="Sök elev (namn, email, klass)..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              />
+            </div>
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="bg-white p-4 rounded-lg shadow">
+                <p className="text-sm text-gray-600">Elever i vald klass</p>
+                <p className="text-2xl font-bold text-blue-600">{filteredStudents.length}</p>
+              </div>
+              <div className="bg-white p-4 rounded-lg shadow">
+                <p className="text-sm text-gray-600">Total arbetstid</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {filteredStudents.reduce((sum, s) => sum + (s.totalHours ?? 0), 0)}h
+                </p>
+              </div>
+              <div className="bg-white p-4 rounded-lg shadow">
+                <p className="text-sm text-gray-600">Inskickade bedömningar</p>
+                <p className="text-2xl font-bold text-purple-600">
+                  {filteredStudents.reduce((sum, s) => sum + (s.assessmentCount ?? 0), 0)}
+                </p>
+              </div>
+            </div>
+            {/* Students Table */}
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              {/* ...tabell och veckohantering... */}
+            </div>
+          </>
+        ) : null}
             {/* QR-kod/modal för klass */}
             {qrClass && (
               <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
@@ -602,3 +756,6 @@ export default function StudentsPage() {
     </>
   );
 }
+  // Lägg till veckohantering UI
+  // Om du vill visa den överst på sidan:
+  // export default function StudentsPage() { ... return (<div><WeekAccessManager /> ... </div>); }

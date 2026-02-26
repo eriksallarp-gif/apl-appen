@@ -275,27 +275,6 @@ export default function StudentDetailPage() {
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
   return (
     <div className="min-h-screen bg-white">
-      <aside className="fixed left-0 top-0 h-screen w-56 bg-gradient-to-br from-orange-50 to-white border-r border-orange-100/50 flex flex-col py-8 px-6 z-10">
-        <div className="mb-10">
-          <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
-          <p className="text-xs text-orange-400 mt-1">Hem</p>
-        </div>
-        <nav className="flex-1 space-y-4">
-          <Link href="/dashboard" className={`block font-semibold rounded-lg px-3 py-2 transition ${pathname === '/dashboard' ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Hem</Link>
-          <Link href="/dashboard/students" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/students') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Elever</Link>
-          <Link href="/dashboard/companies" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/companies') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Företag</Link>
-          <Link href="/dashboard/documents" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/documents') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Dokument</Link>
-          <Link href="/dashboard/settings" className={`block font-medium rounded-lg px-3 py-2 transition ${pathname.startsWith('/dashboard/settings') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}>Inställningar</Link>
-        </nav>
-        <div className="mt-auto pt-8">
-          <button
-            onClick={async () => { const { signOut } = await import('firebase/auth'); signOut(auth); window.location.href = '/login'; }}
-            className="w-full bg-orange-600 text-white rounded-lg py-2 font-semibold hover:bg-orange-700 transition"
-          >
-            Logga ut
-          </button>
-        </div>
-      </aside>
       <main className="ml-56 max-w-7xl mx-auto px-8 py-12">
         {/* Student Info Card */}
         <div className="bg-white/70 backdrop-blur rounded-3xl shadow-lg shadow-blue-100/30 p-8 mb-8 border border-blue-100/50">
