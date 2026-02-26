@@ -15,15 +15,29 @@
       "**/.*",
       "**/node_modules/**"
     ],
-    "rewrites": [
-      {
-        "source": "**",
-        "run": {
-          "serviceId": "apl-appen-web",
-          "region": "europe-north1"
+      "headers": [
+        {
+          "source": "/_next/static/**",
+          "headers": [
+            { "key": "Cache-Control", "value": "public,max-age=31536000,immutable" }
+          ]
+        },
+        {
+          "source": "**",
+          "headers": [
+            { "key": "Cache-Control", "value": "no-store" }
+          ]
         }
-      }
-    ]
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "run": {
+            "serviceId": "apl-appen-web",
+            "region": "europe-north1"
+          }
+        }
+      ]
   },
   "flutter": {
     "platforms": {

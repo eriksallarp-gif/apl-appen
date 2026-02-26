@@ -192,3 +192,117 @@ exports.updateStudentSpecialization = functions.https.onCall(async (data, contex
 
   return { ok: true };
 });
+
+/**
+ * Callable: deleteClass
+ * Payload: { classId: string, confirm: string, hardDeleteTimesheets?: boolean }
+ * - Only callable by teacher (owner) or admin.
+ * - Teacher can only delete their own classes.
+ * - Requires typing the class id/name/code in `confirm` which is validated server-side.
+ * - Performs recursive delete of the class document (and its subcollections) using Admin SDK
+ *   then updates user profiles (removes classId & teacherUid) and handles timesheets.
+ * NOTE: For safety we do NOT hard-delete timesheets by default. Set `hardDeleteTimesheets: true`
+ * if you really want that behavior. Default is to mark timesheets as orphaned (classId set to
+ * empty string and `orphanedClass: true`).
+ */
+exports.deleteClass = functions.https.onCall(async (data, context) => {
+  const role = await assertTeacherOrAdmin(context);
+
+  const classId = (data.classId || '').toString().trim();
+  const confirm = (data.confirm || '').toString().trim();
+  const hardDeleteTimesheets = data.hardDeleteTimesheets === true;
+
+  if (!classId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing classId');
+  }
+
+  const classRef = db.collection('classes').doc(classId);
+  const classSnap = await classRef.get();
+  if (!classSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Class not found');
+  }
+
+  const classData = classSnap.data() || {};
+  const className = (classData.name || '').toString();
+  const classCode = (classData.classCode || '').toString();
+  const teacherUid = (classData.teacherUid || '').toString();
+
+  // Confirm string must match id, code or name
+  if (!confirm || (confirm !== classId && confirm !== classCode && confirm !== className)) {
+    throw new functions.https.HttpsError('invalid-argument', 'Confirmation mismatch. Provide the class id, code or name to confirm deletion.');
+  }
+
+  // If caller is a teacher, verify ownership
+  if (role === 'teacher' && context.auth) {
+    if (teacherUid !== context.auth.uid) {
+      throw new functions.https.HttpsError('permission-denied', 'You can only delete classes you own.');
+    }
+  }
+
+  try {
+    // 1) Update users that reference this class: remove classId and teacherUid
+    const usersSnap = await db.collection('users').where('classId', '==', classId).get();
+    let batch = db.batch();
+    let ops = 0;
+    for (const udoc of usersSnap.docs) {
+      batch.update(udoc.ref, {
+        classId: admin.firestore.FieldValue.delete(),
+        teacherUid: admin.firestore.FieldValue.delete(),
+      });
+      ops++;
+      if (ops >= 450) { // keep below 500
+        await batch.commit();
+        batch = db.batch();
+        ops = 0;
+      }
+    }
+    if (ops > 0) await batch.commit();
+
+    // 2) Handle timesheets linked to this class
+    const timesheetsSnap = await db.collection('timesheets').where('classId', '==', classId).get();
+    batch = db.batch();
+    ops = 0;
+    if (hardDeleteTimesheets) {
+      // Hard delete (dangerous) - delete docs
+      for (const t of timesheetsSnap.docs) {
+        batch.delete(t.ref);
+        ops++;
+        if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
+      }
+      if (ops > 0) await batch.commit();
+    } else {
+      // Mark orphaned (safer default): remove link and set flag
+      for (const t of timesheetsSnap.docs) {
+        batch.update(t.ref, {
+          classId: '',
+          orphanedClass: true,
+          classDeletedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        ops++;
+        if (ops >= 450) { await batch.commit(); batch = db.batch(); ops = 0; }
+      }
+      if (ops > 0) await batch.commit();
+    }
+
+    // 3) Perform recursive delete of the class document and its subcollections
+    // Uses Admin SDK recursiveDelete (available in firebase-admin >= v11).
+    try {
+      await admin.firestore().recursiveDelete(classRef);
+    } catch (e) {
+      // If recursiveDelete isn't available or fails, attempt manual subcollection cleanup
+      console.warn('recursiveDelete failed, attempting manual cleanup:', e);
+      // Delete students and studentWeekOverrides subcollections manually
+      const studentsSnap = await classRef.collection('students').get();
+      for (const s of studentsSnap.docs) { await s.ref.delete(); }
+      const overridesSnap = await classRef.collection('studentWeekOverrides').get();
+      for (const o of overridesSnap.docs) { await o.ref.delete(); }
+      // Finally delete the class doc itself
+      await classRef.delete();
+    }
+
+    return { ok: true };
+  } catch (e) {
+    console.error('deleteClass failed', e);
+    throw new functions.https.HttpsError('internal', 'Failed to delete class');
+  }
+});

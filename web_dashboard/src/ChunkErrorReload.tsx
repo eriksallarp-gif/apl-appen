@@ -3,7 +3,7 @@ import { useEffect } from "react";
 
 export default function ChunkErrorReload() {
   useEffect(() => {
-    const handler = (event) => {
+    const handler = (event: any) => {
       // Next.js chunkloaderror reload
       if (
         event?.type === "error" &&

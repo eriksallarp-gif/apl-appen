@@ -79,8 +79,8 @@ export default function StudentsPage() {
         const codesSnapshot = await getDocs(collection(db, 'classCodes'));
         const teacherUid = auth.currentUser?.uid;
         const codes = codesSnapshot.docs
-          .filter(doc => doc.data().teacherUid === teacherUid)
-          .map(doc => ({ classId: doc.data().classId, code: doc.data().code }));
+          .filter((doc: any) => doc.data().teacherUid === teacherUid)
+          .map((doc: any) => ({ classId: doc.data().classId, code: doc.data().code }));
         setClassCodes(codes);
       } catch (err) {
         setClassCodes([]);
@@ -206,7 +206,7 @@ export default function StudentsPage() {
         }
       }
 
-      const classesData = allDocs.map(doc => ({
+      const classesData = allDocs.map((doc: any) => ({
         id: doc.id,
         name: doc.data().name || 'Okänd klass',
       }));
@@ -237,22 +237,22 @@ export default function StudentsPage() {
       const isTeacher = role === 'teacher';
       const classIds = isTeacher
         ? new Set(classesSnapshot.docs
-            .filter(doc => !doc.data().migratedTo)
-            .map(doc => doc.id))
-        : new Set(classesSnapshot.docs.map(doc => doc.id));
+            .filter((doc: any) => !doc.data().migratedTo)
+            .map((doc: any) => doc.id))
+        : new Set(classesSnapshot.docs.map((doc: any) => doc.id));
       
       const studentUsers = usersSnapshot.docs
-        .filter(doc => doc.data().role === 'student')
-        .filter(doc => {
+        .filter((doc: any) => doc.data().role === 'student')
+        .filter((doc: any) => {
           if (!isTeacher) return true;
           const data = doc.data();
           const classId = (data.classId || '').toString();
           const teacherUid = (data.teacherUid || '').toString();
           return teacherUid === currentUserId || (classId && classIds.has(classId));
         })
-        .map(doc => {
+        .map((doc: any) => {
           const classId = doc.data().classId;
-          const classDoc = classesSnapshot.docs.find(c => c.id === classId);
+          const classDoc = classesSnapshot.docs.find((c: any) => c.id === classId);
           return {
             id: doc.id,
             email: doc.data().email || '',
