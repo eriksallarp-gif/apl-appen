@@ -311,11 +311,17 @@ class _StatisticsContentState extends State<_StatisticsContent> {
 
             return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: FirebaseFirestore.instance
-                  .collection('assessmentRequests')
-                  .where('status', isEqualTo: 'submitted')
-                  .snapshots(),
+                .collection('assessmentRequests')
+                .snapshots(),
               builder: (context, assessmentSnapshot) {
                 final allAssessments = assessmentSnapshot.data?.docs ?? [];
+                // Debug: log assessmentRequests count and a few docs
+                print('DEBUG: assessmentRequests snapshot count=${allAssessments.length}');
+                for (var d in allAssessments.take(10)) {
+                  final dt = d.data() ?? {};
+                  print('ASSESS_DOC: id=${d.id}, studentUid=${dt['studentUid'] ?? null}, weeks=${dt['weeks'] ?? null}, status=${dt['status'] ?? null}');
+                }
+
                 final assessments = allAssessments.where((doc) {
                   final studentUid =
                       doc.data()['studentUid']?.toString() ?? '';
@@ -468,18 +474,29 @@ class _StatisticsContentState extends State<_StatisticsContent> {
         }
       }
 
-      totalHours += docHours;
+      // Aggregate per-timesheet numbers for activity breakdown (do not
+      // treat timesheets as source of truth for assessed status)
       studentHours[studentUid] = (studentHours[studentUid] ?? 0) + docHours;
       weeklyHours[weekStart] = (weeklyHours[weekStart] ?? 0) + docHours;
-
-      if (approved) approvedCount++;
     }
 
+    // Use assessmentRequests as source of truth for approved weeks, totals
+    final Set<String> approvedWeeks = {};
+    int totalHoursFromAssessments = 0;
     for (var doc in assessments) {
-      final data = doc.data();
-      totalLunches += (data?['lunchApproved'] as int? ?? 0);
-      totalKilometers += (data?['travelApproved'] as int? ?? 0);
+      final data = doc.data() ?? {};
+      final weeks = (data['weeks'] as List?)?.cast<String>() ?? [];
+      for (final w in weeks) {
+        if (w.isNotEmpty) approvedWeeks.add(w);
+      }
+      totalLunches += (data['lunchApproved'] as int?) ?? 0;
+      totalKilometers += (data['travelApproved'] as int?) ?? (data['travelCount'] as int?) ?? 0;
+      totalHoursFromAssessments += (data['totalHours'] as int?) ?? 0;
     }
+
+    approvedCount = approvedWeeks.length;
+    // Canonical total hours comes from assessmentRequests
+    totalHours = totalHoursFromAssessments;
 
     return {
       'studentHours': studentHours,

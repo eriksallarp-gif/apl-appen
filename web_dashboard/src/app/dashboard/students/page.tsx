@@ -303,9 +303,17 @@ export default function StudentsPage() {
           });
         });
 
-        const assessmentCount = filteredAssessments.filter(
+        const studentAssessmentDocs = filteredAssessments.filter(
           doc => doc.data().studentUid === student.id
-        ).length;
+        );
+        const uniqueWeeks = new Set<string>();
+        for (const ad of studentAssessmentDocs) {
+          const weeks = (ad.data().weeks || []) as string[];
+          for (const w of weeks) {
+            if (w) uniqueWeeks.add(w);
+          }
+        }
+        const assessmentCount = uniqueWeeks.size;
 
         return {
           ...student,

@@ -31,27 +31,27 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
           final timesheets = timesheetSnapshot.data?.docs ?? [];
 
           return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('assessmentRequests')
-                .where('studentUid', isEqualTo: user.uid)
-                .where('status', isEqualTo: 'submitted')
-                .snapshots(),
+                stream: FirebaseFirestore.instance
+                  .collection('assessmentRequests')
+                  .where('studentUid', isEqualTo: user.uid)
+                  .snapshots(),
             builder: (context, assessmentSnapshot) {
               final assessments = assessmentSnapshot.data?.docs ?? [];
 
-              // Hämta godkända veckonummer från assessments
-              final Set<int> approvedWeeks = {};
+              // Debug logs to help diagnose missing assessmentRequests
+              print('DEBUG: assessmentRequests for ${user.uid} count=${assessments.length}');
+              for (var d in assessments) {
+                final dt = d.data();
+                print('ASSESS_DOC: id=${d.id}, weeks=${dt['weeks'] ?? null}, travelApproved=${dt['travelApproved'] ?? null}, lunchApproved=${dt['lunchApproved'] ?? null}, status=${dt['status'] ?? null}');
+              }
+
+              // Hämta godkända veckor direkt från assessmentRequests (strings like 'v.17')
+              final Set<String> approvedWeeks = {};
               for (final doc in assessments) {
                 final data = doc.data();
                 final weeks = (data['weeks'] as List?)?.cast<String>() ?? [];
                 for (final week in weeks) {
-                  // Extrahera veckonummer från format "V. 5"
-                  final weekNum = int.tryParse(
-                    week.replaceAll(RegExp(r'[^0-9]'), ''),
-                  );
-                  if (weekNum != null) {
-                    approvedWeeks.add(weekNum);
-                  }
+                  if (week.isNotEmpty) approvedWeeks.add(week);
                 }
               }
 
@@ -86,15 +86,9 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                 final weekStart = (data['weekStart'] ?? '').toString();
                 final approved = (data['approved'] ?? false) as bool;
                 
-                // Beräkna veckonummer från weekStart
-                final weekNumber = getWeekNumber(weekStart);
-
-                // Endast godkända tidkort: antingen lärare godkänt ELLER handledare bedömt veckan
-                final isApproved = approved || (weekNumber > 0 && approvedWeeks.contains(weekNumber));
-                
-                if (!isApproved) {
-                  continue;
-                }
+                // Endast tidkort som är markerade godkända av lärare
+                final isApproved = approved;
+                if (!isApproved) continue;
 
                 final entries =
                     (data['entries'] as Map<String, dynamic>?) ?? {};

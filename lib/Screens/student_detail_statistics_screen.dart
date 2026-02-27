@@ -41,10 +41,9 @@ class _StudentDetailStatisticsScreenState
           // Hämta även assessments för att få lunch/resor
           return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
-                .collection('assessmentRequests')
-                .where('studentUid', isEqualTo: widget.studentUid)
-                .where('status', isEqualTo: 'submitted')
-                .snapshots(),
+              .collection('assessmentRequests')
+              .where('studentUid', isEqualTo: widget.studentUid)
+              .snapshots(),
             builder: (context, assessmentSnapshot) {
               if (assessmentSnapshot.connectionState ==
                   ConnectionState.waiting) {
@@ -52,6 +51,11 @@ class _StudentDetailStatisticsScreenState
               }
 
               final assessments = assessmentSnapshot.data?.docs ?? [];
+              print('DEBUG: assessmentRequests for ${widget.studentUid} count=${assessments.length}');
+              for (var d in assessments) {
+                final dd = d.data() ?? {};
+                print('ASSESS_DOC: id=${d.id}, weeks=${dd['weeks'] ?? null}, travelApproved=${dd['travelApproved'] ?? null}, lunchApproved=${dd['lunchApproved'] ?? null}, status=${dd['status'] ?? null}');
+              }
 
               if (timesheets.isEmpty) {
                 return Center(
@@ -132,7 +136,8 @@ class _StudentDetailStatisticsScreenState
     List<QueryDocumentSnapshot<Map<String, dynamic>>> timesheets,
     List<QueryDocumentSnapshot<Map<String, dynamic>>> assessments,
   ) {
-    int totalHours = 0;
+    int totalHoursFromAssessments = 0;
+    int totalHoursFromTimesheets = 0;
     int approvedCount = 0;
     int totalLunches = 0;
     int totalKilometers = 0;
@@ -151,29 +156,26 @@ class _StudentDetailStatisticsScreenState
       }
     }
 
-    final Set<int> approvedWeeks = {};
+    // Collect weeks and sums from assessmentRequests (source-of-truth)
+    final Set<String> approvedWeeks = {};
     for (var doc in assessments) {
-      final data = doc.data();
+      final data = doc.data() ?? {};
       final weeks = (data['weeks'] as List?)?.cast<String>() ?? [];
-      for (final week in weeks) {
-        final weekNum = int.tryParse(week.replaceAll(RegExp(r'[^0-9]'), ''));
-        if (weekNum != null) {
-          approvedWeeks.add(weekNum);
-        }
+      for (final w in weeks) {
+        if (w.isNotEmpty) approvedWeeks.add(w);
       }
+
+      totalKilometers += (data['travelApproved'] as int?) ?? (data['travelCount'] as int?) ?? 0;
+      totalLunches += (data['lunchApproved'] as int?) ?? 0;
+      totalHoursFromAssessments += (data['totalHours'] as int?) ?? 0;
     }
 
+    // Debug: list approved weeks from assessmentRequests for this student
+    print('DEBUG: assessmentRequests for ${widget.studentUid} -> docs=${assessments.length}, approvedWeeks=$approvedWeeks, totalTravel=$totalKilometers, totalLunch=$totalLunches, totalHoursFromAssessments=$totalHoursFromAssessments');
+
+    // Aggregate activity hours from timesheets (keep using timesheets for activity breakdown)
     for (var doc in timesheets) {
       final data = doc.data();
-      final weekStart = (data['weekStart'] ?? '').toString();
-      final weekNumber = getWeekNumber(weekStart);
-      final isApprovedBySupervisor =
-          weekNumber > 0 && approvedWeeks.contains(weekNumber);
-
-      if (!isApprovedBySupervisor) {
-        continue;
-      }
-
       final entries = (data['entries'] as Map?)?.cast<String, dynamic>() ?? {};
 
       int weekHours = 0;
@@ -197,31 +199,23 @@ class _StudentDetailStatisticsScreenState
         }
       }
 
-      totalHours += weekHours;
+      totalHoursFromTimesheets += weekHours;
       approvedCount++;
     }
-
-    // Hämta luncher och kilometer från godkända assessments
-    for (var doc in assessments) {
-      final data = doc.data();
-      final lunchApproved = data['lunchApproved'] as int? ?? 0;
-      final travelApproved = data['travelApproved'] as int? ?? 0;
-
-      totalLunches += lunchApproved;
-      totalKilometers += travelApproved;
-    }
+    // Prefer totalHours from assessments when present, otherwise fallback to timesheets
+    final int finalTotalHours = totalHoursFromAssessments > 0 ? totalHoursFromAssessments : totalHoursFromTimesheets;
 
     return {
-      'totalHours': totalHours,
+      'totalHours': finalTotalHours,
       'totalWeeks': timesheets.length,
       'approvedCount': approvedCount,
       'activityHours': activityHours,
       'totalLunches': totalLunches,
       'totalKilometers': totalKilometers,
-      'assessmentCount': assessments.length,
-      'averagePerWeek': timesheets.isEmpty
+      'assessmentCount': approvedWeeks.length,
+        'averagePerWeek': timesheets.isEmpty
           ? 0
-          : (totalHours / timesheets.length).round(),
+          : (finalTotalHours / timesheets.length).round(),
     };
   }
 

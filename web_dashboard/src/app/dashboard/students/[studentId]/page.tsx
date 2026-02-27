@@ -10,6 +10,7 @@ import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firesto
 
 interface Assessment {
   id: string;
+  weeks?: string[];
   status: string;
   submittedAt?: any;
   supervisorName?: string;
@@ -21,6 +22,19 @@ interface Assessment {
   weekStart?: string;
   lunchApproved?: number;
   travelApproved?: number;
+  imageComments?: string[];
+  images?: Array<{
+    fileName: string;
+    uploadedAt?: any;
+    url: string;
+  }>;
+  studentSelfAssessment?: {
+    overallRating?: string;
+    whatCouldBeBetter?: string;
+    whatCouldYouDoDifferently?: string;
+    whatDidYouDo?: string;
+    whatWasPositive?: string;
+  };
 }
 
 interface Timesheet {
@@ -159,24 +173,18 @@ export default function StudentDetailPage() {
       });
       setTimesheets(timesheetsData);
 
-      // Hämta bedömningar och länka dem till motsvarande vecka i tidkorten
+      // Hämta bedömningar direkt från assessmentRequests (ingen status-filter, debug first)
       const assessmentsSnapshot = await getDocs(
-        query(collection(db, 'assessmentRequests'), where('studentUid', '==', studentId))
+        query(
+          collection(db, 'assessmentRequests'),
+          where('studentUid', '==', studentId)
+        )
       );
+      console.debug('DEBUG: assessmentRequests for', studentId, 'count=', assessmentsSnapshot.size);
       const assessmentsData = assessmentsSnapshot.docs.map(doc => {
         const data = doc.data();
-        
-        // Försök hitta motsvarande vecka i tidkorten baserat på veckonummer
-        const assessmentWeekStart = data.weekStart || (data.submittedAt ? new Date(data.submittedAt.seconds * 1000).toISOString().split('T')[0] : null);
-        
-        let totalHours = 0;
-        if (assessmentWeekStart) {
-          const assessmentWeekNum = getWeekNumber(assessmentWeekStart);
-          // Hitta tidkort med samma veckonummer
-          const matchingTimesheet = timesheetsData.find(ts => getWeekNumber(ts.weekStart) === assessmentWeekNum);
-          totalHours = matchingTimesheet?.totalHours || 0;
-        }
-        
+        const weeks = (data.weeks || []) as string[];
+
         return {
           id: doc.id,
           status: data.status,
@@ -186,12 +194,23 @@ export default function StudentDetailPage() {
           averageRating: data.averageRating,
           assessmentData: data.assessmentData,
           attachments: data.attachments || [],
-          weekStart: assessmentWeekStart,
-          totalHours,
+          weeks,
+          weekStart: data.weekStart || null,
+          totalHours: data.totalHours || 0,
           lunchApproved: data.lunchApproved || (data.assessmentData?.lunchApproved ?? 0) || 0,
           travelApproved: data.travelApproved || (data.assessmentData?.travelApproved ?? 0) || 0,
-        };
+          imageComments: data.imageComments || [],
+          images: data.images || [],
+          studentSelfAssessment: data.studentSelfAssessment || undefined,
+        } as Assessment;
       });
+      // Debug each doc to help trace missing fields / casing
+      for (const d of assessmentsSnapshot.docs) {
+        const dt = d.data();
+        console.debug('ASSESS_DOC:', { id: d.id, weeks: dt?.weeks || null, travelApproved: dt?.travelApproved || null, lunchApproved: dt?.lunchApproved || null, status: dt?.status || null });
+        console.debug('assessment full data:', dt);
+      }
+      console.debug('DEBUG: flattened weeks for', studentId, assessmentsData.flatMap(a => a.weeks));
       setAssessments(assessmentsData);
 
       // Hämta ersättningar
@@ -231,10 +250,10 @@ export default function StudentDetailPage() {
   const approvedTimesheetsOnly = timesheets.filter(ts => ts.approved);
   const totalHours = approvedTimesheetsOnly.reduce((sum, ts) => sum + ts.totalHours, 0);
   const approvedTimesheets = approvedTimesheetsOnly.length;
-  const submittedAssessments = assessments.filter(a => a.status === 'submitted').length;
-  
-  // Godkända handledarbedömningar
-  const approvedAssessments = assessments.filter(a => a.status === 'submitted');
+  const submittedAssessments = assessments.length;
+
+  // Godkända handledarbedömningar (we already fetched only approved assessments)
+  const approvedAssessments = assessments;
 
   // Summera timmar per arbetsmoment från tidkort som har handledargodkänd bedömning
   const taskHours: { [key: string]: number } = {};
@@ -243,14 +262,13 @@ export default function StudentDetailPage() {
     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday',
     'Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag'
   ];
-  // Hitta veckor med godkänd assessment
-  const approvedWeeks = new Set(
-    assessments
-      .filter(a => a.status === 'submitted' && a.weekStart)
-      .map(a => a.weekStart ? getWeekNumber(a.weekStart) : null)
+  // Hitta veckor med godkänd assessment direkt från assessments[].weeks (strings like "v.17")
+  const approvedWeeks = new Set<string>(
+    approvedAssessments.flatMap(a => (a.weeks || []) as string[])
   );
-  // Endast tidkort med godkänd handledarbedömning
-  const approvedTimesheetsForDiagram = approvedTimesheetsOnly.filter(ts => approvedWeeks.has(getWeekNumber(ts.weekStart)));
+
+  // For diagrams we keep using approved timesheets, but do not derive assessment status from timesheets
+  const approvedTimesheetsForDiagram = approvedTimesheetsOnly;
   // Summera timmar per arbetsmoment (nivå 1 i entries) över alla dagar och veckor
   approvedTimesheetsForDiagram.forEach(timesheet => {
     const entries = timesheet.entries || {};
@@ -506,15 +524,13 @@ export default function StudentDetailPage() {
               <div>
                 <h3 className="text-2xl font-bold mb-6 text-slate-900">Bedömningar</h3>
                 <div className="space-y-4">
-                  {assessments.filter(a => a.status === 'submitted').length === 0 ? (
+                  {assessments.length === 0 ? (
                     <p className="text-slate-500 text-center py-12">Inga bedömningar ännu</p>
                   ) : (
-                    assessments.filter(a => a.status === 'submitted').map(assessment => {
+                    assessments.map(assessment => {
                       const isExpanded = expandedAssessmentId === assessment.id;
-                      const weekNum = assessment.submittedAt 
-                        ? getWeekNumber(new Date(assessment.submittedAt.seconds * 1000).toISOString().split('T')[0])
-                        : '?';
-                      
+                      const weeksLabel = (assessment.weeks || []).join(', ') || '?';
+
                       return (
                         <div key={assessment.id} className="border-2 border-slate-200/50 rounded-2xl overflow-hidden hover:border-purple-300/50 transition-colors bg-slate-50/30">
                           <button
@@ -523,15 +539,13 @@ export default function StudentDetailPage() {
                           >
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-4">
-                                <p className="font-semibold text-slate-900 text-lg">
-                                  v.{weekNum}
-                                </p>
+                                <p className="font-semibold text-slate-900 text-lg">{weeksLabel}</p>
                                 <span className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                                  assessment.status === 'submitted'
+                                  assessment.status === 'approved'
                                     ? 'bg-green-100/70 text-green-800'
                                     : 'bg-amber-100/70 text-amber-800'
                                 }`}>
-                                  {assessment.status === 'submitted' ? '✓ Inskickad' : 'Väntande'}
+                                  {assessment.status === 'approved' ? '✓ Godkänd' : 'Väntande'}
                                 </span>
                                 <span className="text-sm text-slate-600">
                                   {assessment.totalHours || 0}h
@@ -551,6 +565,7 @@ export default function StudentDetailPage() {
                           
                           {isExpanded && (
                             <div className="border-t border-slate-200 p-6 bg-gradient-to-br from-slate-50/50 to-purple-50/30">
+                              {console.debug && isExpanded && console.debug('assessment data:', assessment)}
                               {assessment.submittedAt && (
                                 <p className="text-sm text-slate-600 mb-4">
                                   <strong>Datum:</strong> {new Date(assessment.submittedAt.seconds * 1000).toLocaleDateString('sv-SE')}
@@ -575,6 +590,43 @@ export default function StudentDetailPage() {
                                       </div>
                                     ))}
                                   </div>
+                                </div>
+                              )}
+                              {assessment.images && assessment.images.length > 0 && (
+                                <div className="text-sm mt-6">
+                                  <p className="font-semibold mb-3 text-slate-700">Bilder ({assessment.images.length}):</p>
+                                  <div className="grid grid-cols-3 gap-3">
+                                    {assessment.images.map((img, idx) => (
+                                      <div key={idx} className="mb-4">
+                                        <a
+                                          href={img.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="border-2 border-slate-200/50 rounded-2xl overflow-hidden bg-white hover:border-purple-300/50 transition-colors shadow-md shadow-slate-100/50"
+                                        >
+                                          <img
+                                            src={img.url}
+                                            alt={img.fileName || `Bild ${idx + 1}`}
+                                            className="rounded-md w-40 h-40 object-cover"
+                                          />
+                                        </a>
+                                        {assessment.imageComments && assessment.imageComments[idx] && (
+                                          <p className="text-sm mt-2 text-gray-600">{assessment.imageComments[idx]}</p>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {assessment.studentSelfAssessment && (
+                                <div className="mt-6 space-y-2">
+                                  <h3 className="font-semibold text-lg">Elevens självskattning</h3>
+                                  <p><strong>Betyg:</strong> {assessment.studentSelfAssessment.overallRating}</p>
+                                  <p><strong>Vad gjorde du?</strong> {assessment.studentSelfAssessment.whatDidYouDo}</p>
+                                  <p><strong>Vad var positivt?</strong> {assessment.studentSelfAssessment.whatWasPositive}</p>
+                                  <p><strong>Vad kunde varit bättre?</strong> {assessment.studentSelfAssessment.whatCouldBeBetter}</p>
+                                  <p><strong>Vad kunde du gjort annorlunda?</strong> {assessment.studentSelfAssessment.whatCouldYouDoDifferently}</p>
                                 </div>
                               )}
                               {assessment.attachments && assessment.attachments.length > 0 && (
