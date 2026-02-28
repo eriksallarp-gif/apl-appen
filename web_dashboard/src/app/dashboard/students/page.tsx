@@ -387,63 +387,6 @@ export default function StudentsPage() {
       </div>
 
       {/* Klasshantering tas bort från Elever-sidan; hanteras i /dashboard/klasser */}
-        {/* Visa elevhantering först när en specifik klass är vald */}
-        {selectedClassId !== 'ALL' ? (
-          <>
-            {/* Filter, sök, statistik, tabell, veckohantering */}
-            {/* Class Filter */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Välj klass
-              </label>
-              <select
-                value={selectedClassId}
-                onChange={(e) => setSelectedClassId(e.target.value)}
-                className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-              >
-                <option value="ALL">Alla klasser</option>
-                {classes.map(cls => (
-                  <option key={cls.id} value={cls.id}>
-                    {cls.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {/* Search */}
-            <div className="mb-6">
-              <input
-                type="text"
-                placeholder="Sök elev (namn, email, klass)..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              />
-            </div>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="bg-white p-4 rounded-lg shadow">
-                <p className="text-sm text-gray-600">Elever i vald klass</p>
-                <p className="text-2xl font-bold text-blue-600">{filteredStudents.length}</p>
-              </div>
-              <div className="bg-white p-4 rounded-lg shadow">
-                <p className="text-sm text-gray-600">Total arbetstid</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {filteredStudents.reduce((sum, s) => sum + (s.totalHours ?? 0), 0)}h
-                </p>
-              </div>
-              <div className="bg-white p-4 rounded-lg shadow">
-                <p className="text-sm text-gray-600">Inskickade bedömningar</p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {filteredStudents.reduce((sum, s) => sum + (s.assessmentCount ?? 0), 0)}
-                </p>
-              </div>
-            </div>
-            {/* Students Table */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              {/* ...tabell och veckohantering... */}
-            </div>
-          </>
-        ) : null}
             {/* QR-kod/modal för klass */}
             {qrClass && (
               <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
