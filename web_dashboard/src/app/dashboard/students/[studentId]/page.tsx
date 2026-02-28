@@ -173,7 +173,8 @@ export default function StudentDetailPage() {
       });
       setTimesheets(timesheetsData);
 
-      // Hämta bedömningar direkt från assessmentRequests (ingen status-filter, debug first)
+      // Hämta bedömningar direkt från assessmentRequests (alla) — vi bestämmer godkända lokalt
+      console.debug('QUERY: fetching assessmentRequests for studentUid=', studentId);
       const assessmentsSnapshot = await getDocs(
         query(
           collection(db, 'assessmentRequests'),
@@ -207,8 +208,18 @@ export default function StudentDetailPage() {
       // Debug each doc to help trace missing fields / casing
       for (const d of assessmentsSnapshot.docs) {
         const dt = d.data();
-        console.debug('ASSESS_DOC:', { id: d.id, weeks: dt?.weeks || null, travelApproved: dt?.travelApproved || null, lunchApproved: dt?.lunchApproved || null, status: dt?.status || null });
-        console.debug('assessment full data:', dt);
+        console.debug('ASSESS_DOC:', { id: d.id, weeks: dt?.weeks || null, weekStart: dt?.weekStart || null, travelApproved: dt?.travelApproved || dt?.assessmentData?.travelApproved || null, lunchApproved: dt?.lunchApproved || dt?.assessmentData?.lunchApproved || null, status: dt?.status || null });
+        console.debug('assessment full data (safe):', {
+          id: d.id,
+          keys: Object.keys(dt),
+          sample: {
+            status: dt?.status,
+            weekStart: dt?.weekStart,
+            weeks: dt?.weeks,
+            lunchApproved: dt?.lunchApproved ?? dt?.assessmentData?.lunchApproved,
+            travelApproved: dt?.travelApproved ?? dt?.assessmentData?.travelApproved,
+          }
+        });
       }
       console.debug('DEBUG: flattened weeks for', studentId, assessmentsData.flatMap(a => a.weeks));
       setAssessments(assessmentsData);
@@ -669,46 +680,119 @@ export default function StudentDetailPage() {
               <div>
                 <h3 className="text-2xl font-bold mb-6 text-slate-900">Ersättningar per vecka</h3>
                 {(() => {
-                  // Gruppera godkända bedömningar per vecka för ersättningsstatistik
-                  const compsByWeek: { [week: string]: Assessment[] } = {};
-                  approvedAssessments.forEach(assessment => {
-                    if (assessment.weekStart) {
-                      const weekNum = getWeekNumber(assessment.weekStart);
-                      const weekKey = `Vecka ${weekNum}`;
-                      if (!compsByWeek[weekKey]) compsByWeek[weekKey] = [];
-                      compsByWeek[weekKey].push(assessment);
+                  // Debug
+                  console.debug('COMPENSATIONS VIEW: total assessments for student=', approvedAssessments.length);
+                  // Filtrera till endast de bedömningar som innehåller ersättning (handledarens godkännande)
+                  const compAssessments = approvedAssessments.filter(a => {
+                    const lunch = a.lunchApproved ?? (a as any).assessmentData?.lunchApproved;
+                    const travel = a.travelApproved ?? (a as any).assessmentData?.travelApproved;
+                    // Om något av lunch/travel är satt (inkl 0) eller om status indikerar submitted/approved
+                    return (lunch !== undefined && lunch !== null) || (travel !== undefined && travel !== null) || (a.status === 'submitted' || a.status === 'approved');
+                  });
+                  console.debug('COMPENSATIONS VIEW: compAssessments count=', compAssessments.length);
+                  if (compAssessments.length === 0) {
+                    return <p className="text-slate-500 text-center py-12">Inga godkända bedömningar ännu</p>;
+                  }
+
+                  // Hjälp-funktion: bygg en array av week-nycklar (standardiserad) från en assessment
+                  const getWeekKeys = (a: Assessment): string[] => {
+                    const keys: string[] = [];
+                    // 1) weekStart (datum)
+                    if (a.weekStart) {
+                      try {
+                        const d = new Date(a.weekStart);
+                        if (!isNaN(d.getTime())) {
+                          const y = d.getFullYear();
+                          const w = getWeekNumber(a.weekStart);
+                          keys.push(`${y}-W${w}`);
+                        }
+                      } catch (e) {}
                     }
+                    // 2) weeks[] (kan innehålla "v.17" eller "17" eller "2024-W17")
+                    if (a.weeks && Array.isArray(a.weeks) && a.weeks.length > 0) {
+                      a.weeks.forEach(w => {
+                        if (typeof w === 'string') {
+                          const m = w.match(/(\d{4})[-_ ]?W?(\d{1,2})/);
+                          if (m) {
+                            keys.push(`${m[1]}-W${Number(m[2])}`);
+                            return;
+                          }
+                          const m2 = w.match(/v\.?\s*(\d{1,2})/i);
+                          if (m2) {
+                            // fallback to current year if year not present
+                            const year = new Date().getFullYear();
+                            keys.push(`${year}-W${Number(m2[1])}`);
+                            return;
+                          }
+                          const m3 = w.match(/^(\d{1,2})$/);
+                          if (m3) {
+                            const year = new Date().getFullYear();
+                            keys.push(`${year}-W${Number(m3[1])}`);
+                            return;
+                          }
+                          // otherwise push raw
+                          keys.push(w);
+                        }
+                      });
+                    }
+                    // 3) andra fält (weekNumber, week, aplWeek)
+                    const any = (a as any);
+                    if (any.weekNumber || any.week || any.aplWeek) {
+                      const wn = any.weekNumber || any.week || any.aplWeek;
+                      const year = any.year || new Date().getFullYear();
+                      if (wn) keys.push(`${year}-W${Number(wn)}`);
+                    }
+
+                    return keys.length > 0 ? keys : ['unknown'];
+                  };
+
+                  // Gruppera per week-nyckel
+                  const compsByWeek: { [weekKey: string]: { lunch: number; travel: number; display: string } } = {};
+                  compAssessments.forEach(a => {
+                    const weekKeys = getWeekKeys(a);
+                    weekKeys.forEach(k => {
+                      if (!compsByWeek[k]) compsByWeek[k] = { lunch: 0, travel: 0, display: k };
+                      const lunch = a.lunchApproved ?? (a as any).assessmentData?.lunchApproved ?? 0;
+                      const travel = a.travelApproved ?? (a as any).assessmentData?.travelApproved ?? 0;
+                      compsByWeek[k].lunch += Number(lunch) || 0;
+                      compsByWeek[k].travel += Number(travel) || 0;
+                    });
                   });
 
-                  // Visa endast veckor där handledaren har fyllt i lunch eller resa (även om det är 0)
-                  const filteredCompsByWeek = Object.fromEntries(
-                    Object.entries(compsByWeek).filter(([, weekAssessments]) =>
-                      weekAssessments.some(a => a.lunchApproved !== undefined || a.travelApproved !== undefined)
-                    )
-                  );
+                  // Sortera veckonycklar stigande (baserat på year-Wnum om möjligt)
+                  const sortedKeys = Object.keys(compsByWeek).sort((A, B) => {
+                    const pa = A.match(/(\d{4})-W(\d{1,2})/);
+                    const pb = B.match(/(\d{4})-W(\d{1,2})/);
+                    if (pa && pb) {
+                      const ay = Number(pa[1]), aw = Number(pa[2]);
+                      const by = Number(pb[1]), bw = Number(pb[2]);
+                      if (ay !== by) return ay - by;
+                      return aw - bw;
+                    }
+                    return A.localeCompare(B);
+                  });
 
-                  return Object.keys(filteredCompsByWeek).length === 0 ? (
-                    <p className="text-slate-500 text-center py-12">Inga godkända bedömningar ännu</p>
-                  ) : (
+                  return (
                     <div className="space-y-4">
-                      {Object.entries(filteredCompsByWeek).sort().reverse().map(([week, weekAssessments]) => {
-                        // Summera lunch och resa från handledarens bedömning (lunchApproved, travelApproved)
-                        const lunchCount = weekAssessments.reduce((sum, a) => sum + (a.lunchApproved || 0), 0);
-                        const travelKm = weekAssessments.reduce((sum, a) => sum + (a.travelApproved || 0), 0);
+                      {sortedKeys.map(weekKey => {
+                        const { lunch, travel } = compsByWeek[weekKey];
+                        // Visningsetikett: försök formatera till "v.X (YYYY)"
+                        const m = weekKey.match(/(\d{4})-W(\d{1,2})/);
+                        const display = m ? `v.${Number(m[2])} (${m[1]})` : weekKey;
                         return (
-                          <div key={week} className="border-2 border-slate-200/50 rounded-2xl p-6 bg-gradient-to-br from-amber-50/30 to-orange-50/20 hover:border-amber-300/50 transition-colors">
+                          <div key={weekKey} className="border-2 border-slate-200/50 rounded-2xl p-6 bg-gradient-to-br from-amber-50/30 to-orange-50/20 hover:border-amber-300/50 transition-colors">
                             <div className="flex items-center justify-between mb-4">
-                              <h4 className="font-semibold text-slate-900 text-lg">{week}</h4>
+                              <h4 className="font-semibold text-slate-900 text-lg">{display}</h4>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                               <div className="bg-gradient-to-br from-blue-100/50 to-blue-50/30 p-4 rounded-2xl border border-blue-200/50">
                                 <p className="text-xs text-slate-600 mb-2 font-medium">Luncher</p>
-                                <p className="text-3xl font-bold text-blue-600">{lunchCount}</p>
+                                <p className="text-3xl font-bold text-blue-600">{lunch}</p>
                                 <p className="text-xs text-slate-500 mt-1">st</p>
                               </div>
                               <div className="bg-gradient-to-br from-green-100/50 to-green-50/30 p-4 rounded-2xl border border-green-200/50">
                                 <p className="text-xs text-slate-600 mb-2 font-medium">Resa</p>
-                                <p className="text-3xl font-bold text-green-600">{Math.round(travelKm)}</p>
+                                <p className="text-3xl font-bold text-green-600">{Math.round(travel)}</p>
                                 <p className="text-xs text-slate-500 mt-1">km</p>
                               </div>
                             </div>
