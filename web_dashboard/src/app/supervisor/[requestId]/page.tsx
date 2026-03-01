@@ -35,6 +35,7 @@ export default function SupervisorPage() {
   const [companies, setCompanies] = useState<Array<{ id: string; name: string }>>([]);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [otherInfo, setOtherInfo] = useState('');
   const [lunchApproved, setLunchApproved] = useState(0);
   const [travelApproved, setTravelApproved] = useState(0);
 
@@ -168,6 +169,7 @@ export default function SupervisorPage() {
         supervisorCompany: companyToSave,
         supervisorName: name,
         supervisorPhone: phone,
+        supervisorOtherInfo: otherInfo,
         lunchApproved,
         travelApproved,
         assessmentData,
@@ -548,6 +550,18 @@ export default function SupervisorPage() {
                     placeholder="T.ex. 070-123 45 67"
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition"
                     required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2 text-gray-800">
+                    Övrigt
+                  </label>
+                  <textarea
+                    value={otherInfo}
+                    onChange={(e) => setOtherInfo(e.target.value)}
+                    placeholder="Projektnummer/projektnamn eller annan info"
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition"
+                    rows={3}
                   />
                 </div>
               </div>
