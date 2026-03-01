@@ -365,7 +365,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                       maxLines: 3,
                       decoration: InputDecoration(
                         labelText: '3. Vad skulle kunnat vara bättre?',
-                        hintText: 'Vad var utmanande? Vad skulle förbättras?',
+                        hintText: 'Vad var utmanande? Vad skulle kunna förbättras?',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -380,7 +380,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                       maxLines: 3,
                       decoration: InputDecoration(
                         labelText: '4. Vad kunde du som elev gjort annorlunda?',
-                        hintText: 'Hur kunde du bidra mer? Vad kunde du förbättra?',
+                        hintText: 'Hur kunde du bidragit mer? Vad kan du förbättra till nästa gång?',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -635,13 +635,30 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
 
     // Generera unik token
     final token = _generateToken();
-    final expiresAt = DateTime.now().add(const Duration(days: 14));
+    final expiresAt = DateTime.now().add(const Duration(days: 1));
 
     setState(() {
       _isUploading = true;
     });
 
     try {
+      // Hämta elevens kopplade företag (om det finns)
+      String linkedCompanyName = '';
+      try {
+        final linkedCompanySnapshot = await FirebaseFirestore.instance
+            .collection('companies')
+            .where('studentId', isEqualTo: user.uid)
+            .limit(1)
+            .get();
+
+        if (linkedCompanySnapshot.docs.isNotEmpty) {
+          final companyData = linkedCompanySnapshot.docs.first.data();
+          linkedCompanyName = (companyData['name'] ?? '').toString().trim();
+        }
+      } catch (_) {
+        linkedCompanyName = '';
+      }
+
       // Ladda upp bilder till Firebase Storage
       final List<Map<String, dynamic>> uploadedImages = [];
       
@@ -694,6 +711,8 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
             'token': token,
             'expiresAt': Timestamp.fromDate(expiresAt),
             'images': uploadedImages,
+            'linkedCompanyName': linkedCompanyName,
+            'studentCompanyName': linkedCompanyName,
             // Selfassessment
             'studentSelfAssessment': {
               'whatDidYouDo': _selfAssessment1Controller.text.trim(),
@@ -834,7 +853,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Länken är giltig i 14 dagar',
+              'Länken är giltig i 1 dag',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.grey,

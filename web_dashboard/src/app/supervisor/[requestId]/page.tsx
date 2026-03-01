@@ -29,6 +29,8 @@ export default function SupervisorPage() {
   const [comments, setComments] = useState<{ [key: string]: string }>({});
   const [imageComments, setImageComments] = useState<{ [key: number]: string }>({});
   const [company, setCompany] = useState('');
+  const [linkedCompanyName, setLinkedCompanyName] = useState<string>('');
+  const isCompanyLocked = linkedCompanyName.trim().length > 0;
   const [showCustomCompany, setShowCustomCompany] = useState(false);
   const [companies, setCompanies] = useState<Array<{ id: string; name: string }>>([]);
   const [name, setName] = useState('');
@@ -72,24 +74,38 @@ export default function SupervisorPage() {
         return;
       }
 
-      const data = docSnap.data();
+      const requestData = docSnap.data();
 
-      if (data.status !== 'pending' || data.token !== token) {
+      if (requestData.status !== 'pending' || requestData.token !== token) {
         setValidationError('Ogiltig eller använd länk');
         setLoading(false);
         return;
       }
 
-      const expiresAt = data.expiresAt.toDate();
+      const expiresAt = requestData.expiresAt.toDate();
       if (expiresAt < new Date()) {
         setValidationError('Denna länk har gått ut');
         setLoading(false);
         return;
       }
 
-      setRequest(data);
-      setLunchApproved(data.lunchCount || 0);
-      setTravelApproved(data.travelCount || 0);
+      setRequest(requestData);
+
+      const linked =
+        (requestData?.linkedCompanyName ??
+         requestData?.studentCompanyName ??
+         requestData?.companyName ??
+         '').toString().trim();
+
+      setLinkedCompanyName(linked);
+
+      if (linked) {
+        setCompany(linked);
+        setShowCustomCompany(false);
+      }
+
+      setLunchApproved(requestData.lunchCount || 0);
+      setTravelApproved(requestData.travelCount || 0);
       setLoading(false);
     } catch (err) {
       console.error('Error loading request:', err);
@@ -109,7 +125,7 @@ export default function SupervisorPage() {
       return;
     }
 
-    if (!company.trim() || !name.trim() || !phone.trim()) {
+    if ((!isCompanyLocked && !company.trim()) || !name.trim() || !phone.trim()) {
       setError('Vänligen fyll i alla signaturfält (företag, namn, telefon).');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
@@ -126,6 +142,10 @@ export default function SupervisorPage() {
     }
 
     try {
+      const companyToSave = isCompanyLocked
+        ? linkedCompanyName
+        : company;
+
       const avg = Object.values(ratings).reduce((a, b) => a + b, 0) / CRITERIA.length;
       const averageRating = avg.toFixed(1);
 
@@ -145,7 +165,7 @@ export default function SupervisorPage() {
       batch.update(docRef, {
         status: 'submitted',
         submittedAt: Timestamp.now(),
-        supervisorCompany: company,
+        supervisorCompany: companyToSave,
         supervisorName: name,
         supervisorPhone: phone,
         lunchApproved,
@@ -442,54 +462,66 @@ export default function SupervisorPage() {
                   <label className="block text-sm font-semibold mb-2 text-gray-800">
                     Företag / Organisation <span className="text-red-500">*</span>
                   </label>
-                  {!showCustomCompany && companies.length > 0 ? (
-                    <div className="space-y-2">
-                      <select
-                        value={company}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === '__custom__') {
-                            setShowCustomCompany(true);
-                            setCompany('');
-                          } else {
-                            setCompany(value);
-                          }
-                        }}
-                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition"
-                        required
-                      >
-                        <option value="">Välj företag</option>
-                        {companies.map((c) => (
-                          <option key={c.id} value={c.name}>
-                            {c.name}
-                          </option>
-                        ))}
-                        <option value="__custom__">➕ Annat företag (skriv själv)</option>
-                      </select>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <input
-                        type="text"
-                        value={company}
-                        onChange={(e) => setCompany(e.target.value)}
-                        placeholder="T.ex. Acme AB"
-                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition"
-                        required
-                      />
-                      {companies.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowCustomCompany(false);
-                            setCompany('');
-                          }}
-                          className="text-sm text-purple-600 hover:text-purple-700 underline"
-                        >
-                          ← Välj från befintliga företag
-                        </button>
+                  {isCompanyLocked && (
+                    <>
+                      <div className="w-full px-4 py-3 border-2 border-green-300 rounded-lg bg-green-50 font-semibold text-green-900">
+                        🔒 {linkedCompanyName}
+                      </div>
+                      <p className="text-xs text-green-700 mt-2">Företaget är låst av skolan ({linkedCompanyName})</p>
+                    </>
+                  )}
+                  {!isCompanyLocked && (
+                    <>
+                      {!showCustomCompany && companies.length > 0 ? (
+                        <div className="space-y-2">
+                          <select
+                            value={company}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === '__custom__') {
+                                setShowCustomCompany(true);
+                                setCompany('');
+                              } else {
+                                setCompany(value);
+                              }
+                            }}
+                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition"
+                            required
+                          >
+                            <option value="">Välj företag</option>
+                            {companies.map((c) => (
+                              <option key={c.id} value={c.name}>
+                                {c.name}
+                              </option>
+                            ))}
+                            <option value="__custom__">➕ Annat företag (skriv själv)</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={company}
+                            onChange={(e) => setCompany(e.target.value)}
+                            placeholder="T.ex. Acme AB"
+                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition"
+                            required
+                          />
+                          {companies.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowCustomCompany(false);
+                                setCompany('');
+                              }}
+                              className="text-sm text-purple-600 hover:text-purple-700 underline"
+                            >
+                              ← Välj från befintliga företag
+                            </button>
+                          )}
+                        </div>
                       )}
-                    </div>
+                    </>
                   )}
                 </div>
                 <div>
@@ -515,16 +547,6 @@ export default function SupervisorPage() {
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="T.ex. 070-123 45 67"
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Telefonnummer *</label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg"
                     required
                   />
                 </div>
