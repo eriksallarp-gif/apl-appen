@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
@@ -33,6 +34,15 @@ export default function LoginPage() {
 
       const userData = userDoc.data();
       const role = userData.role;
+      const status = userData.status || 'active';
+
+      // Check if user account is frozen
+      if (status === 'frozen') {
+        await auth.signOut();
+        setError('Ditt konto är fryst. Kontakta en administratör för att aktivera det igen.');
+        setLoading(false);
+        return;
+      }
 
       // Only allow teachers and admins
       if (role !== 'teacher' && role !== 'admin') {
@@ -61,55 +71,81 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100">
-      <div className="bg-white p-8 rounded-lg shadow-lg w-96">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-orange-600 mb-2">APL-appen</h1>
-          <p className="text-gray-600">Admin & Lärarinloggning</p>
+      <div className="w-full max-w-96">
+        {/* Tillbaka-knapp */}
+        <div className="mb-6">
+          <Link
+            href="/"
+            className="inline-flex items-center text-orange-600 hover:text-orange-700 font-medium transition"
+          >
+            ← Tillbaka till startsidan
+          </Link>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              E-post
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              placeholder="din@email.se"
-              required
-            />
+        {/* Login-formulär */}
+        <div className="bg-white p-8 rounded-lg shadow-lg">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-orange-600 mb-2">APL-appen</h1>
+            <p className="text-gray-600 text-sm">Lärare & administratörinloggning</p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Lösenord
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-
-          {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">
-              {error}
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                E-post
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                placeholder="din@email.se"
+                required
+              />
             </div>
-          )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-orange-600 text-white py-2 rounded-lg font-medium hover:bg-orange-700 transition disabled:opacity-50"
-          >
-            {loading ? 'Loggar in...' : 'Logga in'}
-          </button>
-        </form>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Lösenord
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            {error && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-orange-600 text-white py-2 rounded-lg font-medium hover:bg-orange-700 transition disabled:opacity-50"
+            >
+              {loading ? 'Loggar in...' : 'Logga in'}
+            </button>
+          </form>
+
+          {/* Info för elever */}
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <p className="text-sm text-gray-600 mb-3">
+              <strong>Är du elev?</strong>
+            </p>
+            <p className="text-sm text-gray-600 mb-4">
+              Elever loggar in via APL-appen på sina mobiler.
+            </p>
+            <p className="text-xs text-gray-500">
+              Kontakta din lärare om du behöver hjälp med registreringen.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

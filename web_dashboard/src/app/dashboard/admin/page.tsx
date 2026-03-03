@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db, functions } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -21,6 +20,7 @@ interface PendingTeacher {
   name: string;
   email: string;
   school: string;
+  status?: string;
   createdAt: any;
 }
 
@@ -29,6 +29,7 @@ interface ApprovedTeacher {
   name: string;
   email: string;
   school: string;
+  status?: string;
   createdAt: any;
 }
 
@@ -37,6 +38,7 @@ interface Student {
   name: string;
   email: string;
   school: string;
+  status?: string;
   createdAt: any;
 }
 
@@ -76,14 +78,6 @@ export default function AdminPage() {
   const [activeSection, setActiveSection] = useState<'pending' | 'approved' | 'schools' | 'students'>('pending');
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [studentForm, setStudentForm] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    classId: '',
-    teacherUid: '',
-  });
   const [teacherForm, setTeacherForm] = useState({
     firstName: '',
     lastName: '',
@@ -177,37 +171,29 @@ export default function AdminPage() {
           .map(([name, teacherCount]) => ({ name, teacherCount }))
           .sort((a, b) => a.name.localeCompare(b.name, 'sv-SE'))
       );
-      // Lägg till övriga setState-anrop här om det behövs
+      
+      // Update teacher lists
+      setPendingTeachers(pending.map(mapTeacher));
+      setApprovedTeachers(approved.map(mapTeacher));
+      setAllTeachers(approved.map((teacher) => ({
+        id: teacher.id,
+        name: teacher.name || 'Okant namn',
+        email: teacher.email || '',
+        role: teacher.role || 'teacher',
+        school: teacher.school || 'Ingen skola angiven',
+        status: teacher.status || 'active',
+      })));
+      
+      // Update stats
+      setStats({
+        totalSchools: schoolCounts.size,
+        totalTeachers: teachers.length,
+        totalStudents: students.length,
+        pendingTeachers: pending.length,
+        approvedTeachers: approved.length,
+      });
     } catch (error) {
       console.error('Error fetching stats:', error);
-    }
-  };
-
-  const handleCreateStudent = async () => {
-    setFormError(null);
-    if (!studentForm.firstName || !studentForm.lastName || !studentForm.email || !studentForm.password) {
-      setFormError('Fyll i förnamn, efternamn, e-post och lösenord.');
-      return;
-    }
-
-    try {
-      setCreating(true);
-      const createUser = httpsCallable(functions, 'createUser');
-      await createUser({
-        role: 'student',
-        firstName: studentForm.firstName,
-        lastName: studentForm.lastName,
-        email: studentForm.email,
-        password: studentForm.password,
-        classId: studentForm.classId,
-        teacherUid: studentForm.teacherUid,
-      });
-      setStudentForm({ firstName: '', lastName: '', email: '', password: '', classId: '', teacherUid: '' });
-      await fetchAdminData();
-    } catch (error: any) {
-      setFormError(error?.message || 'Fel vid skapande av elev.');
-    } finally {
-      setCreating(false);
     }
   };
 
@@ -249,6 +235,21 @@ export default function AdminPage() {
       await fetchAdminData();
     } catch (error: any) {
       alert(error?.message || 'Fel vid borttagning.');
+    }
+  };
+
+  const handleSetUserStatus = async (uid: string, status: 'active' | 'frozen') => {
+    const action = status === 'frozen' ? 'frysa' : 'aktivera';
+    if (!confirm(`Ar du saker pa att du vill ${action} denna anvandare?`)) {
+      return;
+    }
+    try {
+      const setUserStatusCallable = httpsCallable(functions, 'setUserStatus');
+      await setUserStatusCallable({ uid, status });
+      await fetchAdminData();
+      alert(`Användaren har ${status === 'frozen' ? 'frysts' : 'aktiverats'}!`);
+    } catch (error: any) {
+      alert(error?.message || `Fel vid ${action} av användare.`);
     }
   };
 
@@ -327,25 +328,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <aside className="fixed left-0 top-0 h-screen w-56 bg-gradient-to-br from-orange-50 to-white border-r border-orange-100/50 flex flex-col py-8 px-6 z-10">
-        <div className="mb-10">
-          <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
-          <p className="text-xs text-orange-400 mt-1">Hem</p>
-        </div>
-        <nav className="flex-1 space-y-4">
-          <Link href="/dashboard" className={`block font-semibold rounded-lg px-3 py-2 transition`}>Hem</Link>
-          <Link href="/dashboard/students" className={`block font-medium rounded-lg px-3 py-2 transition`}>Elever</Link>
-          <Link href="/dashboard/companies" className={`block font-medium rounded-lg px-3 py-2 transition`}>Företag</Link>
-          <Link href="/dashboard/documents" className={`block font-medium rounded-lg px-3 py-2 transition`}>Dokument</Link>
-          <Link href="/dashboard/schools" className={`block font-medium rounded-lg px-3 py-2 transition`}>Skolor</Link>
-          <Link href="/dashboard/admin" className={`block font-medium rounded-lg px-3 py-2 transition bg-orange-100/60 text-orange-600 ring-2 ring-orange-400`}>Lärare</Link>
-          <Link href="/dashboard/settings" className={`block font-medium rounded-lg px-3 py-2 transition ${typeof window !== 'undefined' && window.location.pathname.startsWith('/dashboard/settings') ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : ''}`}>Inställningar</Link>
-        </nav>
-        <div className="mt-auto pt-8">
-          <button onClick={async () => { await signOut(auth); window.location.href = '/login'; }} className="w-full bg-orange-600 text-white rounded-lg py-2 font-semibold hover:bg-orange-700 transition">Logga ut</button>
-        </div>
-      </aside>
-      <main className="ml-56 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <button
@@ -390,77 +373,7 @@ export default function AdminPage() {
         </div>
 
         {/* Admin user management */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">Lägg till elev</h2>
-              <p className="text-sm text-gray-600 mt-1">Skapa elevkonto och koppla till klass/lärare</p>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input
-                  value={studentForm.firstName}
-                  onChange={(e) => setStudentForm({ ...studentForm, firstName: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Förnamn"
-                />
-                <input
-                  value={studentForm.lastName}
-                  onChange={(e) => setStudentForm({ ...studentForm, lastName: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Efternamn"
-                />
-                <input
-                  value={studentForm.email}
-                  onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="E-post"
-                />
-                <input
-                  value={studentForm.password}
-                  onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                  placeholder="Lösenord"
-                  type="password"
-                />
-                <select
-                  value={studentForm.classId}
-                  onChange={(e) => setStudentForm({ ...studentForm, classId: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                >
-                  <option value="">Valfri klass</option>
-                  {classes.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={studentForm.teacherUid}
-                  onChange={(e) => setStudentForm({ ...studentForm, teacherUid: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
-                >
-                  <option value="">Valfri lärare</option>
-                  {allTeachers.map((teacher) => (
-                    <option key={teacher.id} value={teacher.id}>
-                      {teacher.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {formError && (
-                <p className="text-sm text-red-600">{formError}</p>
-              )}
-              <button
-                onClick={handleCreateStudent}
-                disabled={creating}
-                className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition disabled:opacity-60"
-              >
-                Skapa elev
-              </button>
-            </div>
-          </div>
-
+        <div className="grid grid-cols-1 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">Lägg till lärare</h2>
@@ -473,18 +386,22 @@ export default function AdminPage() {
                   onChange={(e) => setTeacherForm({ ...teacherForm, firstName: e.target.value })}
                   className="border border-gray-300 rounded-lg px-3 py-2"
                   placeholder="Förnamn"
+                  autoComplete="off"
                 />
                 <input
                   value={teacherForm.lastName}
                   onChange={(e) => setTeacherForm({ ...teacherForm, lastName: e.target.value })}
                   className="border border-gray-300 rounded-lg px-3 py-2"
                   placeholder="Efternamn"
+                  autoComplete="off"
                 />
                 <input
                   value={teacherForm.email}
                   onChange={(e) => setTeacherForm({ ...teacherForm, email: e.target.value })}
                   className="border border-gray-300 rounded-lg px-3 py-2"
                   placeholder="E-post"
+                  autoComplete="off"
+                  type="email"
                 />
                 <input
                   value={teacherForm.password}
@@ -492,12 +409,14 @@ export default function AdminPage() {
                   className="border border-gray-300 rounded-lg px-3 py-2"
                   placeholder="Lösenord"
                   type="password"
+                  autoComplete="new-password"
                 />
                 <input
                   value={teacherForm.school}
                   onChange={(e) => setTeacherForm({ ...teacherForm, school: e.target.value })}
                   className="border border-gray-300 rounded-lg px-3 py-2"
                   placeholder="Skola"
+                  autoComplete="off"
                 />
                 <label className="flex items-center gap-2 text-sm text-gray-700">
                   <input
@@ -525,8 +444,8 @@ export default function AdminPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">Ta bort lärare</h2>
-              <p className="text-sm text-gray-600 mt-1">Raderar Auth + Firestore</p>
+              <h2 className="text-xl font-bold text-gray-900">Hantera lärare</h2>
+              <p className="text-sm text-gray-600 mt-1">Frysa/aktivera/ta bort lärare</p>
             </div>
             <div className="p-6 space-y-3">
               {allTeachers.length === 0 ? (
@@ -534,43 +453,40 @@ export default function AdminPage() {
               ) : (
                 allTeachers.map((teacher) => (
                   <div key={teacher.id} className="flex items-center justify-between border border-gray-200 rounded-lg p-3">
-                    <div>
+                    <div className="flex-1">
                       <p className="font-medium text-gray-900">{teacher.name}</p>
                       <p className="text-xs text-gray-600">{teacher.email}</p>
+                      <p className="text-xs text-gray-500">Skola: {teacher.school || 'Ej angiven'}</p>
+                      {teacher.status && (
+                        <p className={`text-xs mt-1 ${teacher.status === 'frozen' ? 'text-red-600' : 'text-green-600'}`}>
+                          Status: {teacher.status === 'frozen' ? 'Fryst' : 'Aktiv'}
+                        </p>
+                      )}
                     </div>
-                    <button
-                      onClick={() => handleDeleteUser(teacher.id)}
-                      className="text-red-600 hover:text-red-800 text-sm"
-                    >
-                      Ta bort
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">Ta bort elever</h2>
-              <p className="text-sm text-gray-600 mt-1">Raderar Auth + Firestore</p>
-            </div>
-            <div className="p-6 space-y-3">
-              {allStudents.length === 0 ? (
-                <p className="text-gray-500">Inga elever</p>
-              ) : (
-                allStudents.map((student) => (
-                  <div key={student.id} className="flex items-center justify-between border border-gray-200 rounded-lg p-3">
-                    <div>
-                      <p className="font-medium text-gray-900">{student.name}</p>
-                      <p className="text-xs text-gray-600">{student.email}</p>
+                    <div className="flex gap-2">
+                      {teacher.status !== 'frozen' && (
+                        <button
+                          onClick={() => handleSetUserStatus(teacher.id, 'frozen')}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium"
+                        >
+                          Frysa
+                        </button>
+                      )}
+                      {teacher.status === 'frozen' && (
+                        <button
+                          onClick={() => handleSetUserStatus(teacher.id, 'active')}
+                          className="text-green-600 hover:text-green-800 text-sm font-medium"
+                        >
+                          Aktivera
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteUser(teacher.id)}
+                        className="text-gray-600 hover:text-gray-800 text-sm font-medium"
+                      >
+                        Ta bort
+                      </button>
                     </div>
-                    <button
-                      onClick={() => handleDeleteUser(student.id)}
-                      className="text-red-600 hover:text-red-800 text-sm"
-                    >
-                      Ta bort
-                    </button>
                   </div>
                 ))
               )}
@@ -633,10 +549,33 @@ export default function AdminPage() {
                           <p className="text-sm text-gray-600">
                             <span className="font-medium">Skola:</span> {student.school}
                           </p>
+                          {student.status && (
+                            <p className={`text-sm mt-2 font-medium ${student.status === 'frozen' ? 'text-red-600' : 'text-green-600'}`}>
+                              Status: {student.status === 'frozen' ? 'Fryst' : 'Aktiv'}
+                            </p>
+                          )}
                           {student.createdAt && (
                             <p className="text-xs text-gray-500 mt-2">
                               Registrerad: {new Date(student.createdAt.seconds * 1000).toLocaleDateString('sv-SE')}
                             </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          {student.status !== 'frozen' && (
+                            <button
+                              onClick={() => handleSetUserStatus(student.id, 'frozen')}
+                              className="text-red-600 hover:text-red-800 text-sm font-medium"
+                            >
+                              Frysa
+                            </button>
+                          )}
+                          {student.status === 'frozen' && (
+                            <button
+                              onClick={() => handleSetUserStatus(student.id, 'active')}
+                              className="text-green-600 hover:text-green-800 text-sm font-medium"
+                            >
+                              Aktivera
+                            </button>
                           )}
                         </div>
                       </div>
@@ -674,10 +613,33 @@ export default function AdminPage() {
                           <p className="text-sm text-gray-600">
                             <span className="font-medium">Skola:</span> {teacher.school}
                           </p>
+                          {teacher.status && (
+                            <p className={`text-sm mt-2 font-medium ${teacher.status === 'frozen' ? 'text-red-600' : 'text-green-600'}`}>
+                              Status: {teacher.status === 'frozen' ? 'Fryst' : 'Aktiv'}
+                            </p>
+                          )}
                           {teacher.createdAt && (
                             <p className="text-xs text-gray-500 mt-2">
                               Registrerad: {new Date(teacher.createdAt.seconds * 1000).toLocaleDateString('sv-SE')}
                             </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          {teacher.status !== 'frozen' && (
+                            <button
+                              onClick={() => handleSetUserStatus(teacher.id, 'frozen')}
+                              className="text-red-600 hover:text-red-800 text-sm font-medium"
+                            >
+                              Frysa
+                            </button>
+                          )}
+                          {teacher.status === 'frozen' && (
+                            <button
+                              onClick={() => handleSetUserStatus(teacher.id, 'active')}
+                              className="text-green-600 hover:text-green-800 text-sm font-medium"
+                            >
+                              Aktivera
+                            </button>
                           )}
                         </div>
                       </div>

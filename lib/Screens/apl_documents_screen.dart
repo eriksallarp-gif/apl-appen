@@ -3,6 +3,48 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+class _UserScope {
+  final String school;
+  final String teacherId;
+
+  const _UserScope({required this.school, required this.teacherId});
+}
+
+Future<_UserScope> _resolveUserScope(String uid) async {
+  final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+  final userSnap = await userRef.get();
+  final userData = userSnap.data() ?? {};
+
+  var school = ((userData['school'] ?? userData['schoolId']) ?? '')
+      .toString()
+      .trim();
+  var teacherId = ((userData['teacherId'] ?? userData['teacherUid']) ?? '')
+      .toString()
+      .trim();
+
+  if (teacherId.isNotEmpty && (userData['teacherId'] == null)) {
+    await userRef.set({'teacherId': teacherId}, SetOptions(merge: true));
+  }
+
+  if (school.isEmpty && teacherId.isNotEmpty) {
+    final teacherSnap = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(teacherId)
+        .get();
+    final teacherSchool = (teacherSnap.data()?['school'] ?? '').toString().trim();
+    if (teacherSchool.isNotEmpty) {
+      school = teacherSchool;
+      await userRef.set({'school': teacherSchool}, SetOptions(merge: true));
+    }
+  }
+
+  if (school.isNotEmpty && userData['school'] == null) {
+    await userRef.set({'school': school}, SetOptions(merge: true));
+  }
+
+  return _UserScope(school: school, teacherId: teacherId);
+}
+
 class AplDocumentsScreen extends StatelessWidget {
   const AplDocumentsScreen({super.key});
 
@@ -337,90 +379,134 @@ class _CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Räkna antal dokument i kategorin
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('aplDocuments')
-          .where('category', isEqualTo: categoryId)
-          .snapshots(),
-      builder: (context, snapshot) {
-        final docCount = snapshot.data?.docs.length ?? 0;
+    final currentUser = FirebaseAuth.instance.currentUser;
 
-        // Debug: Log all documents in this category
-        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
-          print('📋 $categoryName: Found $docCount documents');
-          for (var doc in snapshot.data!.docs) {
-            final data = doc.data() as Map<String, dynamic>;
-            print('   - ${data['title']}');
-          }
+    if (currentUser == null) {
+      return _SimpleCard(
+        icon: icon,
+        title: categoryName,
+        subtitle: 'Logga in igen för att se dokument',
+        onTap: null,
+      );
+    }
+
+    return FutureBuilder<_UserScope>(
+      future: _resolveUserScope(currentUser.uid),
+      builder: (context, userSnapshot) {
+        if (userSnapshot.connectionState == ConnectionState.waiting) {
+          return _SimpleCard(
+            icon: icon,
+            title: categoryName,
+            subtitle: 'Laddar...',
+            onTap: null,
+          );
         }
 
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CategoryDocumentsScreen(
-                    categoryId: categoryId,
-                    categoryName: categoryName,
+        final scope = userSnapshot.data ??
+            const _UserScope(school: '', teacherId: '');
+        final schoolId = scope.school;
+        final teacherId = scope.teacherId;
+
+        if (schoolId.isEmpty) {
+          return _SimpleCard(
+            icon: icon,
+            title: categoryName,
+            subtitle: 'Saknar school på användaren',
+            onTap: null,
+          );
+        }
+
+        Query<Map<String, dynamic>> documentsQuery = FirebaseFirestore.instance
+            .collection('aplDocuments')
+            .where('category', isEqualTo: categoryId)
+            .where('school', isEqualTo: schoolId);
+
+        if (teacherId.isNotEmpty) {
+          documentsQuery = documentsQuery.where('teacherId', isEqualTo: teacherId);
+        }
+
+        return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: documentsQuery.snapshots(),
+          builder: (context, snapshot) {
+            final docCount = snapshot.data?.docs.length ?? 0;
+
+            // Debug: Log all documents in this category
+            if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+              print('📋 $categoryName: Found $docCount documents');
+              for (var doc in snapshot.data!.docs) {
+                final data = doc.data();
+                print('   - ${data['title']}');
+              }
+            }
+
+            return Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CategoryDocumentsScreen(
+                        categoryId: categoryId,
+                        categoryName: categoryName,
+                      ),
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.orange.shade200),
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white,
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(icon, color: Colors.orange.shade600, size: 28),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              categoryName,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              docCount == 0
+                                  ? 'Inga dokument ännu'
+                                  : '$docCount ${docCount == 1 ? 'dokument' : 'dokument'}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.arrow_forward_ios,
+                        size: 16,
+                        color: Colors.grey.shade400,
+                      ),
+                    ],
                   ),
                 ),
-              );
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.orange.shade200),
-                borderRadius: BorderRadius.circular(12),
-                color: Colors.white,
               ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(icon, color: Colors.orange.shade600, size: 28),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          categoryName,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          docCount == 0
-                              ? 'Inga dokument ännu'
-                              : '$docCount ${docCount == 1 ? 'dokument' : 'dokument'}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    size: 16,
-                    color: Colors.grey.shade400,
-                  ),
-                ],
-              ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -489,22 +575,56 @@ class CategoryDocumentsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(categoryName), elevation: 0),
+        body: const Center(child: Text('Logga in igen för att se dokument.')),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: Text(categoryName), elevation: 0),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('aplDocuments')
-            .where('category', isEqualTo: categoryId)
-            .orderBy('uploadedAt', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
+      body: FutureBuilder<_UserScope>(
+        future: _resolveUserScope(currentUser.uid),
+        builder: (context, userSnapshot) {
+          if (userSnapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final scope =
+              userSnapshot.data ?? const _UserScope(school: '', teacherId: '');
+          final schoolId = scope.school;
+          final teacherId = scope.teacherId;
+
+          if (schoolId.isEmpty) {
+            return const Center(
+              child: Text('Saknar school på användaren. Kontakta lärare.'),
+            );
+          }
+
+          Query<Map<String, dynamic>> documentsQuery = FirebaseFirestore.instance
+              .collection('aplDocuments')
+              .where('category', isEqualTo: categoryId)
+              .where('school', isEqualTo: schoolId);
+
+          if (teacherId.isNotEmpty) {
+            documentsQuery = documentsQuery.where('teacherId', isEqualTo: teacherId);
+          }
+
+          documentsQuery = documentsQuery.orderBy('uploadedAt', descending: true);
+
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: documentsQuery.snapshots(),
+            builder: (context, snapshot) {
           // Debug logging
           if (snapshot.hasData) {
             print(
               '📦 Category: $categoryId - Found ${snapshot.data!.docs.length} documents',
             );
             for (var doc in snapshot.data!.docs) {
-              final data = doc.data() as Map<String, dynamic>;
+              final data = doc.data();
               print('  - ${data['title']} (category: ${data['category']})');
             }
           }
@@ -560,7 +680,7 @@ class CategoryDocumentsScreen extends StatelessWidget {
             itemCount: docs.length,
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final doc = docs[index].data() as Map<String, dynamic>;
+              final doc = docs[index].data();
               final title = doc['title'] as String? ?? 'Dokument';
               final url = doc['url'] as String? ?? '';
               final fileType = doc['fileType'] as String?;
@@ -628,6 +748,8 @@ class CategoryDocumentsScreen extends StatelessWidget {
                   ),
                 ),
               );
+            },
+          );
             },
           );
         },

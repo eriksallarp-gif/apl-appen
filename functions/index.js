@@ -72,6 +72,14 @@ exports.createUser = functions.https.onCall(async (data, context) => {
     }
   }
 
+  let teacherSchool = '';
+  if (role === 'student' && teacherUid) {
+    const teacherDoc = await db.collection('users').doc(teacherUid).get();
+    if (teacherDoc.exists) {
+      teacherSchool = (teacherDoc.data().school || '').toString().trim();
+    }
+  }
+
   const userDoc = {
     name: fullName,
     displayName: fullName,
@@ -79,6 +87,7 @@ exports.createUser = functions.https.onCall(async (data, context) => {
     lastName,
     email,
     role,
+    status: 'active',
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 
@@ -89,7 +98,13 @@ exports.createUser = functions.https.onCall(async (data, context) => {
 
   if (role === 'student') {
     if (classId) userDoc.classId = classId;
-    if (teacherUid) userDoc.teacherUid = teacherUid;
+    if (teacherUid) {
+      userDoc.teacherUid = teacherUid;
+      userDoc.teacherId = teacherUid;
+    }
+    if (teacherSchool) {
+      userDoc.school = teacherSchool;
+    }
   }
 
   await db.collection('users').doc(userRecord.uid).set(userDoc);
@@ -305,4 +320,32 @@ exports.deleteClass = functions.https.onCall(async (data, context) => {
     console.error('deleteClass failed', e);
     throw new functions.https.HttpsError('internal', 'Failed to delete class');
   }
+});
+
+exports.setUserStatus = functions.https.onCall(async (data, context) => {
+  await assertAdmin(context);
+
+  const uid = (data.uid || '').toString().trim();
+  const status = (data.status || '').toString().trim().toLowerCase();
+
+  if (!uid) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing uid.');
+  }
+
+  if (status !== 'active' && status !== 'frozen') {
+    throw new functions.https.HttpsError('invalid-argument', "Status must be 'active' or 'frozen'.");
+  }
+
+  const userDoc = await db.collection('users').doc(uid).get();
+  if (!userDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'User not found.');
+  }
+
+  await db.collection('users').doc(uid).update({
+    status,
+    statusChangedAt: admin.firestore.FieldValue.serverTimestamp(),
+    statusChangedBy: context.auth.uid,
+  });
+
+  return { ok: true, uid, status };
 });

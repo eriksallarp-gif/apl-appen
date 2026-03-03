@@ -16,6 +16,7 @@ type Student = {
   classId: string;
   className: string;
   specialization: string;
+  status?: string;
   timesheetCount?: number;
   approvedTimesheets?: number;
   totalHours?: number;
@@ -143,7 +144,11 @@ export default function StudentsPage() {
   const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
   const [savingSpecialization, setSavingSpecialization] = useState(false);
   const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
+  const [statusChangingStudent, setStatusChangingStudent] = useState<{ student: Student; newStatus: string } | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
+  const [studentForm, setStudentForm] = useState({ firstName: '', lastName: '', email: '', password: '', classId: '', teacherUid: '' });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [classes, setClasses] = useState<{ id: string; name: string }[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
@@ -260,6 +265,7 @@ export default function StudentsPage() {
             classId: classId,
             className: classDoc ? classDoc.data().name : 'Ingen klass',
             specialization: doc.data().specialization || '',
+            status: doc.data().status || 'active',
           };
         });
 
@@ -350,6 +356,55 @@ export default function StudentsPage() {
     }
   };
 
+  const handleSetUserStatus = async (student: Student, status: 'active' | 'frozen') => {
+    const action = status === 'frozen' ? 'frysa' : 'aktivera';
+    if (!confirm(`Är du säker på att du vill ${action} ${student.name}?`)) {
+      return;
+    }
+
+    try {
+      setStatusChangingStudent({ student, newStatus: status });
+      const setUserStatusCallable = httpsCallable(functions, 'setUserStatus');
+      await setUserStatusCallable({ uid: student.id, status });
+      await fetchStudents(auth.currentUser?.uid || '', userRole || undefined);
+      setStatusChangingStudent(null);
+      alert(`Elevens status har uppdaterats!`);
+    } catch (error: any) {
+      console.error('Error setting user status:', error);
+      alert(error?.message || `Fel vid ${action} av elev`);
+      setStatusChangingStudent(null);
+    }
+  };
+
+  const handleCreateStudent = async () => {
+    setFormError(null);
+    if (!studentForm.firstName || !studentForm.lastName || !studentForm.email || !studentForm.password) {
+      setFormError('Fyll i förnamn, efternamn, e-post och lösenord.');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      const createUser = httpsCallable(functions, 'createUser');
+      await createUser({
+        role: 'student',
+        firstName: studentForm.firstName,
+        lastName: studentForm.lastName,
+        email: studentForm.email,
+        password: studentForm.password,
+        classId: studentForm.classId,
+        teacherUid: studentForm.teacherUid,
+      });
+      setStudentForm({ firstName: '', lastName: '', email: '', password: '', classId: '', teacherUid: '' });
+      await fetchStudents(auth.currentUser?.uid || '', userRole || undefined);
+      alert('Elev skapad!');
+    } catch (error: any) {
+      setFormError(error?.message || 'Fel vid skapande av elev.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const filteredStudents = students
     .filter(s => {
       // Klassfilter
@@ -425,7 +480,73 @@ export default function StudentsPage() {
         </select>
       </div>
 
-      {/* Search */}
+      {/* Admin: Lägg till elev formulär */}
+      {userRole === 'admin' && (
+        <div className="bg-white rounded-lg shadow mb-8 p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Lägg till elev</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <input
+              value={studentForm.firstName}
+              onChange={(e) => setStudentForm({ ...studentForm, firstName: e.target.value })}
+              className="border border-gray-300 rounded-lg px-3 py-2"
+              placeholder="Förnamn"
+              autoComplete="off"
+            />
+            <input
+              value={studentForm.lastName}
+              onChange={(e) => setStudentForm({ ...studentForm, lastName: e.target.value })}
+              className="border border-gray-300 rounded-lg px-3 py-2"
+              placeholder="Efternamn"
+              autoComplete="off"
+            />
+            <input
+              value={studentForm.email}
+              onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
+              className="border border-gray-300 rounded-lg px-3 py-2"
+              placeholder="E-post"
+              autoComplete="off"
+              type="email"
+            />
+            <input
+              value={studentForm.password}
+              onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
+              className="border border-gray-300 rounded-lg px-3 py-2"
+              placeholder="Lösenord"
+              type="password"
+              autoComplete="new-password"
+            />
+            <select
+              value={studentForm.classId}
+              onChange={(e) => setStudentForm({ ...studentForm, classId: e.target.value })}
+              className="border border-gray-300 rounded-lg px-3 py-2"
+            >
+              <option value="">Valfri klass</option>
+              {classes.map((cls) => (
+                <option key={cls.id} value={cls.id}>
+                  {cls.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={studentForm.teacherUid}
+              onChange={(e) => setStudentForm({ ...studentForm, teacherUid: e.target.value })}
+              className="border border-gray-300 rounded-lg px-3 py-2"
+            >
+              <option value="">Valfri lärare</option>
+            </select>
+          </div>
+          {formError && (
+            <p className="text-sm text-red-600 mb-4">{formError}</p>
+          )}
+          <button
+            onClick={handleCreateStudent}
+            disabled={creating}
+            className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition disabled:opacity-60"
+          >
+            Skapa elev
+          </button>
+        </div>
+      )}      {/* Search */}
       <div className="mb-6">
         <input
           type="text"
@@ -552,6 +673,57 @@ export default function StudentsPage() {
                     >
                       {deletingStudent?.id === student.id ? 'Tar bort...' : 'Ta bort'}
                     </button>
+                  </td>
+                )}
+                {userRole === 'admin' && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      {student.status && (
+                        <span className={`text-xs font-medium px-2 py-1 rounded ${student.status === 'frozen' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                          {student.status === 'frozen' ? 'Fryst' : 'Aktiv'}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                )}
+                {userRole === 'admin' && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      {student.status !== 'frozen' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSetUserStatus(student, 'frozen');
+                          }}
+                          disabled={statusChangingStudent?.student.id === student.id}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-60"
+                        >
+                          Frysa
+                        </button>
+                      )}
+                      {student.status === 'frozen' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSetUserStatus(student, 'active');
+                          }}
+                          disabled={statusChangingStudent?.student.id === student.id}
+                          className="text-green-600 hover:text-green-800 text-sm font-medium disabled:opacity-60"
+                        >
+                          Aktivera
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteStudent(student);
+                        }}
+                        disabled={deletingStudent?.id === student.id}
+                        className="text-gray-600 hover:text-gray-800 text-sm font-medium disabled:opacity-60"
+                      >
+                        Ta bort
+                      </button>
+                    </div>
                   </td>
                 )}
               </tr>

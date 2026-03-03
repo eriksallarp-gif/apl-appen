@@ -3,8 +3,8 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import Header from '@/components/Header';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -31,22 +31,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isTeacher = userRole === 'teacher';
 
   // Menystruktur: visa rätt länkar beroende på roll
-  const menuItems = [
-    { href: '/dashboard', label: 'Hem', match: (p: string) => p === '/dashboard', bold: true },
-    { href: '/dashboard/students', label: 'Elever', match: (p: string) => p.startsWith('/dashboard/students') },
-    // Veckohantering och Klasser för lärare
-    ...(isTeacher ? [
-      { href: '/dashboard/veckohanterare', label: 'Veckohanterare', match: (p: string) => p.startsWith('/dashboard/veckohanterare') },
-      { href: '/dashboard/klasser', label: 'Klasser', match: (p: string) => p.startsWith('/dashboard/klasser') },
-    ] : []),
-    { href: '/dashboard/companies', label: 'Företag', match: (p: string) => p.startsWith('/dashboard/companies') },
-    { href: '/dashboard/documents', label: 'Dokument', match: (p: string) => p.startsWith('/dashboard/documents') },
-    // Skolor endast för admin
-    ...(isAdmin ? [{ href: '/dashboard/schools', label: 'Skolor', match: (p: string) => p.startsWith('/dashboard/schools') }] : []),
-    // Lärare endast för admin
-    ...(isAdmin ? [{ href: '/dashboard/admin', label: 'Lärare', match: (p: string) => p.startsWith('/dashboard/admin') }] : []),
-    { href: '/dashboard/settings', label: 'Inställningar', match: (p: string) => p === '/dashboard/settings' || p.startsWith('/dashboard/settings/') },
-  ];
+  const menuItems = isAdmin
+    ? [
+        { href: '/dashboard', label: 'Hem', match: (p: string) => p === '/dashboard', bold: true },
+        { href: '/dashboard/students', label: 'Elever', match: (p: string) => p.startsWith('/dashboard/students') },
+        { href: '/dashboard/schools', label: 'Skolor', match: (p: string) => p.startsWith('/dashboard/schools') },
+        { href: '/dashboard/admin', label: 'Lärare', match: (p: string) => p.startsWith('/dashboard/admin') },
+        { href: '/dashboard/settings', label: 'Inställningar', match: (p: string) => p === '/dashboard/settings' || p.startsWith('/dashboard/settings/') },
+      ]
+    : [
+        { href: '/dashboard', label: 'Hem', match: (p: string) => p === '/dashboard', bold: true },
+        { href: '/dashboard/students', label: 'Elever', match: (p: string) => p.startsWith('/dashboard/students') },
+        ...(isTeacher ? [
+          { href: '/dashboard/veckohanterare', label: 'Veckohanterare', match: (p: string) => p.startsWith('/dashboard/veckohanterare') },
+          { href: '/dashboard/klasser', label: 'Klasser', match: (p: string) => p.startsWith('/dashboard/klasser') },
+        ] : []),
+        { href: '/dashboard/companies', label: 'Företag', match: (p: string) => p.startsWith('/dashboard/companies') },
+        { href: '/dashboard/documents', label: 'Dokument', match: (p: string) => p.startsWith('/dashboard/documents') },
+        { href: '/dashboard/settings', label: 'Inställningar', match: (p: string) => p === '/dashboard/settings' || p.startsWith('/dashboard/settings/') },
+      ];
 
   if (!userRole) {
     return (
@@ -58,10 +61,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-white">
-      <aside className="fixed left-0 top-0 h-screen w-56 bg-gradient-to-br from-orange-50 to-white border-r border-orange-100/50 flex flex-col py-8 px-6 z-10">
+      <Header />
+      <aside className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-56 bg-gradient-to-br from-orange-50 to-white border-r border-orange-100/50 flex flex-col py-8 px-6 z-10">
         <div className="mb-10">
           <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
-          <p className="text-xs text-orange-400 mt-1">Hem</p>
+          <p className="text-xs text-orange-400 mt-1">{isAdmin ? 'Admin' : 'Lärare'}</p>
         </div>
         <nav className="flex-1 space-y-4">
           {menuItems.map(item => {
@@ -77,11 +81,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             );
           })}
         </nav>
-        <div className="mt-auto pt-8">
-          <button onClick={async () => { await signOut(auth); window.location.href = '/login'; }} className="w-full bg-orange-600 text-white rounded-lg py-2 font-semibold hover:bg-orange-700 transition">Logga ut</button>
-        </div>
       </aside>
-      <main className="ml-56 max-w-7xl mx-auto px-8 py-12">
+      <main className="ml-56 mt-16 max-w-7xl mx-auto px-8 py-12">
         {children}
       </main>
     </div>

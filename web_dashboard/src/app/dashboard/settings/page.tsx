@@ -50,7 +50,7 @@ export default function SettingsPage() {
   return (
     <>
       <h1 className="text-2xl font-bold mb-8 text-orange-600">Inställningar</h1>
-      <form className="space-y-8">
+      <form className="space-y-8" autoComplete="off">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Namn</label>
           <input
@@ -59,6 +59,7 @@ export default function SettingsPage() {
             onChange={e => setName(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
             placeholder="Ditt namn"
+            autoComplete="off"
           />
         </div>
         <div>
@@ -70,6 +71,7 @@ export default function SettingsPage() {
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
             placeholder="din@email.se"
             disabled
+            autoComplete="off"
           />
         </div>
         <div>
@@ -80,7 +82,7 @@ export default function SettingsPage() {
             onChange={e => setPassword(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
             placeholder="Nuvarande lösenord"
-            autoComplete="current-password"
+            autoComplete="new-password"
           />
         </div>
         <div>

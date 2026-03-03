@@ -31,6 +31,14 @@
           return isTeacher() || isAdmin();
         }
 
+        function getUserStatus() {
+          return userDocExists() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('status', 'active') : 'active';
+        }
+
+        function isUserActive() {
+          return isSignedIn() && getUserStatus() != 'frozen';
+        }
+
         // Schools collection - tillåt alla att läsa skolor (för registrering)
         match /schools/{schoolId} {
           allow read: if true;
@@ -43,12 +51,12 @@
           allow read: if isSignedIn();
 
           // Users can create their own profile during registration
-          // Users can write their own profile
-          // Teachers and admins can write any user
+          // Users can write their own profile (only if active)
+          // Teachers and admins can write any user (including status field)
           allow create: if request.auth.uid == userId;
           allow update: if isSignedIn() && (
-            request.auth.uid == userId || 
-            isTeacherOrAdmin()
+            (request.auth.uid == userId && isUserActive()) || 
+            isAdmin()
           );
           allow delete: if isAdmin();
         }
@@ -96,21 +104,19 @@
           // Anyone authenticated can read timesheets
           allow read: if isSignedIn();
 
-          // Students can create their own timesheets
-          allow create: if isSignedIn() && 
+          // Students can create their own timesheets (if active)
+          allow create: if isUserActive() && 
             request.auth.uid == request.resource.data.studentUid;
 
-          // Students can update their own timesheets (unless locked/approved)
+          // Students can update their own timesheets (unless locked/approved) - must be active
           // Teachers can update any timesheet (for approval)
           // Anyone (including unauthenticated) can ONLY set approved=true and locked=true
           // (for supervisor assessments via QR code)
-          allow update: if (
-            isSignedIn() && (
-              (request.auth.uid == resource.data.get('studentUid', '') && 
-               resource.data.get('locked', false) != true) ||
-              request.auth.uid == resource.data.get('teacherUid', '') ||
-              isAdmin()
-            )
+          allow update: if isUserActive() && (
+            (request.auth.uid == resource.data.get('studentUid', '') && 
+             resource.data.get('locked', false) != true) ||
+            request.auth.uid == resource.data.get('teacherUid', '') ||
+            isAdmin()
           ) || (
             // Tillåt vem som helst att ENDAST sätta approved och locked till true
             // Detta används när handledare godkänner via assessmentRequest (QR-kod)
@@ -160,13 +166,13 @@
           // Anyone authenticated can read
           allow read: if isSignedIn();
 
-          // Students can create their own compensation claims
-          allow create: if isSignedIn() && 
+          // Students can create their own compensation claims (if active)
+          allow create: if isUserActive() && 
             request.auth.uid == request.resource.data.studentUid;
 
-          // Students can update their own (unless approved)
+          // Students can update their own (unless approved) - must be active
           // Teachers can update any (for approval)
-          allow update: if isSignedIn() && (
+          allow update: if isUserActive() && (
             (request.auth.uid == resource.data.studentUid && 
              resource.data.approved != true) ||
             isTeacherOrAdmin()
@@ -225,14 +231,20 @@
 
         // APL Documents collection (viktiga dokument för elever)
         match /aplDocuments/{documentId} {
-          // Anyone authenticated can read documents
-          allow read: if isSignedIn();
+          // Authenticated users can only read documents from their own school (and must be active)
+          allow read: if isUserActive()
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.school
+               == resource.data.school;
 
-          // Teachers and admins can create documents
-          allow create: if isTeacherOrAdmin();
+          // Teachers and admins can create documents (must be active)
+          allow create: if isUserActive()
+            && isTeacherOrAdmin()
+            && request.resource.data.school
+               == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.school
+            && request.resource.data.teacherId == request.auth.uid;
 
-          // Teachers and admins can update/delete documents
-          allow update, delete: if isTeacherOrAdmin();
+          // Teachers and admins can update/delete documents (must be active)
+          allow update, delete: if isUserActive() && isTeacherOrAdmin();
         }
 
         // Default deny everything else

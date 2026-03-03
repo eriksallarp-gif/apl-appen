@@ -7,10 +7,12 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { 
   collection, 
   getDocs, 
+  getDoc,
   addDoc, 
   deleteDoc, 
   doc,
   query,
+  where,
   orderBy,
   Timestamp
 } from 'firebase/firestore';
@@ -25,7 +27,16 @@ interface AplDocument {
   fileType: string;
   fileName: string;
   uploadedBy: string;
+  schoolId: string;
+  teacherId: string;
+  createdAt: any;
   uploadedAt: any;
+}
+
+interface UserProfile {
+  role: string;
+  schoolId: string;
+  teacherId?: string;
 }
 
 const CATEGORIES = [
@@ -39,6 +50,7 @@ const CATEGORIES = [
 export default function DocumentsPage() {
   const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [documents, setDocuments] = useState<AplDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -59,20 +71,32 @@ export default function DocumentsPage() {
 
       setUser(currentUser);
 
-      // Check user role
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      const userDoc = await getDocs(query(collection(db, 'users')));
-      const userData = userDoc.docs.find(d => d.id === currentUser.uid)?.data();
+      // Check user role and scope data
+      const userDocSnapshot = await getDoc(doc(db, 'users', currentUser.uid));
+      const userData = userDocSnapshot.exists() ? userDocSnapshot.data() : null;
       const role = userData?.role || 'student';
+      const schoolId = userData?.school || '';
+      const studentTeacherId = userData?.teacherId || '';
 
-      setUserRole(role);
-
-      if (role !== 'teacher' && role !== 'admin') {
+      if (!schoolId) {
+        alert('Kunde inte hitta schoolId för användaren. Kontakta administratör.');
         router.push('/login');
         return;
       }
 
-      await fetchDocuments(currentUser.uid, role);
+      setUserRole(role);
+      setUserProfile({
+        role,
+        schoolId: schoolId,
+        teacherId: studentTeacherId,
+      });
+
+      if (role !== 'teacher' && role !== 'admin' && role !== 'student') {
+        router.push('/login');
+        return;
+      }
+
+      await fetchDocuments(currentUser.uid, role, schoolId, studentTeacherId);
       setLoading(false);
     });
 
@@ -80,17 +104,28 @@ export default function DocumentsPage() {
   }, [router]);
 
 
-  const fetchDocuments = async (uid: string, role: string) => {
+  const fetchDocuments = async (uid: string, role: string, schoolId: string, studentTeacherId?: string) => {
     try {
-      const q = query(collection(db, 'aplDocuments'), orderBy('uploadedAt', 'desc'));
+      const constraints: any[] = [
+        where('school', '==', schoolId),
+      ];
+
+      if (role === 'student' && studentTeacherId) {
+        constraints.push(where('teacherId', '==', studentTeacherId));
+      }
+
+      if (role === 'teacher') {
+        constraints.push(where('teacherId', '==', uid));
+      }
+
+      constraints.push(orderBy('uploadedAt', 'desc'));
+      const q = query(collection(db, 'aplDocuments'), ...constraints);
       const snapshot = await getDocs(q);
-      let docs = snapshot.docs.map(doc => ({
+      const docs = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as AplDocument));
-      if (role === 'teacher') {
-        docs = docs.filter(doc => doc.uploadedBy === uid);
-      }
+
       setDocuments(docs);
     } catch (error) {
       console.error('Error fetching documents:', error);
@@ -110,7 +145,7 @@ export default function DocumentsPage() {
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !selectedCategory || !documentTitle.trim() || !user) {
+    if (!selectedFile || !selectedCategory || !documentTitle.trim() || !user || !userProfile?.schoolId) {
       alert('Fyll i alla fält och välj en fil');
       return;
     }
@@ -131,6 +166,9 @@ export default function DocumentsPage() {
         fileType: selectedFile.type,
         fileName: fileName,
         uploadedBy: user.uid,
+        school: userProfile.schoolId,
+        teacherId: user.uid,
+        createdAt: Timestamp.now(),
         uploadedAt: Timestamp.now()
       });
 
@@ -141,7 +179,12 @@ export default function DocumentsPage() {
       setSelectedCategory('');
       
       // Refresh documents list
-      await fetchDocuments(user.uid, userRole || 'student');
+      await fetchDocuments(
+        user.uid,
+        userRole || 'student',
+        userProfile.schoolId,
+        userProfile.teacherId
+      );
       alert('Dokument uppladdat!');
     } catch (error) {
       console.error('Error uploading document:', error);
@@ -169,7 +212,14 @@ export default function DocumentsPage() {
       await deleteDoc(doc(db, 'aplDocuments', document.id));
       
       // Refresh list
-      await fetchDocuments(user.uid, userRole || 'student');
+      if (userProfile?.schoolId) {
+        await fetchDocuments(
+          user.uid,
+          userRole || 'student',
+          userProfile.schoolId,
+          userProfile.teacherId
+        );
+      }
       alert('Dokument raderat!');
     } catch (error) {
       console.error('Error deleting document:', error);

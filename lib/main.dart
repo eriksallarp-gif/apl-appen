@@ -1255,6 +1255,16 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
 
       final classId = classDoc.id;
       final teacherUid = classDoc.data()?['teacherUid'] as String?;
+      String teacherSchool = '';
+
+      if (teacherUid != null && teacherUid.isNotEmpty) {
+        final teacherDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(teacherUid)
+            .get();
+        teacherSchool = (teacherDoc.data()?['school'] ?? '').toString().trim();
+      }
+
       final userName =
           (await FirebaseFirestore.instance
                   .collection('users')
@@ -1265,7 +1275,12 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
 
       // Uppdatera användare med klasskod
       await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
-        {'classId': classId, 'teacherUid': teacherUid},
+        {
+          'classId': classId,
+          'teacherUid': teacherUid,
+          'teacherId': teacherUid,
+          if (teacherSchool.isNotEmpty) 'school': teacherSchool,
+        },
       );
 
       // Lägg till i klassens students-subcollection
@@ -2527,10 +2542,18 @@ class _TeacherHomeState extends State<TeacherHome> {
       }
 
       final classId = (_addStudentClass == 'NONE') ? '' : _addStudentClass;
+      final currentTeacherDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(teacherUid)
+          .get();
+      final teacherSchool =
+          (currentTeacherDoc.data()?['school'] ?? '').toString().trim();
 
       await userDoc.reference.set({
         'teacherUid': teacherUid,
+        'teacherId': teacherUid,
         'classId': classId,
+        if (teacherSchool.isNotEmpty) 'school': teacherSchool,
       }, SetOptions(merge: true));
 
       setState(() {
@@ -3287,11 +3310,22 @@ class _StudentHomeState extends State<StudentHome> {
           throw Exception('Koden är trasig (saknar lärare).');
         }
 
+        final teacherRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(teacherUid);
+        final teacherSnap = await tx.get(teacherRef);
+        final teacherSchool =
+            (teacherSnap.data()?['school'] ?? '').toString().trim();
+
         // 1) Koppla eleven till läraren
         final studentRef = FirebaseFirestore.instance
             .collection('users')
             .doc(studentUid);
-        tx.update(studentRef, {'teacherUid': teacherUid});
+        tx.update(studentRef, {
+          'teacherUid': teacherUid,
+          'teacherId': teacherUid,
+          if (teacherSchool.isNotEmpty) 'school': teacherSchool,
+        });
 
         // 2) Markera koden som använd
         tx.update(inviteRef, {

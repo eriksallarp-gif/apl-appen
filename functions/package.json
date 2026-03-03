@@ -5,6 +5,12 @@
     "node": "20"
   },
   "main": "index.js",
+  "scripts": {
+    "backfill:student-school:dry": "node backfill-student-school.js --dry-run",
+    "backfill:student-school": "node backfill-student-school.js",
+    "backfill:user-status:dry": "node backfill-user-status.js --dry-run",
+    "backfill:user-status": "node backfill-user-status.js"
+  },
   "dependencies": {
     "express": "^5.2.1",
     "firebase-admin": "^12.0.0",

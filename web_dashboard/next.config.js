@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  distDir: '.next-dev',
 }
 
 module.exports = nextConfig
