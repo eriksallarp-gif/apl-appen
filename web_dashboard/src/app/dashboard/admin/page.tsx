@@ -56,6 +56,7 @@ interface UserSummary {
   classId?: string;
   teacherUid?: string;
   specialization?: string;
+  status?: string;
 }
 
 export default function AdminPage() {
