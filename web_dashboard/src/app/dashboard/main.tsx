@@ -241,7 +241,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p>Laddar...</p>
+        <p className="text-white">Laddar...</p>
       </div>
     );
   }
@@ -249,46 +249,46 @@ export default function DashboardPage() {
   return (
     <div className="max-w-7xl mx-auto px-8 py-12">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-        <div className="bg-gradient-to-br from-orange-400 to-orange-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
+        <div className="bg-gradient-to-br from-[#FF6A00] to-[#FF8533] text-white rounded-xl shadow-2xl p-6 flex flex-col items-start hover:shadow-[0_0_30px_rgba(255,106,0,0.3)] transition">
           <div className="flex items-center gap-3 mb-2">
-            <span className="bg-white/30 rounded-full p-2 text-xl">🎓</span>
+            <span className="bg-white/20 rounded-full p-2 text-xl">🎓</span>
             <span className="text-base font-semibold">Elever</span>
           </div>
-          <div className="text-2xl font-bold">{stats.totalStudents}</div>
+          <div className="text-3xl font-bold">{stats.totalStudents}</div>
         </div>
         {/* Visa "Lärare" istället för "Bedömningar" för admin */}
         {userRole === 'admin' ? (
-          <div className="bg-gradient-to-br from-orange-400 to-orange-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
+          <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white rounded-xl shadow-2xl p-6 flex flex-col items-start hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] transition">
             <div className="flex items-center gap-3 mb-2">
-              <span className="bg-white/30 rounded-full p-2 text-xl">👨‍🏫</span>
+              <span className="bg-white/20 rounded-full p-2 text-xl">👨‍🏫</span>
               <span className="text-base font-semibold">Lärare</span>
             </div>
-            <div className="text-2xl font-bold">{typeof stats.totalTeachers === 'number' ? stats.totalTeachers : '—'}</div>
+            <div className="text-3xl font-bold">{typeof stats.totalTeachers === 'number' ? stats.totalTeachers : '—'}</div>
           </div>
         ) : (
-          <div className="bg-gradient-to-br from-purple-400 to-purple-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
+          <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl shadow-2xl p-6 flex flex-col items-start hover:shadow-[0_0_30px_rgba(168,85,247,0.3)] transition">
             <div className="flex items-center gap-3 mb-2">
-              <span className="bg-white/30 rounded-full p-2 text-xl">👨‍🏫</span>
+              <span className="bg-white/20 rounded-full p-2 text-xl">👨‍🏫</span>
               <span className="text-base font-semibold">Bedömningar</span>
             </div>
-            <div className="text-2xl font-bold">{stats.totalAssessments}</div>
+            <div className="text-3xl font-bold">{stats.totalAssessments}</div>
           </div>
         )}
-        <div className="bg-gradient-to-br from-blue-400 to-blue-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl shadow-2xl p-6 flex flex-col items-start hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] transition">
           <div className="flex items-center gap-3 mb-2">
-            <span className="bg-white/30 rounded-full p-2 text-xl">🏢</span>
+            <span className="bg-white/20 rounded-full p-2 text-xl">🏢</span>
             <span className="text-base font-semibold">Företag</span>
           </div>
-          <div className="text-2xl font-bold">{stats.totalCompanies}</div>
+          <div className="text-3xl font-bold">{stats.totalCompanies}</div>
         </div>
         {/* Skolor endast för admin */}
         {userRole === 'admin' && (
-          <div className="bg-gradient-to-br from-green-400 to-green-500 text-white rounded-2xl shadow-lg p-6 flex flex-col items-start">
+          <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 text-white rounded-xl shadow-2xl p-6 flex flex-col items-start hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] transition">
             <div className="flex items-center gap-3 mb-2">
-              <span className="bg-white/30 rounded-full p-2 text-xl">🏫</span>
+              <span className="bg-white/20 rounded-full p-2 text-xl">🏫</span>
               <span className="text-base font-semibold">Skolor</span>
             </div>
-            <div className="text-2xl font-bold">{stats.totalSchools ?? 0}</div>
+            <div className="text-3xl font-bold">{stats.totalSchools ?? 0}</div>
           </div>
         )}
       </div>

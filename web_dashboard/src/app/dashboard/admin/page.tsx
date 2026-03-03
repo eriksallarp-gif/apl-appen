@@ -321,21 +321,21 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p>Laddar...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#0F172A]">
+        <p className="text-white">Laddar...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <button
             type="button"
             onClick={() => setActiveSection('schools')}
-            className="bg-gradient-to-br from-orange-500 to-orange-600 p-6 rounded-lg shadow text-white text-left hover:shadow-lg transition"
+            className="bg-gradient-to-br from-[#FF6A00] to-[#FF8533] p-6 rounded-xl shadow-lg text-white text-left hover:shadow-[0_0_30px_rgba(255,106,0,0.3)] transition"
             aria-label="Visa skolor"
           >
             <p className="text-sm opacity-90">Totalt antal skolor</p>
@@ -345,7 +345,7 @@ export default function AdminPage() {
           <button
             type="button"
             onClick={() => setActiveSection('approved')}
-            className="bg-gradient-to-br from-green-500 to-green-600 p-6 rounded-lg shadow text-white text-left hover:shadow-lg transition"
+            className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 rounded-xl shadow-lg text-white text-left hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] transition"
             aria-label="Visa godkända lärare"
           >
             <p className="text-sm opacity-90">Godkända lärare</p>
@@ -355,7 +355,7 @@ export default function AdminPage() {
           <button
             type="button"
             onClick={() => setActiveSection('pending')}
-            className="bg-gradient-to-br from-yellow-500 to-yellow-600 p-6 rounded-lg shadow text-white text-left hover:shadow-lg transition"
+            className="bg-gradient-to-br from-amber-500 to-amber-600 p-6 rounded-xl shadow-lg text-white text-left hover:shadow-[0_0_30px_rgba(245,158,11,0.3)] transition"
             aria-label="Visa väntande lärare"
           >
             <p className="text-sm opacity-90">Väntande lärare</p>
@@ -365,7 +365,7 @@ export default function AdminPage() {
           <button
             type="button"
             onClick={() => setActiveSection('students')}
-            className="bg-gradient-to-br from-purple-500 to-purple-600 p-6 rounded-lg shadow text-white text-left hover:shadow-lg transition"
+            className="bg-gradient-to-br from-purple-500 to-purple-600 p-6 rounded-xl shadow-lg text-white text-left hover:shadow-[0_0_30px_rgba(168,85,247,0.3)] transition"
             aria-label="Visa elever"
           >
             <p className="text-sm opacity-90">Totalt antal elever</p>
@@ -375,31 +375,31 @@ export default function AdminPage() {
 
         {/* Admin user management */}
         <div className="grid grid-cols-1 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">Lägg till lärare</h2>
-              <p className="text-sm text-gray-600 mt-1">Skapa lärarkonto</p>
+          <div className="bg-[#1E293B] rounded-xl shadow-2xl border border-gray-800">
+            <div className="px-6 py-4 border-b border-gray-800">
+              <h2 className="text-xl font-bold text-white">Lägg till lärare</h2>
+              <p className="text-sm text-gray-400 mt-1">Skapa lärarkonto</p>
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <input
                   value={teacherForm.firstName}
                   onChange={(e) => setTeacherForm({ ...teacherForm, firstName: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  className="bg-[#0F172A] border border-[#FF6A00]/30 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent transition"
                   placeholder="Förnamn"
                   autoComplete="off"
                 />
                 <input
                   value={teacherForm.lastName}
                   onChange={(e) => setTeacherForm({ ...teacherForm, lastName: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  className="bg-[#0F172A] border border-[#FF6A00]/30 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent transition"
                   placeholder="Efternamn"
                   autoComplete="off"
                 />
                 <input
                   value={teacherForm.email}
                   onChange={(e) => setTeacherForm({ ...teacherForm, email: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  className="bg-[#0F172A] border border-[#FF6A00]/30 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent transition"
                   placeholder="E-post"
                   autoComplete="off"
                   type="email"
@@ -407,7 +407,7 @@ export default function AdminPage() {
                 <input
                   value={teacherForm.password}
                   onChange={(e) => setTeacherForm({ ...teacherForm, password: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  className="bg-[#0F172A] border border-[#FF6A00]/30 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent transition"
                   placeholder="Lösenord"
                   type="password"
                   autoComplete="new-password"
@@ -415,26 +415,27 @@ export default function AdminPage() {
                 <input
                   value={teacherForm.school}
                   onChange={(e) => setTeacherForm({ ...teacherForm, school: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  className="bg-[#0F172A] border border-[#FF6A00]/30 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent transition"
                   placeholder="Skola"
                   autoComplete="off"
                 />
-                <label className="flex items-center gap-2 text-sm text-gray-700">
+                <label className="flex items-center gap-2 text-sm text-gray-300">
                   <input
                     type="checkbox"
                     checked={teacherForm.approved}
                     onChange={(e) => setTeacherForm({ ...teacherForm, approved: e.target.checked })}
+                    className="w-4 h-4 text-[#FF6A00] bg-[#0F172A] border-[#FF6A00]/30 rounded focus:ring-[#FF6A00]"
                   />
                   Godkänd direkt
                 </label>
               </div>
               {formError && (
-                <p className="text-sm text-red-600">{formError}</p>
+                <p className="text-sm text-red-400 bg-red-900/30 border border-red-500/50 p-3 rounded-lg">{formError}</p>
               )}
               <button
                 onClick={handleCreateTeacher}
                 disabled={creating}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-60"
+                className="bg-[#FF6A00] text-white px-6 py-3 rounded-lg hover:bg-[#FF6A00]/90 transition disabled:opacity-60 font-semibold shadow-[0_0_20px_rgba(255,106,0,0.3)] hover:shadow-[0_0_30px_rgba(255,106,0,0.5)]"
               >
                 Skapa larare
               </button>
@@ -443,23 +444,23 @@ export default function AdminPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900">Hantera lärare</h2>
-              <p className="text-sm text-gray-600 mt-1">Frysa/aktivera/ta bort lärare</p>
+          <div className="bg-[#1E293B] rounded-xl shadow-2xl border border-gray-800">
+            <div className="px-6 py-4 border-b border-gray-800">
+              <h2 className="text-xl font-bold text-white">Hantera lärare</h2>
+              <p className="text-sm text-gray-400 mt-1">Frysa/aktivera/ta bort lärare</p>
             </div>
             <div className="p-6 space-y-3">
               {allTeachers.length === 0 ? (
                 <p className="text-gray-500">Inga lärare</p>
               ) : (
                 allTeachers.map((teacher) => (
-                  <div key={teacher.id} className="flex items-center justify-between border border-gray-200 rounded-lg p-3">
+                  <div key={teacher.id} className="flex items-center justify-between bg-[#0F172A] border border-gray-800 rounded-lg p-4 hover:border-[#FF6A00]/30 transition">
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900">{teacher.name}</p>
-                      <p className="text-xs text-gray-600">{teacher.email}</p>
+                      <p className="font-medium text-white">{teacher.name}</p>
+                      <p className="text-xs text-gray-400">{teacher.email}</p>
                       <p className="text-xs text-gray-500">Skola: {teacher.school || 'Ej angiven'}</p>
                       {teacher.status && (
-                        <p className={`text-xs mt-1 ${teacher.status === 'frozen' ? 'text-red-600' : 'text-green-600'}`}>
+                        <p className={`text-xs mt-1 ${teacher.status === 'frozen' ? 'text-red-400' : 'text-emerald-400'}`}>
                           Status: {teacher.status === 'frozen' ? 'Fryst' : 'Aktiv'}
                         </p>
                       )}
@@ -468,7 +469,7 @@ export default function AdminPage() {
                       {teacher.status !== 'frozen' && (
                         <button
                           onClick={() => handleSetUserStatus(teacher.id, 'frozen')}
-                          className="text-red-600 hover:text-red-800 text-sm font-medium"
+                          className="text-red-400 hover:text-red-300 text-sm font-medium px-3 py-1 rounded hover:bg-red-900/20 transition"
                         >
                           Frysa
                         </button>
@@ -476,14 +477,14 @@ export default function AdminPage() {
                       {teacher.status === 'frozen' && (
                         <button
                           onClick={() => handleSetUserStatus(teacher.id, 'active')}
-                          className="text-green-600 hover:text-green-800 text-sm font-medium"
+                          className="text-emerald-400 hover:text-emerald-300 text-sm font-medium px-3 py-1 rounded hover:bg-emerald-900/20 transition"
                         >
                           Aktivera
                         </button>
                       )}
                       <button
                         onClick={() => handleDeleteUser(teacher.id)}
-                        className="text-gray-600 hover:text-gray-800 text-sm font-medium"
+                        className="text-gray-400 hover:text-gray-300 text-sm font-medium px-3 py-1 rounded hover:bg-gray-800 transition"
                       >
                         Ta bort
                       </button>

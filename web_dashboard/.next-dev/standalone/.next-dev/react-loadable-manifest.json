@@ -1,0 +1,25 @@
+{
+  "app\\dashboard\\layout.tsx -> @/lib/firebase": {
+    "id": 6410,
+    "files": []
+  },
+  "app\\dashboard\\layout.tsx -> firebase/auth": {
+    "id": 3301,
+    "files": []
+  },
+  "app\\dashboard\\layout.tsx -> firebase/firestore": {
+    "id": 5978,
+    "files": []
+  },
+  "app\\dashboard\\settings\\page.tsx -> firebase/auth": {
+    "id": 3301,
+    "files": [
+      "static/chunks/69806262-a2cfe292995bb9bf.js",
+      "static/chunks/605-21f630a2d7e11ef5.js"
+    ]
+  },
+  "app\\dashboard\\students\\page.tsx -> firebase/firestore": {
+    "id": 5978,
+    "files": []
+  }
+}

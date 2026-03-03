@@ -37,7 +37,7 @@ export default function Header() {
   };
 
   if (isLoading) {
-    return <div className="h-16 bg-white border-b border-orange-200"></div>;
+    return <div className="h-16 bg-[#1E293B] border-b border-gray-800"></div>;
   }
 
   if (!isLoggedIn) {
@@ -45,14 +45,14 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-white border-b border-orange-200 sticky top-0 z-40 shadow-sm">
+    <header className="bg-[#1E293B] border-b border-gray-800 sticky top-0 z-40 shadow-2xl">
       <div className="h-16 flex items-center justify-between px-8">
         <div className="flex items-center space-x-4">
-          <span className="text-sm text-gray-600">{userEmail}</span>
+          <span className="text-sm text-gray-400">{userEmail}</span>
         </div>
         <button
           onClick={handleLogout}
-          className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition font-medium text-sm"
+          className="px-5 py-2 bg-[#FF6A00] text-white rounded-lg hover:bg-[#FF6A00]/90 transition font-medium text-sm shadow-[0_0_15px_rgba(255,106,0,0.3)] hover:shadow-[0_0_25px_rgba(255,106,0,0.5)]"
         >
           Logga ut
         </button>
