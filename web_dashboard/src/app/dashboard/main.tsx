@@ -6,6 +6,7 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { usePathname } from 'next/navigation';
+import { BriefcaseBusiness, GraduationCap, School, Users } from 'lucide-react';
 
 interface Stats {
   totalStudents: number;
@@ -240,58 +241,82 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-white">Laddar...</p>
+      <div className="flex min-h-screen items-center justify-center bg-white text-slate-700">
+        <p>Laddar...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-8 py-12">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-        <div className="bg-gradient-to-br from-[#FF6A00] to-[#FF8533] text-white rounded-xl shadow-2xl p-6 flex flex-col items-start hover:shadow-[0_0_30px_rgba(255,106,0,0.3)] transition">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="bg-white/20 rounded-full p-2 text-xl">🎓</span>
-            <span className="text-base font-semibold">Elever</span>
-          </div>
-          <div className="text-3xl font-bold">{stats.totalStudents}</div>
-        </div>
-        {/* Visa "Lärare" istället för "Bedömningar" för admin */}
-        {userRole === 'admin' ? (
-          <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white rounded-xl shadow-2xl p-6 flex flex-col items-start hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] transition">
-            <div className="flex items-center gap-3 mb-2">
-              <span className="bg-white/20 rounded-full p-2 text-xl">👨‍🏫</span>
-              <span className="text-base font-semibold">Lärare</span>
-            </div>
-            <div className="text-3xl font-bold">{typeof stats.totalTeachers === 'number' ? stats.totalTeachers : '—'}</div>
-          </div>
-        ) : (
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl shadow-2xl p-6 flex flex-col items-start hover:shadow-[0_0_30px_rgba(168,85,247,0.3)] transition">
-            <div className="flex items-center gap-3 mb-2">
-              <span className="bg-white/20 rounded-full p-2 text-xl">👨‍🏫</span>
-              <span className="text-base font-semibold">Bedömningar</span>
-            </div>
-            <div className="text-3xl font-bold">{stats.totalAssessments}</div>
-          </div>
-        )}
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl shadow-2xl p-6 flex flex-col items-start hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] transition">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="bg-white/20 rounded-full p-2 text-xl">🏢</span>
-            <span className="text-base font-semibold">Företag</span>
-          </div>
-          <div className="text-3xl font-bold">{stats.totalCompanies}</div>
-        </div>
-        {/* Skolor endast för admin */}
-        {userRole === 'admin' && (
-          <div className="bg-gradient-to-br from-cyan-500 to-cyan-600 text-white rounded-xl shadow-2xl p-6 flex flex-col items-start hover:shadow-[0_0_30px_rgba(6,182,212,0.3)] transition">
-            <div className="flex items-center gap-3 mb-2">
-              <span className="bg-white/20 rounded-full p-2 text-xl">🏫</span>
-              <span className="text-base font-semibold">Skolor</span>
-            </div>
-            <div className="text-3xl font-bold">{stats.totalSchools ?? 0}</div>
-          </div>
-        )}
+    <main className="min-h-screen bg-white text-slate-900">
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute -top-24 right-[-10%] h-[420px] w-[420px] rounded-full bg-orange-200/35 blur-3xl" />
+        <div className="absolute top-[35%] left-[-10%] h-[360px] w-[360px] rounded-full bg-orange-100/60 blur-3xl" />
       </div>
-    </div>
+
+      <section className="mx-auto max-w-7xl px-8 py-12">
+        <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-sm font-medium text-orange-700">Dashboard</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Översikt</h1>
+          <p className="mt-2 text-sm text-slate-600">Samma visuella tema som startsidan för både admin och lärare.</p>
+        </div>
+
+        <div className="mb-10 grid grid-cols-1 gap-4 md:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-2 flex items-center gap-3">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                <GraduationCap className="h-5 w-5 text-orange-600" />
+              </span>
+              <span className="text-base font-semibold text-slate-900">Elever</span>
+            </div>
+            <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalStudents}</div>
+          </div>
+
+          {userRole === 'admin' ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mb-2 flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                  <Users className="h-5 w-5 text-orange-600" />
+                </span>
+                <span className="text-base font-semibold text-slate-900">Lärare</span>
+              </div>
+              <div className="text-2xl font-bold tracking-tight text-slate-900">{typeof stats.totalTeachers === 'number' ? stats.totalTeachers : '—'}</div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mb-2 flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                  <Users className="h-5 w-5 text-orange-600" />
+                </span>
+                <span className="text-base font-semibold text-slate-900">Bedömningar</span>
+              </div>
+              <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalAssessments}</div>
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="mb-2 flex items-center gap-3">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                <BriefcaseBusiness className="h-5 w-5 text-orange-600" />
+              </span>
+              <span className="text-base font-semibold text-slate-900">Företag</span>
+            </div>
+            <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalCompanies}</div>
+          </div>
+
+          {userRole === 'admin' && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mb-2 flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                  <School className="h-5 w-5 text-orange-600" />
+                </span>
+                <span className="text-base font-semibold text-slate-900">Skolor</span>
+              </div>
+              <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalSchools ?? 0}</div>
+            </div>
+          )}
+        </div>
+      </section>
+    </main>
   );
 }

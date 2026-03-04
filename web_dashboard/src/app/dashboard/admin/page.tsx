@@ -6,6 +6,7 @@ import { auth, db, functions } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
+import { Clock3, GraduationCap, School, Users } from 'lucide-react';
 
 interface AdminStats {
   totalSchools: number;
@@ -321,85 +322,119 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0F172A]">
-        <p className="text-white">Laddar...</p>
+      <div className="flex min-h-screen items-center justify-center bg-white text-slate-700">
+        <p>Laddar...</p>
       </div>
     );
   }
 
+  const statCardBase =
+    'rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:shadow';
+  const statCardActive = 'ring-2 ring-orange-200';
+
   return (
-    <div className="min-h-screen">
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+    <main className="min-h-screen bg-white text-slate-900">
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute -top-24 right-[-10%] h-[420px] w-[420px] rounded-full bg-orange-200/35 blur-3xl" />
+        <div className="absolute top-[35%] left-[-10%] h-[360px] w-[360px] rounded-full bg-orange-100/60 blur-3xl" />
+      </div>
+
+      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-sm font-medium text-orange-700">Adminpanel</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Översikt och användarhantering</h1>
+          <p className="mt-2 text-sm text-slate-600">Hantera skolor, lärare och elever med samma tema som startsidan.</p>
+        </div>
+
+        <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
           <button
             type="button"
             onClick={() => setActiveSection('schools')}
-            className="bg-gradient-to-br from-[#FF6A00] to-[#FF8533] p-6 rounded-xl shadow-lg text-white text-left hover:shadow-[0_0_30px_rgba(255,106,0,0.3)] transition"
+            className={`${statCardBase} ${activeSection === 'schools' ? statCardActive : ''}`}
             aria-label="Visa skolor"
           >
-            <p className="text-sm opacity-90">Totalt antal skolor</p>
-            <p className="text-4xl font-bold mt-2">{stats.totalSchools}</p>
+            <div className="flex items-center gap-2 text-slate-700">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                <School className="h-4 w-4 text-orange-600" />
+              </span>
+              <p className="text-sm font-medium">Totalt antal skolor</p>
+            </div>
+            <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{stats.totalSchools}</p>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveSection('approved')}
-            className="bg-gradient-to-br from-emerald-500 to-emerald-600 p-6 rounded-xl shadow-lg text-white text-left hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] transition"
+            className={`${statCardBase} ${activeSection === 'approved' ? statCardActive : ''}`}
             aria-label="Visa godkända lärare"
           >
-            <p className="text-sm opacity-90">Godkända lärare</p>
-            <p className="text-4xl font-bold mt-2">{stats.approvedTeachers}</p>
+            <div className="flex items-center gap-2 text-slate-700">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                <Users className="h-4 w-4 text-orange-600" />
+              </span>
+              <p className="text-sm font-medium">Godkända lärare</p>
+            </div>
+            <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{stats.approvedTeachers}</p>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveSection('pending')}
-            className="bg-gradient-to-br from-amber-500 to-amber-600 p-6 rounded-xl shadow-lg text-white text-left hover:shadow-[0_0_30px_rgba(245,158,11,0.3)] transition"
+            className={`${statCardBase} ${activeSection === 'pending' ? statCardActive : ''}`}
             aria-label="Visa väntande lärare"
           >
-            <p className="text-sm opacity-90">Väntande lärare</p>
-            <p className="text-4xl font-bold mt-2">{stats.pendingTeachers}</p>
+            <div className="flex items-center gap-2 text-slate-700">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                <Clock3 className="h-4 w-4 text-orange-600" />
+              </span>
+              <p className="text-sm font-medium">Väntande lärare</p>
+            </div>
+            <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{stats.pendingTeachers}</p>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveSection('students')}
-            className="bg-gradient-to-br from-purple-500 to-purple-600 p-6 rounded-xl shadow-lg text-white text-left hover:shadow-[0_0_30px_rgba(168,85,247,0.3)] transition"
+            className={`${statCardBase} ${activeSection === 'students' ? statCardActive : ''}`}
             aria-label="Visa elever"
           >
-            <p className="text-sm opacity-90">Totalt antal elever</p>
-            <p className="text-4xl font-bold mt-2">{stats.totalStudents}</p>
+            <div className="flex items-center gap-2 text-slate-700">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                <GraduationCap className="h-4 w-4 text-orange-600" />
+              </span>
+              <p className="text-sm font-medium">Totalt antal elever</p>
+            </div>
+            <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{stats.totalStudents}</p>
           </button>
         </div>
 
         {/* Admin user management */}
         <div className="grid grid-cols-1 gap-6 mb-8">
-          <div className="bg-[#1E293B] rounded-xl shadow-2xl border border-gray-800">
-            <div className="px-6 py-4 border-b border-gray-800">
-              <h2 className="text-xl font-bold text-white">Lägg till lärare</h2>
-              <p className="text-sm text-gray-400 mt-1">Skapa lärarkonto</p>
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-slate-900">Lägg till lärare</h2>
+              <p className="mt-1 text-sm text-slate-600">Skapa lärarkonto</p>
             </div>
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <input
                   value={teacherForm.firstName}
                   onChange={(e) => setTeacherForm({ ...teacherForm, firstName: e.target.value })}
-                  className="bg-[#0F172A] border border-[#FF6A00]/30 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent transition"
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400"
                   placeholder="Förnamn"
                   autoComplete="off"
                 />
                 <input
                   value={teacherForm.lastName}
                   onChange={(e) => setTeacherForm({ ...teacherForm, lastName: e.target.value })}
-                  className="bg-[#0F172A] border border-[#FF6A00]/30 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent transition"
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400"
                   placeholder="Efternamn"
                   autoComplete="off"
                 />
                 <input
                   value={teacherForm.email}
                   onChange={(e) => setTeacherForm({ ...teacherForm, email: e.target.value })}
-                  className="bg-[#0F172A] border border-[#FF6A00]/30 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent transition"
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400"
                   placeholder="E-post"
                   autoComplete="off"
                   type="email"
@@ -407,7 +442,7 @@ export default function AdminPage() {
                 <input
                   value={teacherForm.password}
                   onChange={(e) => setTeacherForm({ ...teacherForm, password: e.target.value })}
-                  className="bg-[#0F172A] border border-[#FF6A00]/30 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent transition"
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400"
                   placeholder="Lösenord"
                   type="password"
                   autoComplete="new-password"
@@ -415,27 +450,26 @@ export default function AdminPage() {
                 <input
                   value={teacherForm.school}
                   onChange={(e) => setTeacherForm({ ...teacherForm, school: e.target.value })}
-                  className="bg-[#0F172A] border border-[#FF6A00]/30 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#FF6A00] focus:border-transparent transition"
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400"
                   placeholder="Skola"
                   autoComplete="off"
                 />
-                <label className="flex items-center gap-2 text-sm text-gray-300">
+                <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
                     type="checkbox"
                     checked={teacherForm.approved}
                     onChange={(e) => setTeacherForm({ ...teacherForm, approved: e.target.checked })}
-                    className="w-4 h-4 text-[#FF6A00] bg-[#0F172A] border-[#FF6A00]/30 rounded focus:ring-[#FF6A00]"
                   />
                   Godkänd direkt
                 </label>
               </div>
               {formError && (
-                <p className="text-sm text-red-400 bg-red-900/30 border border-red-500/50 p-3 rounded-lg">{formError}</p>
+                <p className="text-sm text-red-600">{formError}</p>
               )}
               <button
                 onClick={handleCreateTeacher}
                 disabled={creating}
-                className="bg-[#FF6A00] text-white px-6 py-3 rounded-lg hover:bg-[#FF6A00]/90 transition disabled:opacity-60 font-semibold shadow-[0_0_20px_rgba(255,106,0,0.3)] hover:shadow-[0_0_30px_rgba(255,106,0,0.5)]"
+                className="rounded-xl bg-orange-600 px-4 py-2 text-white transition hover:bg-orange-700 disabled:opacity-60"
               >
                 Skapa larare
               </button>
@@ -443,24 +477,24 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-[#1E293B] rounded-xl shadow-2xl border border-gray-800">
-            <div className="px-6 py-4 border-b border-gray-800">
-              <h2 className="text-xl font-bold text-white">Hantera lärare</h2>
-              <p className="text-sm text-gray-400 mt-1">Frysa/aktivera/ta bort lärare</p>
+        <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h2 className="text-xl font-bold text-slate-900">Hantera lärare</h2>
+              <p className="mt-1 text-sm text-slate-600">Frysa/aktivera/ta bort lärare</p>
             </div>
-            <div className="p-6 space-y-3">
+            <div className="space-y-3 p-6">
               {allTeachers.length === 0 ? (
-                <p className="text-gray-500">Inga lärare</p>
+                <p className="text-slate-500">Inga lärare</p>
               ) : (
                 allTeachers.map((teacher) => (
-                  <div key={teacher.id} className="flex items-center justify-between bg-[#0F172A] border border-gray-800 rounded-lg p-4 hover:border-[#FF6A00]/30 transition">
+                  <div key={teacher.id} className="flex items-center justify-between rounded-xl border border-slate-200 p-3">
                     <div className="flex-1">
-                      <p className="font-medium text-white">{teacher.name}</p>
-                      <p className="text-xs text-gray-400">{teacher.email}</p>
-                      <p className="text-xs text-gray-500">Skola: {teacher.school || 'Ej angiven'}</p>
+                      <p className="font-medium text-slate-900">{teacher.name}</p>
+                      <p className="text-xs text-slate-600">{teacher.email}</p>
+                      <p className="text-xs text-slate-500">Skola: {teacher.school || 'Ej angiven'}</p>
                       {teacher.status && (
-                        <p className={`text-xs mt-1 ${teacher.status === 'frozen' ? 'text-red-400' : 'text-emerald-400'}`}>
+                        <p className={`mt-1 text-xs ${teacher.status === 'frozen' ? 'text-red-600' : 'text-green-600'}`}>
                           Status: {teacher.status === 'frozen' ? 'Fryst' : 'Aktiv'}
                         </p>
                       )}
@@ -469,7 +503,7 @@ export default function AdminPage() {
                       {teacher.status !== 'frozen' && (
                         <button
                           onClick={() => handleSetUserStatus(teacher.id, 'frozen')}
-                          className="text-red-400 hover:text-red-300 text-sm font-medium px-3 py-1 rounded hover:bg-red-900/20 transition"
+                          className="text-sm font-medium text-red-600 hover:text-red-800"
                         >
                           Frysa
                         </button>
@@ -477,14 +511,14 @@ export default function AdminPage() {
                       {teacher.status === 'frozen' && (
                         <button
                           onClick={() => handleSetUserStatus(teacher.id, 'active')}
-                          className="text-emerald-400 hover:text-emerald-300 text-sm font-medium px-3 py-1 rounded hover:bg-emerald-900/20 transition"
+                          className="text-sm font-medium text-green-600 hover:text-green-800"
                         >
                           Aktivera
                         </button>
                       )}
                       <button
                         onClick={() => handleDeleteUser(teacher.id)}
-                        className="text-gray-400 hover:text-gray-300 text-sm font-medium px-3 py-1 rounded hover:bg-gray-800 transition"
+                        className="text-sm font-medium text-slate-600 hover:text-slate-800"
                       >
                         Ta bort
                       </button>
@@ -514,7 +548,7 @@ export default function AdminPage() {
                       className="border border-gray-200 rounded-lg p-4"
                     >
                       <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-900">{school.name}</h3>
+                        <h3 className="font-semibold text-slate-900">{school.name}</h3>
                         <span className="text-sm text-gray-600">{school.teacherCount} larare</span>
                       </div>
                     </div>
@@ -668,7 +702,7 @@ export default function AdminPage() {
                   {pendingTeachers.map((teacher) => (
                     <div
                       key={teacher.id}
-                      className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition"
+                      className="rounded-xl border border-slate-200 p-4 transition hover:border-orange-300"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -707,7 +741,7 @@ export default function AdminPage() {
             </div>
           </div>
         )}
-      </main>
-    </div>
+      </section>
+    </main>
   );
 }
