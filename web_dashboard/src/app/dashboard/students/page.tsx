@@ -298,7 +298,7 @@ export default function StudentsPage() {
         );
 
         let totalHours = 0;
-        studentTimesheets.forEach(timesheet => {
+        approvedTimesheets.forEach(timesheet => {
           const entries = timesheet.data().entries || {};
           Object.values(entries).forEach((dayEntries: any) => {
             if (dayEntries && typeof dayEntries === 'object') {

@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where, deleteDoc } from 'firebase/firestore';
 
 interface Assessment {
   id: string;
@@ -104,6 +104,7 @@ export default function StudentDetailPage() {
   const [selectedView, setSelectedView] = useState<'hours' | 'timesheets' | 'assessments' | 'compensations' | null>(null);
   const [expandedTimesheetId, setExpandedTimesheetId] = useState<string | null>(null);
   const [expandedAssessmentId, setExpandedAssessmentId] = useState<string | null>(null);
+  const [deletingAssessmentId, setDeletingAssessmentId] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -111,12 +112,62 @@ export default function StudentDetailPage() {
         router.push('/login');
         return;
       }
+      await cleanupOldPendingAssessments();
       await fetchStudentData();
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [router, studentId]);
+
+  const cleanupOldPendingAssessments = async () => {
+    try {
+      const assessmentsSnapshot = await getDocs(
+        query(
+          collection(db, 'assessmentRequests'),
+          where('studentUid', '==', studentId),
+          where('status', '==', 'pending')
+        )
+      );
+
+      const now = Date.now();
+      const twentyFourHoursInMs = 24 * 60 * 60 * 1000;
+
+      for (const assessmentDoc of assessmentsSnapshot.docs) {
+        const data = assessmentDoc.data();
+        const submittedAt = data.submittedAt;
+        
+        if (submittedAt) {
+          const submittedTime = submittedAt.seconds * 1000;
+          const ageInMs = now - submittedTime;
+          
+          if (ageInMs > twentyFourHoursInMs) {
+            await deleteDoc(doc(db, 'assessmentRequests', assessmentDoc.id));
+            console.log(`Raderade gammal väntande bedömning: ${assessmentDoc.id}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Fel vid rensning av gamla bedömningar:', error);
+    }
+  };
+
+  const handleDeleteAssessment = async (assessmentId: string) => {
+    if (!confirm('Är du säker på att du vill ta bort denna väntande bedömning?')) {
+      return;
+    }
+
+    try {
+      setDeletingAssessmentId(assessmentId);
+      await deleteDoc(doc(db, 'assessmentRequests', assessmentId));
+      await fetchStudentData();
+    } catch (error) {
+      console.error('Fel vid borttagning av bedömning:', error);
+      alert('Kunde inte ta bort bedömningen.');
+    } finally {
+      setDeletingAssessmentId(null);
+    }
+  };
 
   const fetchStudentData = async () => {
     try {
@@ -561,6 +612,18 @@ export default function StudentDetailPage() {
                                 <span className="text-sm text-slate-600">
                                   {assessment.totalHours || 0}h
                                 </span>
+                                {assessment.status !== 'approved' && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteAssessment(assessment.id);
+                                    }}
+                                    disabled={deletingAssessmentId === assessment.id}
+                                    className="ml-2 rounded-lg bg-red-100 px-3 py-1 text-sm font-medium text-red-700 transition hover:bg-red-200 disabled:opacity-50"
+                                  >
+                                    {deletingAssessmentId === assessment.id ? 'Tar bort...' : '🗑 Ta bort'}
+                                  </button>
+                                )}
                               </div>
                               <div className="flex items-center gap-4">
                                 {assessment.averageRating && (
