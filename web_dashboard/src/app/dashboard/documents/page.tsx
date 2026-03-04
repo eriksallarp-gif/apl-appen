@@ -18,6 +18,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { usePathname } from 'next/navigation';
+import { Building2, ShieldCheck, Calendar, AlertTriangle, HardHat, Paperclip, FileText } from 'lucide-react';
 
 interface AplDocument {
   id: string;
@@ -40,11 +41,12 @@ interface UserProfile {
 }
 
 const CATEGORIES = [
-  { id: 'kontakt_foretag', name: 'Kontakt företag', icon: '🏢' },
-  { id: 'forsakringar', name: 'Försäkringar', icon: '🛡️' },
-  { id: 'apl_tider', name: 'APL-tider för läsår', icon: '📅' },
-  { id: 'skadeanmalan', name: 'Skadeanmälan', icon: '⚠️' },
-  { id: 'arbetsmiljoverket', name: 'Arbetsmiljöverket', icon: '🏗️' },
+  { id: 'kontakt_foretag', name: 'Kontakt företag', icon: Building2, emoji: '🏢' },
+  { id: 'forsakringar', name: 'Försäkringar', icon: ShieldCheck, emoji: '🛡️' },
+  { id: 'apl_tider', name: 'APL-tider för läsår', icon: Calendar, emoji: '📅' },
+  { id: 'skadeanmalan', name: 'Skadeanmälan', icon: AlertTriangle, emoji: '⚠️' },
+  { id: 'arbetsmiljoverket', name: 'Arbetsmiljöverket', icon: HardHat, emoji: '🏗️' },
+  { id: 'ovrigt', name: 'Övrigt', icon: Paperclip, emoji: '📎' },
 ];
 
 export default function DocumentsPage() {
@@ -232,7 +234,9 @@ export default function DocumentsPage() {
   };
 
   const getCategoryIcon = (categoryId: string) => {
-    return CATEGORIES.find(c => c.id === categoryId)?.icon || '📄';
+    const category = CATEGORIES.find(c => c.id === categoryId);
+    if (!category) return FileText;
+    return category.icon;
   };
 
   const formatDate = (timestamp: any) => {
@@ -286,9 +290,12 @@ export default function DocumentsPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
           {CATEGORIES.map(cat => {
             const count = documents.filter(d => d.category === cat.id).length;
+            const IconComponent = cat.icon;
             return (
               <div key={cat.id} className="bg-white p-6 rounded-lg border-2 border-gray-200">
-                <div className="text-4xl mb-2">{cat.icon}</div>
+                <div className="mb-2 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                  <IconComponent className="h-5 w-5 text-orange-600" />
+                </div>
                 <h3 className="font-semibold text-gray-900">{cat.name}</h3>
                 <p className="text-sm text-gray-600 mt-1">
                   {count} {count === 1 ? 'dokument' : 'dokument'}
@@ -332,8 +339,11 @@ export default function DocumentsPage() {
                           {doc.title}
                         </h3>
                         <div className="flex items-center gap-3 mt-2 text-sm text-gray-600">
-                          <span className="flex items-center gap-1">
-                            {getCategoryIcon(doc.category)}
+                          <span className="flex items-center gap-1.5">
+                            {(() => {
+                              const IconComponent = getCategoryIcon(doc.category);
+                              return <IconComponent className="h-4 w-4 text-orange-600" />;
+                            })()}
                             {getCategoryName(doc.category)}
                           </span>
                           <span>•</span>
@@ -398,7 +408,7 @@ export default function DocumentsPage() {
                     <option value="">Välj kategori...</option>
                     {CATEGORIES.map(cat => (
                       <option key={cat.id} value={cat.id}>
-                        {cat.icon} {cat.name}
+                        {cat.emoji} {cat.name}
                       </option>
                     ))}
                   </select>
