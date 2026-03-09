@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { auth, db, functions } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -90,6 +90,14 @@ export default function AdminPage() {
   });
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const section = searchParams.get('section');
+    if (section === 'pending' || section === 'approved' || section === 'schools' || section === 'students') {
+      setActiveSection(section);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -130,6 +138,23 @@ export default function AdminPage() {
     school: teacher.school || 'Ingen skola angiven',
     createdAt: teacher.createdAt,
   });
+
+  const getCreatedAtMs = (value: any): number => {
+    if (!value) {
+      return 0;
+    }
+    if (typeof value.toMillis === 'function') {
+      return value.toMillis();
+    }
+    if (typeof value.seconds === 'number') {
+      const nanos = typeof value.nanoseconds === 'number' ? value.nanoseconds : 0;
+      return value.seconds * 1000 + Math.floor(nanos / 1000000);
+    }
+    if (value instanceof Date) {
+      return value.getTime();
+    }
+    return 0;
+  };
 
   const mapStudent = (student: any) => ({
     id: student.id,
@@ -173,9 +198,13 @@ export default function AdminPage() {
           .map(([name, teacherCount]) => ({ name, teacherCount }))
           .sort((a, b) => a.name.localeCompare(b.name, 'sv-SE'))
       );
+
+      const sortedPendingTeachers = pending
+        .map(mapTeacher)
+        .sort((a, b) => getCreatedAtMs(b.createdAt) - getCreatedAtMs(a.createdAt));
       
       // Update teacher lists
-      setPendingTeachers(pending.map(mapTeacher));
+      setPendingTeachers(sortedPendingTeachers);
       setApprovedTeachers(approved.map(mapTeacher));
       setAllTeachers(approved.map((teacher) => ({
         id: teacher.id,
@@ -342,26 +371,11 @@ export default function AdminPage() {
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm font-medium text-orange-700">Adminpanel</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Översikt och användarhantering</h1>
-          <p className="mt-2 text-sm text-slate-600">Hantera skolor, lärare och elever med samma tema som startsidan.</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Översikt och lärarhantering</h1>
+          <p className="mt-2 text-sm text-slate-600">Hantera lärare, lägg till, frys eller ta bort.</p>
         </div>
 
-        <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-4">
-          <button
-            type="button"
-            onClick={() => setActiveSection('schools')}
-            className={`${statCardBase} ${activeSection === 'schools' ? statCardActive : ''}`}
-            aria-label="Visa skolor"
-          >
-            <div className="flex items-center gap-2 text-slate-700">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
-                <School className="h-4 w-4 text-orange-600" />
-              </span>
-              <p className="text-sm font-medium">Totalt antal skolor</p>
-            </div>
-            <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{stats.totalSchools}</p>
-          </button>
-
+        <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2">
           <button
             type="button"
             onClick={() => setActiveSection('approved')}
@@ -390,21 +404,6 @@ export default function AdminPage() {
               <p className="text-sm font-medium">Väntande lärare</p>
             </div>
             <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{stats.pendingTeachers}</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveSection('students')}
-            className={`${statCardBase} ${activeSection === 'students' ? statCardActive : ''}`}
-            aria-label="Visa elever"
-          >
-            <div className="flex items-center gap-2 text-slate-700">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
-                <GraduationCap className="h-4 w-4 text-orange-600" />
-              </span>
-              <p className="text-sm font-medium">Totalt antal elever</p>
-            </div>
-            <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">{stats.totalStudents}</p>
           </button>
         </div>
 

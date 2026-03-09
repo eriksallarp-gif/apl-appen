@@ -6,11 +6,12 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { usePathname } from 'next/navigation';
-import { BriefcaseBusiness, GraduationCap, School, Users } from 'lucide-react';
+import { GraduationCap, School, Users } from 'lucide-react';
 
 interface Stats {
   totalStudents: number;
   totalTeachers: number;
+  pendingTeachers: number;
   totalTimesheets: number;
   pendingTimesheets: number;
   approvedTimesheets: number;
@@ -18,7 +19,6 @@ interface Stats {
   pendingAssessments: number;
   submittedAssessments: number;
   totalHours: number;
-  totalCompanies: number;
   totalSchools: number;
 }
 
@@ -45,6 +45,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({
     totalStudents: 0,
     totalTeachers: 0,
+    pendingTeachers: 0,
     totalTimesheets: 0,
     pendingTimesheets: 0,
     approvedTimesheets: 0,
@@ -52,7 +53,6 @@ export default function DashboardPage() {
     pendingAssessments: 0,
     submittedAssessments: 0,
     totalHours: 0,
-    totalCompanies: 0,
     totalSchools: 0,
   });
   const [classes, setClasses] = useState<ClassData[]>([]);
@@ -91,12 +91,10 @@ export default function DashboardPage() {
       const classesSnapshot = await getDocs(collection(db, 'classes'));
       const timesheetsSnapshot = await getDocs(collection(db, 'timesheets'));
       const assessmentsSnapshot = await getDocs(collection(db, 'assessmentRequests'));
-      const companiesSnapshot = await getDocs(collection(db, 'companies'));
       const schoolsSnapshot = await getDocs(collection(db, 'schools'));
 
       const isTeacher = role === 'teacher';
       console.log('DEBUG: currentUserId', currentUserId, 'role', role);
-      console.log('DEBUG: companies', companiesSnapshot.docs.map(doc => doc.data()));
       const classDocs = isTeacher
         ? classesSnapshot.docs.filter(c => c.data().teacherUid === currentUserId)
         : classesSnapshot.docs;
@@ -109,6 +107,7 @@ export default function DashboardPage() {
 
       const allStudents = usersSnapshot.docs.filter(doc => doc.data().role === 'student');
       const allTeachers = usersSnapshot.docs.filter(doc => doc.data().role === 'teacher');
+      const pendingTeachers = allTeachers.filter(doc => doc.data().approved !== true).length;
       const students = isTeacher
         ? allStudents.filter(doc => {
             const data = doc.data();
@@ -152,21 +151,18 @@ export default function DashboardPage() {
       };
       setRawData(raw);
 
-      const companyCount = isTeacher
-        ? companiesSnapshot.docs.filter(doc => doc.data().teacherUid === currentUserId).length
-        : companiesSnapshot.docs.length;
-      console.log('DEBUG: companyCount', companyCount);
       const schoolsCount = schoolsSnapshot.docs.length;
       // Update stats
       setStats(prev => ({
         ...prev,
-        totalCompanies: companyCount,
         totalSchools: schoolsCount,
         totalTeachers: allTeachers.length,
+        pendingTeachers,
       }));
       const tempStats = {
         totalStudents: studentSummaries.length,
         totalTeachers: allTeachers.length,
+        pendingTeachers,
         totalTimesheets: timesheets.length,
         pendingTimesheets: 0,
         approvedTimesheets: 0,
@@ -174,7 +170,6 @@ export default function DashboardPage() {
         pendingAssessments: 0,
         submittedAssessments: 0,
         totalHours: 0,
-        totalCompanies: companyCount,
         totalSchools: schoolsCount,
       };
       applyClassFilter(selectedClassId, studentSummaries, raw, tempStats);
@@ -239,6 +234,8 @@ export default function DashboardPage() {
     router.push('/login');
   };
 
+  const hasPendingTeachers = stats.pendingTeachers > 0;
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white text-slate-700">
@@ -258,10 +255,14 @@ export default function DashboardPage() {
         <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm font-medium text-orange-700">Dashboard</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Översikt</h1>
-          <p className="mt-2 text-sm text-slate-600">Samma visuella tema som startsidan för både admin och lärare.</p>
+          <p className="mt-2 text-sm text-slate-600">
+            {userRole === 'admin' 
+              ? 'Här kan du hantera elever, lärare och skolor.' 
+              : 'Här kan du se en översikt på dina klasser, elever och deras bedömningar.'}
+          </p>
         </div>
 
-        <div className="mb-10 grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className="mb-10 grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-2 flex items-center gap-3">
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
@@ -273,15 +274,37 @@ export default function DashboardPage() {
           </div>
 
           {userRole === 'admin' ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="mb-2 flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
-                  <Users className="h-5 w-5 text-orange-600" />
-                </span>
-                <span className="text-base font-semibold text-slate-900">Lärare</span>
+            <button
+              type="button"
+              onClick={() => router.push('/dashboard/admin?section=pending')}
+              className={`rounded-2xl border p-6 text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-orange-300 ${
+                hasPendingTeachers
+                  ? 'border-orange-300 bg-orange-50/40 hover:border-orange-400 hover:shadow-md'
+                  : 'border-slate-200 bg-white hover:border-orange-300 hover:shadow-md'
+              }`}
+              aria-label="Öppna väntande lärare"
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                    <Users className="h-5 w-5 text-orange-600" />
+                  </span>
+                  <span className="text-base font-semibold text-slate-900">Lärare</span>
+                </div>
+                {hasPendingTeachers && (
+                  <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800 ring-1 ring-orange-200">
+                    Kräver åtgärd
+                  </span>
+                )}
               </div>
               <div className="text-2xl font-bold tracking-tight text-slate-900">{typeof stats.totalTeachers === 'number' ? stats.totalTeachers : '—'}</div>
-            </div>
+              <p className={`mt-2 text-xs ${hasPendingTeachers ? 'text-orange-800 font-medium' : 'text-slate-600'}`}>
+                Väntande: {stats.pendingTeachers}
+              </p>
+              {hasPendingTeachers && (
+                <p className="mt-1 text-xs text-orange-700">Tryck för att hantera väntande lärarregistreringar.</p>
+              )}
+            </button>
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="mb-2 flex items-center gap-3">
@@ -293,16 +316,6 @@ export default function DashboardPage() {
               <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalAssessments}</div>
             </div>
           )}
-
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-2 flex items-center gap-3">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
-                <BriefcaseBusiness className="h-5 w-5 text-orange-600" />
-              </span>
-              <span className="text-base font-semibold text-slate-900">Företag</span>
-            </div>
-            <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalCompanies}</div>
-          </div>
 
           {userRole === 'admin' && (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
