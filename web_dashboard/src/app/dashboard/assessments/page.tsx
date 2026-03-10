@@ -27,6 +27,11 @@ interface Assessment {
   imageComments?: { [key: number]: string };
 }
 
+function isAssessmentCompleted(assessment: Assessment): boolean {
+  const status = (assessment.status || '').toLowerCase();
+  return status === 'submitted' || status === 'approved' || Boolean(assessment.averageRating);
+}
+
 export default function AssessmentsPage() {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'submitted'>('submitted');
@@ -86,12 +91,15 @@ export default function AssessmentsPage() {
 
       // Sortera: inskickade först, sedan efter datum
       assessmentsData.sort((a, b) => {
-        if (a.status === b.status) {
+        const aCompleted = isAssessmentCompleted(a);
+        const bCompleted = isAssessmentCompleted(b);
+
+        if (aCompleted === bCompleted) {
           const aDate = a.submittedAt?.toDate() || a.createdAt?.toDate() || new Date(0);
           const bDate = b.submittedAt?.toDate() || b.createdAt?.toDate() || new Date(0);
           return bDate.getTime() - aDate.getTime();
         }
-        return a.status === 'submitted' ? -1 : 1;
+        return aCompleted ? -1 : 1;
       });
 
       setAssessments(assessmentsData);
@@ -101,8 +109,9 @@ export default function AssessmentsPage() {
   };
 
   const filteredAssessments = assessments.filter(a => {
-    if (filter === 'pending') return a.status === 'pending';
-    if (filter === 'submitted') return a.status === 'submitted';
+    const isCompleted = isAssessmentCompleted(a);
+    if (filter === 'pending') return !isCompleted;
+    if (filter === 'submitted') return isCompleted;
     return true;
   });
 
@@ -170,7 +179,7 @@ export default function AssessmentsPage() {
               filter === 'pending' ? 'bg-yellow-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
             }`}
           >
-            Väntande ({assessments.filter(a => a.status === 'pending').length})
+            Väntande ({assessments.filter(a => !isAssessmentCompleted(a)).length})
           </button>
           <button
             onClick={() => setFilter('submitted')}
@@ -178,13 +187,16 @@ export default function AssessmentsPage() {
               filter === 'submitted' ? 'bg-green-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
             }`}
           >
-            Inskickade ({assessments.filter(a => a.status === 'submitted').length})
+            Godkända/inskickade ({assessments.filter(a => isAssessmentCompleted(a)).length})
           </button>
         </div>
 
         {/* Assessments Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {filteredAssessments.map(assessment => (
+          {filteredAssessments.map(assessment => {
+            const isCompleted = isAssessmentCompleted(assessment);
+
+            return (
             <div
               key={assessment.id}
               className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition cursor-pointer"
@@ -198,7 +210,7 @@ export default function AssessmentsPage() {
                     {assessment.totalHours} timmar
                   </p>
                 </div>
-                {assessment.status === 'submitted' && assessment.averageRating && (
+                {isCompleted && assessment.averageRating && (
                   <div className="text-right ml-4">
                     <div className={`text-3xl font-bold ${getRatingColor(assessment.averageRating)}`}>
                       {assessment.averageRating}
@@ -208,7 +220,7 @@ export default function AssessmentsPage() {
                 )}
               </div>
 
-              {assessment.status === 'submitted' ? (
+              {isCompleted ? (
                 <div className="space-y-2 text-sm">
                   <div className="bg-gray-50 p-3 rounded">
                     <p className="font-medium">{assessment.supervisorCompany}</p>
@@ -224,7 +236,7 @@ export default function AssessmentsPage() {
                     </span>
                   </div>
                   <p className="text-xs text-gray-500">
-                    Inskickad: {formatDate(assessment.submittedAt)}
+                    Hanterad: {formatDate(assessment.submittedAt)}
                   </p>
                 </div>
               ) : (
@@ -238,7 +250,8 @@ export default function AssessmentsPage() {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {filteredAssessments.length === 0 && (
@@ -263,7 +276,7 @@ export default function AssessmentsPage() {
               {selectedAssessment.weeks.join(', ')} • {selectedAssessment.totalHours} timmar
             </p>
             
-            {selectedAssessment.status === 'submitted' && selectedAssessment.assessmentData && (
+            {isAssessmentCompleted(selectedAssessment) && selectedAssessment.assessmentData && (
               <div className="space-y-6">
                 <div className="bg-blue-50 p-4 rounded-lg">
                   <div className="grid grid-cols-2 gap-4">
@@ -378,12 +391,12 @@ export default function AssessmentsPage() {
                 </div>
 
                 <div className="text-xs text-gray-500 pt-4 border-t">
-                  Inskickad: {formatDate(selectedAssessment.submittedAt)}
+                  Hanterad: {formatDate(selectedAssessment.submittedAt)}
                 </div>
               </div>
             )}
 
-            {selectedAssessment.status === 'pending' && (
+            {!isAssessmentCompleted(selectedAssessment) && (
               <div className="bg-yellow-50 p-6 rounded-lg text-center">
                 <p className="text-yellow-800 font-medium mb-2">
                   Denna bedömning väntar på att fyllas i av handledaren

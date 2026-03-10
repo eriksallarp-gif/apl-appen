@@ -207,8 +207,14 @@ export default function DashboardPage() {
     });
 
     const assessments = raw.assessments.filter(a => studentIds.has(a.studentUid));
-    const pendingAssessments = assessments.filter(a => a.status === 'pending');
-    const submittedAssessments = assessments.filter(a => a.status === 'submitted');
+    const pendingAssessments = assessments.filter(a => {
+      const status = (a.status || '').toLowerCase();
+      return status !== 'submitted' && status !== 'approved';
+    });
+    const submittedAssessments = assessments.filter(a => {
+      const status = (a.status || '').toLowerCase();
+      return status === 'submitted' || status === 'approved';
+    });
 
     setFilteredStudents(activeStudents);
       setStats(prev => ({

@@ -254,7 +254,7 @@ class _StatisticsContentState extends State<_StatisticsContent> {
       stream: FirebaseFirestore.instance
           .collection('timesheets')
           .snapshots(),
-      builder: (context, snapshot) {
+      builder: (outerContext, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -264,7 +264,7 @@ class _StatisticsContentState extends State<_StatisticsContent> {
         // Filtrera tidkort för denna klass
         return FutureBuilder<List<DocumentSnapshot<Map<String, dynamic>>>>(
           future: _filterTimesheetsByClass(allTimesheets, widget.classId),
-          builder: (context, filteredSnapshot) {
+          builder: (innerContext, filteredSnapshot) {
             if (filteredSnapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
@@ -313,7 +313,7 @@ class _StatisticsContentState extends State<_StatisticsContent> {
               stream: FirebaseFirestore.instance
                 .collection('assessmentRequests')
                 .snapshots(),
-              builder: (context, assessmentSnapshot) {
+              builder: (assessmentContext, assessmentSnapshot) {
                 final allAssessments = assessmentSnapshot.data?.docs ?? [];
                 // Debug: log assessmentRequests count and a few docs
                 print('DEBUG: assessmentRequests snapshot count=${allAssessments.length}');

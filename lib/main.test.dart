@@ -571,10 +571,20 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text,
       );
+      final user = cred.user;
+      if (user != null) {
+        await user.reload();
+        if (!user.emailVerified) {
+          await user.sendEmailVerification();
+          await FirebaseAuth.instance.signOut();
+          setState(() => _error = 'E-postverifiering krävs. Mejlet skickat igen.');
+          return;
+        }
+      }
     } on FirebaseAuthException catch (e) {
       setState(() => _error = e.message ?? 'Inloggning misslyckades.');
     } finally {
@@ -593,6 +603,10 @@ class _LoginScreenState extends State<LoginScreen> {
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text,
       );
+
+      final user = cred.user;
+      if (user != null) {
+      }
 
       final uid = cred.user!.uid;
       final email = cred.user!.email ?? _emailCtrl.text.trim();

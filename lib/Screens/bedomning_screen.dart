@@ -81,7 +81,6 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
       stream: FirebaseFirestore.instance
           .collection('timesheets')
           .where('studentUid', isEqualTo: user.uid)
-          .orderBy('weekStart', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {

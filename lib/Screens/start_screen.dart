@@ -43,7 +43,7 @@ class StartScreen extends StatelessWidget {
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: userDocStream,
-      builder: (context, userSnap) {
+      builder: (outerContext, userSnap) {
         if (userSnap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -59,7 +59,7 @@ class StartScreen extends StatelessWidget {
 
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: timesheetQuery.snapshots(),
-          builder: (context, snap) {
+          builder: (innerContext, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 body: Center(child: CircularProgressIndicator()),
@@ -147,7 +147,7 @@ class StartScreen extends StatelessWidget {
                       GestureDetector(
                         onTap: thisWeekExists && teacherUid.isNotEmpty
                             ? () {
-                                Navigator.of(context).push(
+                                Navigator.of(innerContext).push(
                                   MaterialPageRoute(
                                     builder: (_) => WeeklyTimesheetScreen(
                                       studentUid: user.uid,

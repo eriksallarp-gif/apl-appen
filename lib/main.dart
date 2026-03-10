@@ -246,8 +246,25 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
   String? _msg;
   List<Map<String, dynamic>>? _activityTemplate;
   bool _controllersInitialized = false;
+  bool _hydratedFromFirestore = false;
 
   static const _days = ['mon', 'tue', 'wed', 'thu', 'fri'];
+  static const _activityKeySeparator = '::';
+
+  String _buildActivityKey(String group, String item) =>
+      '$group$_activityKeySeparator$item';
+
+  String _activityItemFromKey(String activityKey) {
+    final separatorIndex = activityKey.indexOf(_activityKeySeparator);
+    if (separatorIndex < 0) return activityKey;
+    return activityKey.substring(separatorIndex + _activityKeySeparator.length);
+  }
+
+  List<String> _findScopedKeysForItem(String item) {
+    return _controllers.keys
+        .where((key) => _activityItemFromKey(key) == item)
+        .toList();
+  }
 
   Future<void> _initializeTemplate() async {
     if (_controllersInitialized) return;
@@ -271,14 +288,16 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
 
     // Skapa controllers för alla rader/dagar (tomma istället för '0')
     for (final g in _activityTemplate!) {
+      final group = (g['group'] ?? '').toString();
       for (final item in (g['items'] as List)) {
         final name = item.toString();
-        _controllers[name] = {
+        final activityKey = _buildActivityKey(group, name);
+        _controllers[activityKey] = {
           for (final day in _days) day: TextEditingController(),
         };
         // Create comment controller for "Övrigt" items
         if (name == 'Övrigt') {
-          _commentControllers[name] = TextEditingController();
+          _commentControllers[activityKey] = TextEditingController();
         }
       }
     }
@@ -317,6 +336,8 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
         out[activity] = dayMap;
       }
     }
+    print('DEBUG _buildEntries: Sparar ${out.length} aktiviteter');
+    print('DEBUG _buildEntries: Data = $out');
     return out;
   }
 
@@ -426,7 +447,7 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
   Widget build(BuildContext context) {
     return FutureBuilder(
       future: _initializeTemplate(),
-      builder: (context, snapshot) {
+      builder: (outerContext, snapshot) {
         if (!_controllersInitialized) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -441,52 +462,76 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
 
         return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           stream: docStream,
-          builder: (context, snap) {
+          builder: (innerContext, snap) {
             final data = snap.data?.data();
             final entries = (data?['entries'] as Map?)?.cast<String, dynamic>();
             final approved = (data?['approved'] ?? false) as bool;
             final locked = (data?['locked'] ?? false) as bool;
             final effectiveReadOnly = widget.readOnly || approved || locked;
 
-            // FÖRST: Töm alla controllers (viktigt för att ta bort gamla värden)
-            for (final row in _controllers.values) {
-              for (final day in _days) {
-                if (row[day]!.text.isNotEmpty) {
-                  row[day]!.text = '';
-                }
-              }
-            }
-            
-            // SEDAN: Fyll controllers från Firestore (bara icke-noll värden)
-            if (entries != null) {
-              for (final e in entries.entries) {
-                final activity = e.key;
-                final dayMap = (e.value as Map?)?.cast<String, dynamic>() ?? {};
-                final row = _controllers[activity];
-                if (row != null) {
-                  for (final day in _days) {
-                    final rawValue = dayMap[day];
-                    // Bara sätt värde om det finns OCH inte är 0
-                    if (rawValue != null && rawValue != 0) {
-                      final v = rawValue.toString();
-                      if (row[day]!.text != v) row[day]!.text = v;
+            // Hydrera endast en gång från Firestore så vi inte skriver över
+            // användarens inmatning vid rebuilds under redigering.
+            if (!_hydratedFromFirestore) {
+              if (entries != null) {
+                for (final e in entries.entries) {
+                  final activity = e.key;
+                  final dayMap = (e.value as Map?)?.cast<String, dynamic>() ?? {};
+                  final targetRows = <Map<String, TextEditingController>>[];
+
+                  final scopedRow = _controllers[activity];
+                  if (scopedRow != null) {
+                    targetRows.add(scopedRow);
+                  } else {
+                    final legacyMatches = _findScopedKeysForItem(activity);
+                    if (legacyMatches.isNotEmpty) {
+                      targetRows.add(_controllers[legacyMatches.first]!);
+                    }
+                  }
+
+                  for (final row in targetRows) {
+                    for (final day in _days) {
+                      final rawValue = dayMap[day];
+                      if (rawValue != null && rawValue != 0) {
+                        final v = rawValue.toString();
+                        if (row[day]!.text != v) row[day]!.text = v;
+                      }
                     }
                   }
                 }
               }
-            }
 
-            // Load comments from Firestore
-            final comments = (data?['comments'] as Map?)?.cast<String, dynamic>();
-            if (comments != null) {
-              for (final c in comments.entries) {
-                final activity = c.key;
-                final comment = c.value.toString();
-                final controller = _commentControllers[activity];
-                if (controller != null && controller.text != comment) {
-                  controller.text = comment;
+              final comments =
+                  (data?['comments'] as Map?)?.cast<String, dynamic>();
+              if (comments != null) {
+                for (final c in comments.entries) {
+                  final activity = c.key;
+                  final comment = c.value.toString();
+                  final targets = <TextEditingController>[];
+
+                  final scopedController = _commentControllers[activity];
+                  if (scopedController != null) {
+                    targets.add(scopedController);
+                  } else {
+                    final legacyMatches = _commentControllers.entries
+                        .where(
+                          (entry) => _activityItemFromKey(entry.key) == activity,
+                        )
+                        .map((entry) => entry.value)
+                        .toList();
+                    if (legacyMatches.isNotEmpty) {
+                      targets.add(legacyMatches.first);
+                    }
+                  }
+
+                  for (final controller in targets) {
+                    if (controller.text != comment) {
+                      controller.text = comment;
+                    }
+                  }
                 }
               }
+
+              _hydratedFromFirestore = true;
             }
 
             // Beräkna veckonummer från weekStart
@@ -711,14 +756,22 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
                         ),
                         const SizedBox(height: 10),
                         for (final item in (g['items'] as List)) ...[
-                          _TimesheetRow(
-                            label: item.toString(),
-                            controllers: _controllers[item.toString()]!,
-                            readOnly: effectiveReadOnly,
-                            commentController: item.toString() == 'Övrigt'
-                                ? _commentControllers['Övrigt']
-                                : null,
-                          ),
+                          (() {
+                            final itemName = item.toString();
+                            final activityKey = _buildActivityKey(
+                              g['group'].toString(),
+                              itemName,
+                            );
+
+                            return _TimesheetRow(
+                              label: itemName,
+                              controllers: _controllers[activityKey]!,
+                              readOnly: effectiveReadOnly,
+                              commentController: itemName == 'Övrigt'
+                                  ? _commentControllers[activityKey]
+                                  : null,
+                            );
+                          })(),
                           const SizedBox(height: 10),
                         ],
                         const SizedBox(height: 8),
@@ -1574,8 +1627,8 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, authSnap) {
+      stream: FirebaseAuth.instance.idTokenChanges(),
+      builder: (authContext, authSnap) {
         if (authSnap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -1590,7 +1643,7 @@ class AuthGate extends StatelessWidget {
               .collection('users')
               .doc(user.uid)
               .snapshots(),
-          builder: (context, profileSnap) {
+          builder: (profileContext, profileSnap) {
             if (profileSnap.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 body: Center(child: CircularProgressIndicator()),
@@ -1603,56 +1656,20 @@ class AuthGate extends StatelessWidget {
                 .trim()
                 .toLowerCase();
 
+            // Bara lärare behöver e-postverifiering, elever använder klasskod.
+            if (role == 'teacher' && !user.emailVerified) {
+              return EmailVerificationScreen(user: user);
+            }
+
+            if (data != null && data['role'] == 'teacher' && data['approved'] != true) {
+              return ApprovalPendingScreen(user: user);
+            }
+
             switch (role) {
               case 'admin':
                 return const AdminScreen();
 
               case 'teacher':
-                // Kolla om läraren är godkänd
-                final approved = data?['approved'] as bool? ?? false;
-                if (!approved) {
-                  return Scaffold(
-                    appBar: AppBar(
-                      title: const Text('Väntar på godkännande'),
-                      actions: [
-                        IconButton(
-                          icon: const Icon(Icons.logout),
-                          onPressed: () => FirebaseAuth.instance.signOut(),
-                        ),
-                      ],
-                    ),
-                    body: const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(24),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.hourglass_empty,
-                              size: 64,
-                              color: Colors.orange,
-                            ),
-                            SizedBox(height: 24),
-                            Text(
-                              'Ditt lärarkonto väntar på godkännande',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            SizedBox(height: 16),
-                            Text(
-                              'En administratör kommer att granska din ansökan inom kort. Du får ett mejl när ditt konto godkänts.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }
                 return const MainNavigation();
 
               default: // student
@@ -1812,6 +1829,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _signIn() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -1823,7 +1841,11 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passCtrl.text,
       );
     } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message ?? 'Inloggning misslyckades.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Ett oväntat fel uppstod: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1888,112 +1910,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _showStudentRegisterDialog() async {
-    final firstNameCtrl = TextEditingController();
-    final lastNameCtrl = TextEditingController();
-    final passCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-
-    try {
-      await showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Skapa elevkonto'),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: 400,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: firstNameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Namn',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: lastNameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Efternamn',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: passCtrl,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Lösenord',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: emailCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'E-post',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Du kommer att ange klasskod och yrkesutgång efter att kontot skapats',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Avbryt'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final firstName = firstNameCtrl.text.trim();
-                final lastName = lastNameCtrl.text.trim();
-                final password = passCtrl.text;
-                final email = emailCtrl.text.trim();
-
-                if (firstName.isEmpty ||
-                    lastName.isEmpty ||
-                    password.isEmpty ||
-                    email.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Fyll i alla fält')),
-                  );
-                  return;
-                }
-
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                }
-
-                try {
-                  await _registerStudent(
-                    firstName: firstName,
-                    lastName: lastName,
-                    email: email,
-                    password: password,
-                  );
-                } catch (e) {
-                  // Fel hanteras i _registerStudent
-                }
-              },
-              child: const Text('Skapa konto'),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      firstNameCtrl.dispose();
-      lastNameCtrl.dispose();
-      passCtrl.dispose();
-      emailCtrl.dispose();
-    }
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => _StudentRegistrationDialog(),
+    );
   }
 
   Future<void> _showTeacherRegisterDialog() async {
@@ -2011,178 +1932,142 @@ class _LoginScreenState extends State<LoginScreen> {
       .get();
     final schools = schoolsSnap.docs.map((d) => d['name'].toString()).toList();
 
-    try {
-      await showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Skapa lärarkonto'),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: 400,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: firstNameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Namn',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: lastNameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Efternamn',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: passCtrl,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Lösenord',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: emailCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'E-post',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: selectedSchool,
-                    items: schools
-                        .map((s) => DropdownMenuItem(
-                              value: s,
-                              child: Text(s),
-                            ))
-                        .toList(),
-                    onChanged: (v) => selectedSchool = v,
-                    decoration: const InputDecoration(
-                      labelText: 'Skola',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Admin kommer att granska din ansökan innan du får tillgång',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Avbryt'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final firstName = firstNameCtrl.text.trim();
-                final lastName = lastNameCtrl.text.trim();
-                final password = passCtrl.text;
-                final email = emailCtrl.text.trim();
-                final school = selectedSchool ?? '';
+    Map<String, String>? result;
 
-                if (firstName.isEmpty ||
-                    lastName.isEmpty ||
-                    password.isEmpty ||
-                    email.isEmpty ||
-                    school.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Fyll i alla fält',
+    try {
+      result = await showDialog<Map<String, String>>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Skapa lärarkonto'),
+            content: SingleChildScrollView(
+              child: SizedBox(
+                width: 400,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: firstNameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Namn',
+                        border: OutlineInputBorder(),
                       ),
                     ),
-                  );
-                  return;
-                }
-
-                if (ctx.mounted) {
-                  Navigator.pop(ctx);
-                }
-                await _registerTeacher(
-                  firstName: firstName,
-                  lastName: lastName,
-                  email: email,
-                  password: password,
-                  school: school,
-                );
-              },
-              child: const Text('Skapa konto'),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: lastNameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Efternamn',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: passCtrl,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Lösenord',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: emailCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'E-post',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: selectedSchool,
+                      items: schools
+                          .map((s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(s),
+                              ))
+                          .toList(),
+                      onChanged: (v) => setState(() => selectedSchool = v),
+                      decoration: const InputDecoration(
+                        labelText: 'Skola',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Admin kommer att granska din ansökan innan du får tillgång',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Avbryt'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  // Spara värden
+                  final firstName = firstNameCtrl.text.trim();
+                  final lastName = lastNameCtrl.text.trim();
+                  final password = passCtrl.text;
+                  final email = emailCtrl.text.trim();
+                  final school = selectedSchool ?? '';
+
+                  if (firstName.isEmpty ||
+                      lastName.isEmpty ||
+                      password.isEmpty ||
+                      email.isEmpty ||
+                      school.isEmpty) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Fyll i alla fält',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+
+                  // Returnera värdena och stäng dialogen  
+                  Navigator.of(dialogContext).pop({
+                    'firstName': firstName,
+                    'lastName': lastName,
+                    'email': email,
+                    'password': password,
+                    'school': school,
+                  });
+                },
+                child: const Text('Skapa konto'),
+              ),
+            ],
+          ),
         ),
       );
     } finally {
+      // Controllers dispos:as EFTER att showDialog returnerat
       firstNameCtrl.dispose();
       lastNameCtrl.dispose();
       passCtrl.dispose();
       emailCtrl.dispose();
     }
-  }
 
-  Future<void> _registerStudent({
-    required String firstName,
-    required String lastName,
-    required String email,
-    required String password,
-  }) async {
-    if (!mounted) return;
-    
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
+    // Kör async operation EFTER dialogen är helt stängd och disposed
+    if (result != null) {
+      await _registerTeacher(
+        firstName: result['firstName']!,
+        lastName: result['lastName']!,
+        email: result['email']!,
+        password: result['password']!,
+        school: result['school']!,
       );
-
-      final uid = cred.user!.uid;
-      final fullName = '$firstName $lastName'.trim();
-
-      await cred.user!.updateDisplayName(fullName);
-
-      // Skapa elevkonto utan klasskod och yrkesutgång (kommer senare i onboarding)
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'name': fullName,
-        'displayName': fullName,
-        'firstName': firstName,
-        'lastName': lastName,
-        'email': email.toLowerCase(),
-        'role': 'student',
-        'createdAt': FieldValue.serverTimestamp(),
-        'onboardingComplete': false, // Viktig flagga
-      });
-
-      if (mounted) {
-        setState(() {
-          _error = null;
-          _loading = false;
-        });
-      }
-    } on FirebaseAuthException catch (e) {
-      if (mounted) {
-        setState(() => _error = e.message ?? 'Konto kunde inte skapas.');
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _error = 'Fel: $e');
-      }
     }
   }
+
+
 
   Future<void> _registerTeacher({
     required String firstName,
@@ -2208,6 +2093,34 @@ class _LoginScreenState extends State<LoginScreen> {
       final fullName = '$firstName $lastName'.trim();
 
       await cred.user!.updateDisplayName(fullName);
+
+      // Skicka verifieringsmejl innan vi väntar på admin
+      try {
+        print('🔄 Attempting to send verification email to: ${cred.user!.email}');
+        
+        // Försök först utan ActionCodeSettings
+        await cred.user!.sendEmailVerification();
+        
+        print('✅ Firebase reported: Verification email sent successfully');
+        print('📧 Check these locations:');
+        print('   - Inbox for: ${cred.user!.email}');
+        print('   - Spam/Junk folder');
+        print('   - Promotions tab (Gmail)');
+        print('⏱️ Email may take 1-5 minutes to arrive');
+        print('🔍 If no email after 5 min, check Firebase Console:');
+        print('   Authentication > Settings > Authorized domains');
+        print('   Authentication > Templates > Email verification');
+      } catch (e) {
+        print('❌ FAILED to send verification email!');
+        print('   Error type: ${e.runtimeType}');
+        print('   Error message: $e');
+        if (e is FirebaseAuthException) {
+          print('   Error code: ${e.code}');
+          print('   Error message: ${e.message}');
+        }
+        print('⚠️ IMPORTANT: User created but email NOT sent!');
+        print('   You must manually verify or resend from Firebase Console');
+      }
 
       // Skapa lärarkonto med pending-status
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
@@ -2243,7 +2156,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Ditt lärarkonto har skapats men väntar på godkännande. Du får ett mejl när kontot godkänts.',
+              'Ditt lärarkonto har skapats men väntar på godkännande. Kontrollera e-post och klicka på verifieringslänken. Om mejlet inte syns, kontrollera skräppost/spam.',
             ),
           ),
         );
@@ -2451,6 +2364,482 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// skärm som visas när användarens e-post inte är verifierad
+class EmailVerificationScreen extends StatefulWidget {
+  final User user;
+  const EmailVerificationScreen({required this.user, super.key});
+
+  @override
+  State<EmailVerificationScreen> createState() => _EmailVerificationScreenState();
+}
+
+class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
+  bool _sending = false;
+  String? _message;
+
+  Future<void> _reload() async {
+    setState(() {
+      _message = 'Kontrollerar...';
+    });
+    
+    try {
+      await widget.user.reload();
+      final currentUser = FirebaseAuth.instance.currentUser;
+      
+      if (currentUser != null && currentUser.emailVerified) {
+        // Verifieringen lyckades! Logga ut och låt användaren logga in igen
+        setState(() {
+          _message = 'E-post verifierad! Loggar ut - logga in igen för att fortsätta.';
+        });
+        await Future.delayed(const Duration(seconds: 2));
+        await FirebaseAuth.instance.signOut();
+      } else {
+        setState(() {
+          _message = 'E-posten är fortfarande inte verifierad. Kontrollera din inkorg och klicka på länken.';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _message = 'Fel vid kontroll: $e';
+      });
+    }
+  }
+
+  Future<void> _resend() async {
+    setState(() {
+      _sending = true;
+      _message = null;
+    });
+    try {
+      final actionCodeSettings = ActionCodeSettings(
+        url: 'https://apl-appen-aa472.firebaseapp.com',
+        handleCodeInApp: false,
+        androidPackageName: 'com.example.apl_appen',
+        androidInstallApp: false,
+      );
+      await widget.user.sendEmailVerification(actionCodeSettings);
+      setState(() {
+        _message = 'Verifieringsmejl skickat igen. Kontrollera även spam-mappen.';
+      });
+      print('✅ Verification email re-sent to: ${widget.user.email}');
+    } catch (e) {
+      setState(() {
+        _message = 'Kunde inte skicka mejl: $e';
+      });
+      print('❌ Error sending verification email: $e');
+    } finally {
+      setState(() {
+        _sending = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Verifiera e-post'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logga ut',
+            onPressed: () => FirebaseAuth.instance.signOut(),
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'Ett verifieringsmejl har skickats till din adress. Klicka på länken i mejlet för att aktivera kontot.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 24),
+            if (_message != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _message!,
+                  style: TextStyle(color: Colors.orange.shade900),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            ElevatedButton(
+              onPressed: _sending ? null : _resend,
+              child: _sending
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Skicka om e-post'),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _reload,
+              child: const Text('Jag har verifierat – uppdatera'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Dialog som hanterar elevregistrering internt för att undvika race conditions
+class _StudentRegistrationDialog extends StatefulWidget {
+  const _StudentRegistrationDialog();
+
+  @override
+  State<_StudentRegistrationDialog> createState() => _StudentRegistrationDialogState();
+}
+
+class _StudentRegistrationDialogState extends State<_StudentRegistrationDialog> {
+  final _firstNameCtrl = TextEditingController();
+  final _lastNameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  bool _loading = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _firstNameCtrl.dispose();
+    _lastNameCtrl.dispose();
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _register() async {
+    final firstName = _firstNameCtrl.text.trim();
+    final lastName = _lastNameCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
+    final password = _passCtrl.text;
+
+    if (firstName.isEmpty || lastName.isEmpty || email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Alla fält måste fyllas i.');
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final uid = cred.user!.uid;
+      final fullName = '$firstName $lastName'.trim();
+
+      await cred.user!.updateDisplayName(fullName);
+
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'name': fullName,
+        'displayName': fullName,
+        'firstName': firstName,
+        'lastName': lastName,
+        'email': email.toLowerCase(),
+        'role': 'student',
+        'createdAt': FieldValue.serverTimestamp(),
+        'onboardingComplete': false,
+      });
+
+      // createUserWithEmailAndPassword loggar in användaren automatiskt
+      // AuthGate kommer visa StudentOnboardingScreen
+      if (mounted) Navigator.pop(context);
+      
+    } on FirebaseAuthException catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.message ?? 'Konto kunde inte skapas.';
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Fel: $e';
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Skapa elevkonto'),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _firstNameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Namn',
+                  border: OutlineInputBorder(),
+                ),
+                enabled: !_loading,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _lastNameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Efternamn',
+                  border: OutlineInputBorder(),
+                ),
+                enabled: !_loading,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _emailCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'E-post',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                enabled: !_loading,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _passCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Lösenord',
+                  border: OutlineInputBorder(),
+                ),
+                obscureText: true,
+                enabled: !_loading,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Du kommer att ange klasskod och yrkesutgång efter att kontot skapats',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.red, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _loading ? null : () => Navigator.pop(context),
+          child: const Text('Avbryt'),
+        ),
+        ElevatedButton(
+          onPressed: _loading ? null : _register,
+          child: _loading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Skapa konto'),
+        ),
+      ],
+    );
+  }
+}
+
+class ApprovalPendingScreen extends StatefulWidget {
+  final User user;
+  const ApprovalPendingScreen({required this.user, super.key});
+
+  @override
+  State<ApprovalPendingScreen> createState() => _ApprovalPendingScreenState();
+}
+
+class _ApprovalPendingScreenState extends State<ApprovalPendingScreen> {
+  bool _emailVerified = false;
+  bool _approved = false;
+  bool _checking = false;
+  String? _statusMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshStatus();
+  }
+
+  Future<void> _refreshStatus() async {
+    if (!mounted) return;
+
+    setState(() {
+      _checking = true;
+      _statusMessage = 'Uppdaterar status...';
+    });
+
+    try {
+      await widget.user.reload();
+      final currentUser = FirebaseAuth.instance.currentUser;
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.user.uid)
+          .get();
+
+      if (!mounted) return;
+      setState(() {
+        _emailVerified = currentUser?.emailVerified == true;
+        _approved = userDoc.data()?['approved'] == true;
+        _statusMessage = 'Senast uppdaterad: ${TimeOfDay.now().format(context)}';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = 'Kunde inte uppdatera status: $e';
+      });
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _checking = false;
+      });
+    }
+  }
+
+  Widget _statusTile({
+    required IconData icon,
+    required String title,
+    required bool done,
+    required String doneText,
+    required String pendingText,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: done ? Colors.green.shade50 : Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: done ? Colors.green.shade200 : Colors.orange.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            done ? Icons.check_circle : icon,
+            color: done ? Colors.green.shade700 : Colors.orange.shade700,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 4),
+                Text(done ? doneText : pendingText),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Konto väntar på godkännande'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logga ut',
+            onPressed: () => FirebaseAuth.instance.signOut(),
+          ),
+        ],
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.hourglass_top, size: 56, color: Colors.orange),
+                const SizedBox(height: 16),
+                const Text(
+                  'Nästan klart!',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Ditt lärarkonto är registrerat. Nedan ser du aktuell status för aktivering.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                _statusTile(
+                  icon: Icons.mark_email_unread,
+                  title: '1. E-postverifiering',
+                  done: _emailVerified,
+                  doneText: 'Klar: Din e-post är verifierad.',
+                  pendingText:
+                      'Väntar: Verifiera din e-post via länken i mejlet (kolla även spam).',
+                ),
+                _statusTile(
+                  icon: Icons.admin_panel_settings,
+                  title: '2. Admin-godkännande',
+                  done: _approved,
+                  doneText: 'Klar: Administratören har godkänt ditt konto.',
+                  pendingText: 'Väntar: En administratör behöver godkänna ditt konto.',
+                ),
+                const SizedBox(height: 12),
+                if (_statusMessage != null)
+                  Text(
+                    _statusMessage!,
+                    style: TextStyle(color: Colors.grey.shade700),
+                    textAlign: TextAlign.center,
+                  ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _checking ? null : _refreshStatus,
+                    icon: _checking
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh),
+                    label: Text(_checking ? 'Uppdaterar...' : 'Uppdatera status'),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -3427,7 +3816,7 @@ class StudentTimesheetOverview extends StatelessWidget {
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: userDocStream,
-      builder: (context, userSnap) {
+      builder: (outerUserContext, userSnap) {
         if (userSnap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -3443,7 +3832,7 @@ class StudentTimesheetOverview extends StatelessWidget {
 
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: timesheetQuery.snapshots(),
-          builder: (context, snap) {
+          builder: (innerTimesheetContext, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 body: Center(child: CircularProgressIndicator()),
@@ -3851,7 +4240,7 @@ class StudentClassView extends StatelessWidget {
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: userDocStream,
-      builder: (context, snap) {
+      builder: (userContext, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -3875,7 +4264,7 @@ class StudentClassView extends StatelessWidget {
 
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: classDocStream,
-          builder: (context, classSnap) {
+          builder: (classContext, classSnap) {
             if (classSnap.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 body: Center(child: CircularProgressIndicator()),
@@ -3899,7 +4288,7 @@ class StudentClassView extends StatelessWidget {
 
             return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: studentsQuery.snapshots(),
-              builder: (context, studentSnap) {
+              builder: (studentContext, studentSnap) {
                 if (studentSnap.connectionState == ConnectionState.waiting) {
                   return const Scaffold(
                     body: Center(child: CircularProgressIndicator()),
@@ -4119,7 +4508,7 @@ class AssessmentScreen extends StatelessWidget {
     return Scaffold(
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: timesheetsQuery.snapshots(),
-        builder: (context, snap) {
+        builder: (outerContext, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -4173,7 +4562,7 @@ class AssessmentScreen extends StatelessWidget {
                   child: ListView.separated(
                     itemCount: timesheets.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, i) {
+                    itemBuilder: (listContext, i) {
                       final doc = timesheets[i];
                       final data = doc.data();
                       final weekStart = (data['weekStart'] ?? '').toString();
@@ -4210,7 +4599,7 @@ class AssessmentScreen extends StatelessWidget {
                             )
                             .where((doc) => doc != null)
                             .cast<DocumentSnapshot>(),
-                        builder: (context, assessmentSnap) {
+                        builder: (innerContext, assessmentSnap) {
                           final hasAssessment =
                               assessmentSnap.hasData &&
                               assessmentSnap.data != null &&
@@ -4449,8 +4838,8 @@ class _MainNavigationState extends State<MainNavigation> {
   bool _isTeacher = false;
   bool _isAdmin = false;
   bool _isLoading = true;
-  int _pendingTimesheetsCount = 0; // För badge-räknare
-  StreamSubscription<QuerySnapshot>? _pendingTimesheetsSubscription; // Lagra subscription för cleanup
+  // int _pendingTimesheetsCount = 0; // För badge-räknare (kommenterad - ej använd)
+  // StreamSubscription<QuerySnapshot>? _pendingTimesheetsSubscription; // Kommenterad - ej använd
 
   @override
   void initState() {
@@ -4462,7 +4851,7 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   void dispose() {
     // Avbryt StreamSubscription för att förhindra minnes-läcka
-    _pendingTimesheetsSubscription?.cancel();
+    // _pendingTimesheetsSubscription?.cancel(); // Kommenterad - ej använd
     super.dispose();
   }
 
@@ -4497,9 +4886,12 @@ class _MainNavigationState extends State<MainNavigation> {
           });
 
           // Om lärare eller admin, lyssna på ogranskade tidkort för badge
+          // Kommenterad - ej används efter borttagning av Bedömningar-fliken
+          /*
           if (isTeacher || isAdmin) {
             _listenToPendingTimesheets(user.uid);
           }
+          */
         }
       } catch (e) {
         print('DEBUG: Error getting user role: $e');
@@ -4519,6 +4911,8 @@ class _MainNavigationState extends State<MainNavigation> {
     }
   }
 
+  // Kommenterad - ej använd efter borttagning av Bedömningar-fliken
+  /*
   void _listenToPendingTimesheets(String teacherUid) {
     // Avbryt tidigare subscription om det finns
     _pendingTimesheetsSubscription?.cancel();
@@ -4537,7 +4931,10 @@ class _MainNavigationState extends State<MainNavigation> {
           }
         });
   }
+  */
 
+  // Kommenterad - ej använd efter borttagning av Bedömningar-fliken
+  /*
   Widget _buildBadgeIcon(IconData icon, int count) {
     if (count == 0) {
       return Icon(icon);
@@ -4572,6 +4969,7 @@ class _MainNavigationState extends State<MainNavigation> {
       ],
     );
   }
+  */
 
   List<Widget> _getScreens() {
     print('DEBUG: _getScreens() called, _isTeacher=$_isTeacher, _isAdmin=$_isAdmin');
@@ -4581,12 +4979,12 @@ class _MainNavigationState extends State<MainNavigation> {
         TeacherDashboardScreen(
           onNavigateToApproval: () {
             setState(() {
-              _currentIndex = 2; // Index för Godkännande-fliken
+              _currentIndex = 2; // Index för Statistik-skärmen
             });
           },
         ),
         const StudentRegistrationScreen(),
-        const ApprovalAndAssessmentScreen(showAllClasses: true),
+        // ApprovalAndAssessmentScreen borttagen från navigation men filen finns kvar för framtida bruk
         const StatisticsScreen(),
         const WeekManagementScreen(),
         if (_isAdmin) SchoolsScreen(), // Skolor-flik för admin
@@ -4656,13 +5054,6 @@ class _MainNavigationState extends State<MainNavigation> {
                 const BottomNavigationBarItem(
                   icon: Icon(Icons.person_add),
                   label: 'Elever',
-                ),
-                BottomNavigationBarItem(
-                  icon: _buildBadgeIcon(
-                    Icons.check_circle,
-                    _pendingTimesheetsCount,
-                  ),
-                  label: 'Godkännande',
                 ),
                 const BottomNavigationBarItem(
                   icon: Icon(Icons.analytics),

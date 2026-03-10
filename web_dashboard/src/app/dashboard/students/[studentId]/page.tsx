@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
+import { translateDayToSwedish } from '@/lib/dayTranslations';
+import { getActivityDisplayLabel, getActivityGroupForItem, getActivityItemName, getActivityTemplateBySpecialization } from '@/lib/activityTemplates';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, doc, getDoc, query, where, deleteDoc } from 'firebase/firestore';
 
@@ -43,6 +45,7 @@ interface Timesheet {
   approved: boolean;
   totalHours: number;
   entries: any;
+  comments?: { [key: string]: string };
 }
 
 interface Compensation {
@@ -70,25 +73,56 @@ function getWeekNumber(dateStr: string): number {
   return weekNumber;
 }
 
-// Helper function to translate day names to Swedish
-function translateDayToSwedish(dayName: string): string {
-  const dayMap: { [key: string]: string } = {
-    'monday': 'Måndag',
-    'tuesday': 'Tisdag',
-    'wednesday': 'Onsdag',
-    'thursday': 'Torsdag',
-    'friday': 'Fredag',
-    'saturday': 'Lördag',
-    'sunday': 'Söndag',
-    'Monday': 'Måndag',
-    'Tuesday': 'Tisdag',
-    'Wednesday': 'Onsdag',
-    'Thursday': 'Torsdag',
-    'Friday': 'Fredag',
-    'Saturday': 'Lördag',
-    'Sunday': 'Söndag',
-  };
-  return dayMap[dayName] || dayName;
+function normalizeActivityName(activity: string): string {
+  return activity
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function getTaskComment(
+  comments: { [key: string]: string } | undefined,
+  taskName: string
+): string {
+  if (!comments) return '';
+
+  const directMatch = comments[taskName];
+  if (typeof directMatch === 'string' && directMatch.trim().length > 0) {
+    return directMatch.trim();
+  }
+
+  const itemName = getActivityItemName(taskName);
+  const directItemMatch = comments[itemName];
+  if (typeof directItemMatch === 'string' && directItemMatch.trim().length > 0) {
+    return directItemMatch.trim();
+  }
+
+  const normalizedTask = normalizeActivityName(taskName);
+  for (const [key, value] of Object.entries(comments)) {
+    if (normalizeActivityName(key) === normalizedTask && typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  const normalizedItemName = normalizeActivityName(itemName);
+  for (const [key, value] of Object.entries(comments)) {
+    if (normalizeActivityName(key) === normalizedItemName && typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return '';
+}
+
+function isAssessmentApprovedForDisplay(assessment: Assessment): boolean {
+  const status = (assessment.status || '').toLowerCase();
+
+  return (
+    status === 'approved' ||
+    status === 'submitted' ||
+    Boolean(assessment.averageRating)
+  );
 }
 
 export default function StudentDetailPage() {
@@ -220,6 +254,7 @@ export default function StudentDetailPage() {
           approved: data.approved || false,
           totalHours,
           entries: data.entries,
+          comments: data.comments || {},
         };
       });
       setTimesheets(timesheetsData);
@@ -335,11 +370,12 @@ export default function StudentDetailPage() {
   approvedTimesheetsForDiagram.forEach(timesheet => {
     const entries = timesheet.entries || {};
     Object.entries(entries).forEach(([moment, dayMap]: [string, any]) => {
+      const displayMoment = getActivityDisplayLabel(moment);
       if (dayMap && typeof dayMap === 'object') {
         Object.values(dayMap).forEach((hours: any) => {
           const numHours = Number(hours) || 0;
           if (numHours > 0) {
-            taskHours[moment] = (taskHours[moment] || 0) + numHours;
+            taskHours[displayMoment] = (taskHours[displayMoment] || 0) + numHours;
           }
         });
       }
@@ -552,24 +588,64 @@ export default function StudentDetailPage() {
                             <div className="border-t border-slate-200 p-6 bg-gradient-to-br from-slate-50/50 to-blue-50/30">
                               <h4 className="font-semibold mb-4 text-sm text-slate-700">Arbetsmoment:</h4>
                               <div className="space-y-3">
-                                {Object.entries(timesheet.entries).map(([day, tasks]: [string, any]) => {
-                                  // Filtrera bort tasks med 0 eller 0.0 timmar
-                                  const filteredTasks = Object.entries(tasks || {}).filter(([_, hours]: [string, any]) => Number(hours) > 0);
+                                {(() => {
+                                  const groupedEntries = new Map<string, Array<[string, any]>>();
+
+                                  Object.entries(timesheet.entries).forEach(([activity, dayEntries]: [string, any]) => {
+                                    const group = getActivityGroupForItem(student.specialization, activity) || 'Övriga arbetsmoment';
+                                    const bucket = groupedEntries.get(group) || [];
+                                    bucket.push([activity, dayEntries]);
+                                    groupedEntries.set(group, bucket);
+                                  });
+
+                                  const templateGroupOrder = getActivityTemplateBySpecialization(student.specialization).map(g => g.group);
+                                  const orderedGroups = [
+                                    ...templateGroupOrder.filter(group => groupedEntries.has(group)),
+                                    ...Array.from(groupedEntries.keys()).filter(group => !templateGroupOrder.includes(group)),
+                                  ];
+
+                                  return orderedGroups.map(group => {
+                                    const activities = groupedEntries.get(group) || [];
+
+                                    return (
+                                      <div key={group} className="space-y-2">
+                                        <p className="text-xs font-semibold text-slate-500 uppercase">{group}</p>
+                                        {activities.map(([activity, dayEntries]: [string, any]) => {
+                                  // Filtrera bort dagar med 0 eller 0.0 timmar
+                                  const filteredTasks = Object.entries(dayEntries || {}).filter(([_, hours]: [string, any]) => Number(hours) > 0);
+                                  const activityComment = getTaskComment(timesheet.comments, activity);
+                                  const activityItemName = getActivityItemName(activity);
                                   
                                   return filteredTasks.length > 0 ? (
-                                    <div key={day} className="">
-                                      <p className="text-xs font-semibold text-slate-500 mb-2 uppercase">{translateDayToSwedish(day)}</p>
+                                    <div key={activity} className="">
+                                      <p className="text-xs font-semibold text-slate-500 mb-2 uppercase">{activityItemName}</p>
                                       <div className="ml-4 space-y-1">
-                                        {filteredTasks.map(([task, hours]: [string, any]) => (
-                                          <div key={task} className="flex justify-between text-sm">
-                                            <span className="text-slate-700">{task}</span>
-                                            <span className="font-semibold text-slate-900">{hours}h</span>
-                                          </div>
-                                        ))}
+                                        {filteredTasks.map(([day, hours]: [string, any]) => {
+
+                                          return (
+                                            <div key={day} className="text-sm">
+                                              <div className="flex justify-between">
+                                                <div className="text-slate-700">
+                                                  <span>{translateDayToSwedish(day)}</span>
+                                                  {activityComment && (
+                                                    <span className="ml-2 text-xs text-slate-500">
+                                                      Kommentar: {activityComment}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <span className="font-semibold text-slate-900">{hours}h</span>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
                                       </div>
                                     </div>
                                   ) : null;
-                                })}
+                                        })}
+                                      </div>
+                                    );
+                                  });
+                                })()}
                               </div>
                             </div>
                           )}
@@ -592,6 +668,7 @@ export default function StudentDetailPage() {
                     assessments.map(assessment => {
                       const isExpanded = expandedAssessmentId === assessment.id;
                       const weeksLabel = (assessment.weeks || []).join(', ') || '?';
+                      const isApprovedStatus = isAssessmentApprovedForDisplay(assessment);
 
                       return (
                         <div key={assessment.id} className="border-2 border-slate-200/50 rounded-2xl overflow-hidden hover:border-purple-300/50 transition-colors bg-slate-50/30">
@@ -603,16 +680,16 @@ export default function StudentDetailPage() {
                               <div className="flex items-center gap-4">
                                 <p className="font-semibold text-slate-900 text-lg">{weeksLabel}</p>
                                 <span className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                                  assessment.status === 'approved'
+                                  isApprovedStatus
                                     ? 'bg-green-100/70 text-green-800'
                                     : 'bg-amber-100/70 text-amber-800'
                                 }`}>
-                                  {assessment.status === 'approved' ? '✓ Godkänd' : 'Väntande'}
+                                  {isApprovedStatus ? '✓ Godkänd' : 'Väntande'}
                                 </span>
                                 <span className="text-sm text-slate-600">
                                   {assessment.totalHours || 0}h
                                 </span>
-                                {assessment.status !== 'approved' && (
+                                {!isApprovedStatus && (
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();

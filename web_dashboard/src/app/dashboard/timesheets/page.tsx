@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
+import { translateDayToSwedish } from '@/lib/dayTranslations';
+import { getActivityGroupForItem, getActivityItemName, getActivityTemplateBySpecialization } from '@/lib/activityTemplates';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, doc, getDoc, updateDoc } from 'firebase/firestore';
 
@@ -10,10 +12,54 @@ interface Timesheet {
   id: string;
   studentUid: string;
   studentName: string;
+  specialization?: string;
   weekStart: string;
   approved: boolean;
   totalHours: number;
   entries: any;
+  comments?: { [key: string]: string };
+}
+
+function normalizeActivityName(activity: string): string {
+  return activity
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function getTaskComment(
+  comments: { [key: string]: string } | undefined,
+  taskName: string
+): string {
+  if (!comments) return '';
+
+  const directMatch = comments[taskName];
+  if (typeof directMatch === 'string' && directMatch.trim().length > 0) {
+    return directMatch.trim();
+  }
+
+  const itemName = getActivityItemName(taskName);
+  const directItemMatch = comments[itemName];
+  if (typeof directItemMatch === 'string' && directItemMatch.trim().length > 0) {
+    return directItemMatch.trim();
+  }
+
+  const normalizedTask = normalizeActivityName(taskName);
+  for (const [key, value] of Object.entries(comments)) {
+    if (normalizeActivityName(key) === normalizedTask && typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  const normalizedItemName = normalizeActivityName(itemName);
+  for (const [key, value] of Object.entries(comments)) {
+    if (normalizeActivityName(key) === normalizedItemName && typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+
+  return '';
 }
 
 export default function TimesheetsPage() {
@@ -94,10 +140,12 @@ export default function TimesheetsPage() {
           id: doc.id,
           studentUid: data.studentUid,
           studentName: user?.data().displayName || user?.data().email || 'Okänd',
+          specialization: user?.data().specialization || undefined,
           weekStart: data.weekStart,
           approved: data.approved || false,
           totalHours,
           entries: data.entries,
+          comments: data.comments || {},
         };
       });
 
@@ -303,25 +351,60 @@ export default function TimesheetsPage() {
 
             <div className="space-y-4 mb-6">
               <h3 className="font-semibold">Arbetad tid per dag:</h3>
-              {Object.entries(selectedTimesheet.entries || {}).map(([day, entries]: [string, any]) => {
-                const dayTotal = Object.values(entries || {}).reduce((sum: number, hours: any) => 
-                  sum + (Number(hours) || 0), 0
-                );
-                return (
-                  <div key={day} className="border-b pb-2">
-                    <div className="flex justify-between font-medium">
-                      <span className="capitalize">{day}</span>
-                      <span>{dayTotal}h</span>
-                    </div>
-                    {entries && Object.entries(entries).map(([time, hours]: [string, any]) => (
-                      <div key={time} className="text-sm text-gray-600 ml-4 flex justify-between">
-                        <span>{time}</span>
-                        <span>{hours}h</span>
+              {(() => {
+                const groupedEntries = new Map<string, Array<[string, any]>>();
+
+                Object.entries(selectedTimesheet.entries || {}).forEach(([activity, dayEntries]: [string, any]) => {
+                  const group = getActivityGroupForItem(selectedTimesheet.specialization, activity) || 'Övriga arbetsmoment';
+                  const bucket = groupedEntries.get(group) || [];
+                  bucket.push([activity, dayEntries]);
+                  groupedEntries.set(group, bucket);
+                });
+
+                const templateGroupOrder = getActivityTemplateBySpecialization(selectedTimesheet.specialization).map(g => g.group);
+                const orderedGroups = [
+                  ...templateGroupOrder.filter(group => groupedEntries.has(group)),
+                  ...Array.from(groupedEntries.keys()).filter(group => !templateGroupOrder.includes(group)),
+                ];
+
+                return orderedGroups.map(group => {
+                  const activities = groupedEntries.get(group) || [];
+
+                  return (
+                    <div key={group} className="border-b pb-4">
+                      <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{group}</p>
+                      <div className="space-y-2">
+                        {activities.map(([activity, dayEntries]: [string, any]) => {
+                          const filteredDays = Object.entries(dayEntries || {}).filter(([_, hours]: [string, any]) => Number(hours) > 0);
+                          if (filteredDays.length === 0) return null;
+
+                          const activityLabel = getActivityItemName(activity);
+                          const activityComment = getTaskComment(selectedTimesheet.comments, activity);
+
+                          return (
+                            <div key={activity}>
+                              <p className="text-sm font-semibold text-gray-700">{activityLabel}</p>
+                              <div className="ml-4 space-y-1">
+                                {filteredDays.map(([day, hours]: [string, any]) => (
+                                  <div key={day} className="text-sm text-gray-600 flex justify-between">
+                                    <div>
+                                      <span>{translateDayToSwedish(day)}</span>
+                                      {activityComment && (
+                                        <span className="ml-2 text-xs text-gray-500">Kommentar: {activityComment}</span>
+                                      )}
+                                    </div>
+                                    <span>{hours}h</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
-                  </div>
-                );
-              })}
+                    </div>
+                  );
+                });
+              })()}
             </div>
 
             <div className="bg-blue-50 p-4 rounded-lg mb-6">

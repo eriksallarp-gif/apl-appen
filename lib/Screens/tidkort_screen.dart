@@ -169,11 +169,10 @@ class _TimesheetList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Hämta alla tidkort för denna användare
+    // Hämta alla tidkort för denna användare (utan orderBy för att undvika index-krav)
     final timesheetQuery = FirebaseFirestore.instance
         .collection('timesheets')
-        .where('studentUid', isEqualTo: studentUid)
-        .orderBy('weekStart', descending: true);
+        .where('studentUid', isEqualTo: studentUid);
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: timesheetQuery.snapshots(),
@@ -278,15 +277,21 @@ class _TimesheetList extends StatelessWidget {
               final data = doc.data();
               final entries =
                   (data['entries'] as Map?)?.cast<String, dynamic>() ?? {};
+              print('DEBUG tidkort_screen: WeekStart=$weekStartStr');
+              print('DEBUG tidkort_screen: Entries har ${entries.length} aktiviteter');
+              print('DEBUG tidkort_screen: Entries = $entries');
               for (final row in entries.values) {
                 if (row is Map) {
                   for (final v in row.values) {
-                    totalHours += (v is int)
+                    final hours = (v is int)
                         ? v
                         : int.tryParse(v.toString()) ?? 0;
+                    print('DEBUG tidkort_screen: Lägger till $hours timmar');
+                    totalHours += hours;
                   }
                 }
               }
+              print('DEBUG tidkort_screen: Total = $totalHours timmar');
             }
 
             return Card(

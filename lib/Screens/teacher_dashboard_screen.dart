@@ -90,7 +90,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           .collection('classes')
           .where('teacherUid', isEqualTo: user.uid)
           .snapshots(),
-      builder: (context, classSnap) {
+      builder: (outerContext, classSnap) {
         if (classSnap.connectionState == ConnectionState.waiting) {
           return _buildStatusCardContent(0, 0);
         }
@@ -102,7 +102,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           stream: FirebaseFirestore.instance
               .collection('timesheets')
               .snapshots(),
-          builder: (context, tsSnap) {
+          builder: (innerContext, tsSnap) {
             if (tsSnap.connectionState == ConnectionState.waiting) {
               return _buildStatusCardContent(classes.length, 0);
             }
