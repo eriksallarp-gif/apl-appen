@@ -99,7 +99,7 @@ export default function Home() {
               Logga in
             </button>
             <button
-              onClick={() => router.push('/signup')}
+              onClick={() => router.push('/register')}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-700"
             >
               Kom igång <ArrowRight className="h-4 w-4" />

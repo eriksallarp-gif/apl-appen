@@ -4,8 +4,21 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { sendEmailVerification, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
+
+function mapVerificationError(error: unknown): string {
+  const authError = error as { code?: string; message?: string };
+
+  switch (authError?.code) {
+    case 'auth/too-many-requests':
+      return 'För många försök att skicka verifieringsmejl. Vänta en stund och försök igen.';
+    case 'auth/network-request-failed':
+      return 'Nätverksfel när verifieringsmejlet skulle skickas.';
+    default:
+      return authError?.message || 'Verifieringsmejlet kunde inte skickas.';
+  }
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -52,10 +65,26 @@ export default function LoginPage() {
         return;
       }
 
+      if (role === 'teacher' && !user.emailVerified) {
+        let verificationMessage = 'Du måste verifiera din e-post först. Ett nytt verifieringsmejl har skickats. Kontrollera även skräppost.';
+
+        try {
+          await sendEmailVerification(user);
+        } catch (verificationError) {
+          console.error('Resend verification error:', verificationError);
+          verificationMessage = `Du måste verifiera din e-post först, men verifieringsmejlet kunde inte skickas automatiskt. ${mapVerificationError(verificationError)}`;
+        }
+
+        await auth.signOut();
+        setError(verificationMessage);
+        setLoading(false);
+        return;
+      }
+
       // Check if teacher is approved
       if (role === 'teacher' && !userData.approved) {
         await auth.signOut();
-        setError('Ditt lärarkonto väntar på godkännande från en administratör');
+        setError('Din e-post är verifierad men lärarkontot väntar fortfarande på godkännande från en administratör.');
         setLoading(false);
         return;
       }
