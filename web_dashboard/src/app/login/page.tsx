@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
-import { sendEmailVerification, signInWithEmailAndPassword } from 'firebase/auth';
+import { sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 
 function mapVerificationError(error: unknown): string {
@@ -20,11 +20,31 @@ function mapVerificationError(error: unknown): string {
   }
 }
 
+function mapPasswordResetError(error: unknown): string {
+  const authError = error as { code?: string; message?: string };
+
+  switch (authError?.code) {
+    case 'auth/invalid-email':
+      return 'Ange en giltig e-postadress.';
+    case 'auth/too-many-requests':
+      return 'För många försök. Vänta en stund och försök igen.';
+    case 'auth/network-request-failed':
+      return 'Nätverksfel. Kontrollera din anslutning och försök igen.';
+    default:
+      return authError?.message || 'Kunde inte skicka återställningslänken just nu.';
+  }
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
+  const [isSendingReset, setIsSendingReset] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -98,6 +118,27 @@ export default function LoginPage() {
     }
   };
 
+  const handlePasswordReset = async () => {
+    setResetError('');
+    setResetSuccess('');
+
+    const trimmedEmail = resetEmail.trim().toLowerCase();
+    if (!trimmedEmail) {
+      setResetError('Ange din e-postadress för att återställa lösenordet.');
+      return;
+    }
+
+    setIsSendingReset(true);
+    try {
+      await sendPasswordResetEmail(auth, trimmedEmail);
+      setResetSuccess('Om adressen finns registrerad har vi skickat en återställningslänk till din e-post. Kontrollera även skräppost.');
+    } catch (resetErr) {
+      setResetError(mapPasswordResetError(resetErr));
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100 px-4 py-6 sm:px-6">
       <div className="w-full max-w-96">
@@ -146,6 +187,51 @@ export default function LoginPage() {
                 required
               />
             </div>
+
+            <div className="-mt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotPassword((prev) => !prev);
+                  setResetError('');
+                  setResetSuccess('');
+                  if (!showForgotPassword) {
+                    setResetEmail(email);
+                  }
+                }}
+                className="text-sm font-medium text-orange-700 hover:text-orange-800"
+              >
+                Glömt lösenord?
+              </button>
+            </div>
+
+            {showForgotPassword && (
+              <div className="rounded-lg border border-orange-200 bg-orange-50 p-4">
+                <p className="mb-3 text-sm text-orange-900">
+                  Fyll i din e-post så skickar vi en länk för att återställa lösenordet.
+                </p>
+                <div className="space-y-3">
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(event) => setResetEmail(event.target.value)}
+                    placeholder="din@email.se"
+                    className="w-full rounded-lg border border-orange-200 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                    required
+                  />
+                  {resetError && <p className="text-sm text-red-600">{resetError}</p>}
+                  {resetSuccess && <p className="text-sm text-green-700">{resetSuccess}</p>}
+                  <button
+                    type="button"
+                    onClick={handlePasswordReset}
+                    disabled={isSendingReset}
+                    className="inline-flex items-center justify-center rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-orange-700 disabled:opacity-50"
+                  >
+                    {isSendingReset ? 'Skickar länk...' : 'Skicka återställningslänk'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">
