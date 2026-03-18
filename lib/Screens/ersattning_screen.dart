@@ -117,10 +117,10 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
               }
 
               return SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                     // Total APL-tid
                     Card(
                       child: InkWell(
@@ -499,8 +499,8 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                       ),
                     ),
                   ],
-                ),
-              );
+                    ),
+                  );
             },
           );
         },

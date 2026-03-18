@@ -57,7 +57,29 @@ interface Compensation {
   weekStart?: string;
 }
 
+interface ReviewedAssignment {
+  id: string;
+  title: string;
+  teacherComment?: string | null;
+  reviewedAt?: any;
+  submittedAt?: any;
+  textAnswer?: string | null;
+  mediaUrls?: string[];
+}
+
 // Helper function to get week number from date string
+
+function getMediaType(url: string): 'image' | 'video' | 'other' {
+  try {
+    const match = url.match(/\/o\/([^?]+)/);
+    if (match) {
+      const decoded = decodeURIComponent(match[1]).toLowerCase();
+      if (/\.(jpg|jpeg|png|gif|webp|heic)$/.test(decoded)) return 'image';
+      if (/\.(mp4|mov|avi|mkv|webm)$/.test(decoded)) return 'video';
+    }
+  } catch {}
+  return 'other';
+}
 
 // Korrekt ISO 8601-vecko-funktion (svensk standard)
 function getWeekNumber(dateStr: string): number {
@@ -134,8 +156,9 @@ export default function StudentDetailPage() {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [timesheets, setTimesheets] = useState<Timesheet[]>([]);
   const [compensations, setCompensations] = useState<Compensation[]>([]);
+  const [reviewedAssignments, setReviewedAssignments] = useState<ReviewedAssignment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedView, setSelectedView] = useState<'hours' | 'timesheets' | 'assessments' | 'compensations' | null>(null);
+  const [selectedView, setSelectedView] = useState<'hours' | 'timesheets' | 'assessments' | 'compensations' | 'assignments' | null>(null);
   const [expandedTimesheetId, setExpandedTimesheetId] = useState<string | null>(null);
   const [expandedAssessmentId, setExpandedAssessmentId] = useState<string | null>(null);
   const [deletingAssessmentId, setDeletingAssessmentId] = useState<string | null>(null);
@@ -326,6 +349,51 @@ export default function StudentDetailPage() {
         };
       });
       setCompensations(compensationsData);
+
+      const currentTeacherUid = auth.currentUser?.uid;
+      if (currentTeacherUid) {
+        const assignmentsSnapshot = await getDocs(
+          query(collection(db, 'assignments'), where('createdBy', '==', currentTeacherUid))
+        );
+
+        const reviewedItems: ReviewedAssignment[] = [];
+        for (const assignmentDoc of assignmentsSnapshot.docs) {
+          const assignmentData = assignmentDoc.data();
+          const assignedTo = ((assignmentData.assignedTo ?? []) as string[]);
+          if (!assignedTo.includes(studentId)) {
+            continue;
+          }
+
+          const submissionSnap = await getDoc(doc(db, 'assignments', assignmentDoc.id, 'submissions', studentId));
+          if (!submissionSnap.exists()) {
+            continue;
+          }
+
+          const submissionData = submissionSnap.data();
+          if ((submissionData.status ?? '') !== 'reviewed') {
+            continue;
+          }
+
+          reviewedItems.push({
+            id: assignmentDoc.id,
+            title: (assignmentData.title ?? 'Uppgift').toString(),
+            teacherComment: (submissionData.teacherComment ?? null) as string | null,
+            reviewedAt: submissionData.reviewedAt,
+            submittedAt: submissionData.submittedAt,
+            textAnswer: (submissionData.textAnswer ?? null) as string | null,
+            mediaUrls: (submissionData.mediaUrls ?? []) as string[],
+          });
+        }
+
+        reviewedItems.sort((a, b) => {
+          const aTime = a.reviewedAt?.seconds ? a.reviewedAt.seconds * 1000 : 0;
+          const bTime = b.reviewedAt?.seconds ? b.reviewedAt.seconds * 1000 : 0;
+          return bTime - aTime;
+        });
+        setReviewedAssignments(reviewedItems);
+      } else {
+        setReviewedAssignments([]);
+      }
     } catch (error) {
       console.error('Error fetching student data:', error);
     }
@@ -451,6 +519,17 @@ export default function StudentDetailPage() {
             <p className="text-2xl font-bold text-amber-600 mt-3">
               {approvedAssessments.reduce((sum, a) => sum + (a.lunchApproved || 0), 0)} luncher • {approvedAssessments.reduce((sum, a) => sum + (a.travelApproved || 0), 0)} km
             </p>
+            <p className="text-xs text-slate-500 mt-3">Klicka för detaljer</p>
+          </button>
+
+          <button
+            onClick={() => setSelectedView(selectedView === 'assignments' ? null : 'assignments')}
+            className={`bg-gradient-to-br from-indigo-50 to-blue-50/30 border-2 p-8 rounded-2xl transition-all duration-300 text-left hover:shadow-lg hover:shadow-indigo-100/40 hover:scale-105 ${
+              selectedView === 'assignments' ? 'ring-2 ring-indigo-400 border-indigo-300' : 'border-indigo-200/50'
+            }`}
+          >
+            <p className="text-sm text-slate-600 font-medium">Granskade uppgifter</p>
+            <p className="text-4xl font-bold text-indigo-600 mt-3">{reviewedAssignments.length}</p>
             <p className="text-xs text-slate-500 mt-3">Klicka för detaljer</p>
           </button>
         </div>
@@ -942,6 +1021,80 @@ export default function StudentDetailPage() {
                     </div>
                   );
                 })()}
+              </div>
+            )}
+
+            {selectedView === 'assignments' && (
+              <div>
+                <h3 className="text-2xl font-bold mb-6 text-slate-900">Granskade uppgifter</h3>
+                <div className="space-y-4">
+                  {reviewedAssignments.length === 0 ? (
+                    <p className="text-slate-500 text-center py-12">Inga granskade uppgifter ännu</p>
+                  ) : (
+                    reviewedAssignments.map((assignment) => (
+                      <div key={assignment.id} className="border-2 border-slate-200/50 rounded-2xl overflow-hidden bg-slate-50/30 p-6">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-slate-900 text-lg">{assignment.title}</p>
+                            <p className="text-sm text-slate-600 mt-2">
+                              Granskad {assignment.reviewedAt?.seconds ? new Date(assignment.reviewedAt.seconds * 1000).toLocaleDateString('sv-SE') : '-'}
+                            </p>
+                            <p className="text-sm text-slate-600">
+                              Inlämnad {assignment.submittedAt?.seconds ? new Date(assignment.submittedAt.seconds * 1000).toLocaleDateString('sv-SE') : '-'}
+                            </p>
+                          </div>
+                          <span className="px-4 py-2 rounded-full text-sm font-medium bg-indigo-100/70 text-indigo-800">
+                            ✓ Granskad
+                          </span>
+                        </div>
+
+                        {(assignment.textAnswer ?? '').trim().length > 0 && (
+                          <p className="mt-4 text-sm text-slate-700 whitespace-pre-wrap">{assignment.textAnswer}</p>
+                        )}
+
+                        {(assignment.mediaUrls ?? []).length > 0 && (
+                          <div className="mt-4">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">Bilder / Media</p>
+                            <div className="flex flex-wrap gap-3">
+                              {(assignment.mediaUrls ?? []).map((url, idx) => {
+                                const type = getMediaType(url);
+                                if (type === 'image') {
+                                  return (
+                                    <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                                      <img
+                                        src={url}
+                                        alt={`Bild ${idx + 1}`}
+                                        className="w-36 h-36 object-cover rounded-xl border border-slate-200 hover:opacity-90 transition-opacity shadow-sm"
+                                      />
+                                    </a>
+                                  );
+                                }
+                                return (
+                                  <a
+                                    key={idx}
+                                    href={url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-blue-600 hover:bg-blue-50 transition-colors"
+                                  >
+                                    {type === 'video' ? '▶ Öppna video' : 'Öppna media'}
+                                  </a>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {(assignment.teacherComment ?? '').trim().length > 0 && (
+                          <div className="mt-4 rounded-2xl bg-white/70 border border-slate-200/60 p-4">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Lärarkommentar</p>
+                            <p className="text-sm text-slate-700 whitespace-pre-wrap">{assignment.teacherComment}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </div>

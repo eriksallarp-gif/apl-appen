@@ -20,6 +20,7 @@ import 'Screens/ersattning_screen.dart';
 import 'Screens/admin_screen.dart';
 import 'Screens/schools_screen.dart';
 import 'Screens/settings_screen.dart';
+import 'Screens/assignments_screen.dart';
 
 // Tidkortmallar för olika specialiseringar
 const activityTemplateTrabetare = <Map<String, dynamic>>[
@@ -4997,6 +4998,7 @@ class _MainNavigationState extends State<MainNavigation> {
         TidkortScreen(),
         BedomningScreen(),
         ErsattningScreen(),
+        AssignmentsScreen(),
       ];
     }
   }
@@ -5089,6 +5091,10 @@ class _MainNavigationState extends State<MainNavigation> {
                 const BottomNavigationBarItem(
                   icon: Icon(Icons.analytics),
                   label: 'Statistik',
+                ),
+                const BottomNavigationBarItem(
+                  icon: Icon(Icons.assignment_outlined),
+                  label: 'Uppgifter',
                 ),
               ],
       ),

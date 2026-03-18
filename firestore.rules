@@ -39,6 +39,26 @@
           return isSignedIn() && getUserStatus() != 'frozen';
         }
 
+        function userSchool() {
+          return userDocExists()
+            ? (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('school', ''))
+            : '';
+        }
+
+        function assignmentExists(assignmentId) {
+          return exists(/databases/$(database)/documents/assignments/$(assignmentId));
+        }
+
+        function isAssignmentOwner(assignmentId) {
+          return assignmentExists(assignmentId)
+            && get(/databases/$(database)/documents/assignments/$(assignmentId)).data.createdBy == request.auth.uid;
+        }
+
+        function isAssignedToAssignment(assignmentId) {
+          return assignmentExists(assignmentId)
+            && get(/databases/$(database)/documents/assignments/$(assignmentId)).data.assignedTo.hasAny([request.auth.uid]);
+        }
+
         // Schools collection - tillåt alla att läsa skolor (för registrering)
         match /schools/{schoolId} {
           allow read: if true;
@@ -245,6 +265,69 @@
 
           // Teachers and admins can update/delete documents (must be active)
           allow update, delete: if isUserActive() && isTeacherOrAdmin();
+        }
+
+        // Assignments collection (uppgifter)
+        match /assignments/{assignmentId} {
+          // Teachers who created the assignment can read/write it.
+          // Assigned students can read only their own assigned assignments.
+          // Use resource.data directly (not get()) so collection queries (list) work correctly.
+          allow read: if isUserActive() && (
+            resource.data.createdBy == request.auth.uid ||
+            isAdmin() ||
+            (isStudent() && resource.data.assignedTo.hasAny([request.auth.uid]))
+          );
+
+          allow create: if isUserActive() && isTeacher()
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.schoolId == userSchool();
+
+          allow update, delete: if isUserActive() && (
+            (isTeacher() && isAssignmentOwner(assignmentId)) ||
+            isAdmin()
+          );
+
+          // Student submissions for one assignment
+          match /submissions/{studentId} {
+            allow read: if isUserActive() && (
+              (isTeacher() && isAssignmentOwner(assignmentId)) ||
+              isAdmin() ||
+              (isStudent() && request.auth.uid == studentId && isAssignedToAssignment(assignmentId))
+            );
+
+            // Enforce one submission per student per assignment by document id = student uid.
+            allow create: if isUserActive()
+              && isStudent()
+              && request.auth.uid == studentId
+              && isAssignedToAssignment(assignmentId)
+              && !exists(/databases/$(database)/documents/assignments/$(assignmentId)/submissions/$(studentId));
+
+            // Student cannot overwrite after submit. Teacher/admin can review/update.
+            allow update, delete: if isUserActive() && (
+              (isTeacher() && isAssignmentOwner(assignmentId)) ||
+              isAdmin()
+            );
+          }
+
+          // Optional assignee state docs for badge/new tracking
+          match /assignees/{studentId} {
+            allow read: if isUserActive() && (
+              (isTeacher() && isAssignmentOwner(assignmentId)) ||
+              isAdmin() ||
+              (isStudent() && request.auth.uid == studentId && isAssignedToAssignment(assignmentId))
+            );
+
+            allow create, update: if isUserActive() && (
+              (isTeacher() && isAssignmentOwner(assignmentId)) ||
+              isAdmin() ||
+              (isStudent() && request.auth.uid == studentId && isAssignedToAssignment(assignmentId))
+            );
+
+            allow delete: if isUserActive() && (
+              (isTeacher() && isAssignmentOwner(assignmentId)) ||
+              isAdmin()
+            );
+          }
         }
 
         // Default deny everything else
