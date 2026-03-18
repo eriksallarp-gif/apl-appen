@@ -62,7 +62,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen bg-white">
       <Header />
-      <aside className="fixed left-0 top-16 h-[calc(100vh-4rem)] w-56 bg-gradient-to-br from-orange-50 to-white border-r border-orange-100/50 flex flex-col py-8 px-6 z-10">
+      <div className="sticky top-16 z-30 border-b border-orange-100 bg-white/95 backdrop-blur lg:hidden">
+        <nav className="flex items-center gap-2 overflow-x-auto px-4 py-3">
+          {menuItems.map((item) => {
+            const active = item.match(pathname);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition ${item.bold ? 'font-semibold' : 'font-medium'} ${active ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-white text-gray-600 ring-1 ring-orange-100 hover:bg-orange-50'}`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+
+      <aside className="fixed left-0 top-16 hidden h-[calc(100vh-4rem)] w-56 flex-col border-r border-orange-100/50 bg-gradient-to-br from-orange-50 to-white px-6 py-8 lg:flex">
         <div className="mb-10">
           <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
           <p className="text-xs text-orange-400 mt-1">{isAdmin ? 'Admin' : 'Lärare'}</p>
@@ -82,9 +99,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
       </aside>
-      <main className="ml-56 mt-16 max-w-7xl mx-auto px-8 py-12">
-        {children}
-      </main>
+
+      <div className="mt-16 lg:pl-56">
+        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

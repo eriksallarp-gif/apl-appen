@@ -269,8 +269,8 @@ export default function DocumentsPage() {
   }
 
   return (
-    <main className="max-w-7xl mx-auto px-8 py-12">
-      <div className="flex justify-between items-center mb-8">
+    <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">APL-dokument</h1>
           <p className="text-gray-600 mt-2">
@@ -279,7 +279,7 @@ export default function DocumentsPage() {
           </div>
           <button
             onClick={() => setShowUploadModal(true)}
-            className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center gap-2"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-orange-700 sm:w-auto"
           >
             <span className="text-xl">+</span>
             Ladda upp dokument
@@ -331,14 +331,14 @@ export default function DocumentsPage() {
             <div className="divide-y divide-gray-200">
               {documents.map(doc => (
                 <div key={doc.id} className="p-6 hover:bg-gray-50 transition-colors">
-                  <div className="flex items-start justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-start gap-4 flex-1">
                       <div className="text-4xl">{getFileIcon(doc.fileType)}</div>
                       <div className="flex-1">
                         <h3 className="font-semibold text-gray-900 text-lg">
                           {doc.title}
                         </h3>
-                        <div className="flex items-center gap-3 mt-2 text-sm text-gray-600">
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-600 sm:gap-3">
                           <span className="flex items-center gap-1.5">
                             {(() => {
                               const IconComponent = getCategoryIcon(doc.category);
@@ -351,18 +351,18 @@ export default function DocumentsPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
                       <a
                         href={doc.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium"
+                        className="rounded-lg px-3 py-2 font-medium text-blue-600 transition-colors hover:bg-blue-50 sm:px-4"
                       >
                         Öppna
                       </a>
                       <button
                         onClick={() => handleDelete(doc)}
-                        className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-medium"
+                        className="rounded-lg px-3 py-2 font-medium text-red-600 transition-colors hover:bg-red-50 sm:px-4"
                       >
                         Radera
                       </button>

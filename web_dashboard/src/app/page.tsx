@@ -94,7 +94,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => router.push('/login')}
-              className="hidden rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50 sm:inline-flex"
+              className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 shadow-sm hover:bg-slate-50 sm:px-4 sm:text-sm"
             >
               Logga in
             </button>

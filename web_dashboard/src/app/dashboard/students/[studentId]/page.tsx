@@ -391,13 +391,13 @@ export default function StudentDetailPage() {
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
   return (
     <div className="min-h-screen bg-white">
-      <main className="ml-56 max-w-7xl mx-auto px-8 py-12">
+      <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
         {/* Student Info Card */}
         <div className="bg-white/70 backdrop-blur rounded-3xl shadow-lg shadow-blue-100/30 p-8 mb-8 border border-blue-100/50">
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">{student.name}</h1>
-              <div className="space-y-2 text-slate-600">
+              <div className="hidden space-y-2 text-slate-600 sm:block">
                 <p className="text-sm">📧 {student.email}</p>
                 <p className="text-sm">🎓 {student.className}</p>
                 <p className="text-sm">🔨 Yrkesutgång: {student.specialization}</p>
@@ -475,7 +475,7 @@ export default function StudentDetailPage() {
                     return (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start max-w-4xl">
                         {/* Pie Chart */}
-                        <div className="flex items-center justify-start mt-8 mb-4 ml-32">
+                        <div className="mx-auto flex items-center justify-center mt-8 mb-4">
                           <div className="relative w-96 h-96">
                             <svg viewBox="0 0 100 100" className="transform -rotate-90 drop-shadow-lg">
                               {(() => {

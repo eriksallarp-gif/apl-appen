@@ -257,7 +257,7 @@ export default function DashboardPage() {
         <div className="absolute top-[35%] left-[-10%] h-[360px] w-[360px] rounded-full bg-orange-100/60 blur-3xl" />
       </div>
 
-      <section className="mx-auto max-w-7xl px-8 py-12">
+      <section className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
         <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm font-medium text-orange-700">Dashboard</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Översikt</h1>

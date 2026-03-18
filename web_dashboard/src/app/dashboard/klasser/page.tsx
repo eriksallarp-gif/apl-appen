@@ -206,14 +206,14 @@ export default function ClassesPage() {
   if (loading) return <div className="flex min-h-screen items-center justify-center">Laddar...</div>;
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-8">
-      <div className="flex items-center justify-between mb-8">
+    <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <a href="/dashboard" className="text-orange-600 hover:text-orange-700 font-medium">← Tillbaka</a>
           <h1 className="text-2xl font-bold">Klasser</h1>
         </div>
         <div>
-          <button onClick={() => setCreateModalOpen(true)} className="bg-orange-500 hover:bg-orange-600 text-white rounded-lg px-4 py-2">Skapa klass</button>
+          <button onClick={() => setCreateModalOpen(true)} className="w-full bg-orange-500 px-4 py-2 text-white hover:bg-orange-600 sm:w-auto rounded-lg">Skapa klass</button>
         </div>
       </div>
 
@@ -228,18 +228,18 @@ export default function ClassesPage() {
           const expanded = !!expandedCards[cls.id];
           return (
             <div key={cls.id} className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
-              <div className="flex items-start justify-between">
-                <div>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
                   <div className="text-xl font-semibold mb-1">{cls.name}</div>
                   <div className="text-sm text-gray-500 mb-3">Klasskod</div>
-                  <div className="flex items-center gap-3">
-                    <div className="font-mono text-sm bg-gray-100 px-3 py-1 rounded-lg">{classCode || 'Ingen kod'}</div>
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <div className="max-w-full break-all font-mono text-sm bg-gray-100 px-3 py-1 rounded-lg">{classCode || 'Ingen kod'}</div>
                     {classCode && (
                       <button aria-label={`Kopiera ${classCode}`} onClick={() => copyCode(classCode)} className="text-sm text-gray-600 hover:text-gray-800">Kopiera</button>
                     )}
                   </div>
                 </div>
-                <div className="flex items-start gap-3">
+                <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                   {classCode ? (
                     <button onClick={() => toggleExpand(cls.id)} aria-expanded={expanded} className="text-sm border border-gray-300 rounded-lg px-3 py-2">{expanded ? 'Dölj QR' : 'Visa QR'}</button>
                   ) : (
