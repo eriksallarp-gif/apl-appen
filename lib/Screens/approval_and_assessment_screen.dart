@@ -19,6 +19,11 @@ int _getWeekNumber(DateTime date) {
   return weekNum;
 }
 
+int? _readStoredWeekNumber(Map<String, dynamic> data) {
+  final rawWeekNumber = data['weekNumber'];
+  return rawWeekNumber is num ? rawWeekNumber.toInt() : null;
+}
+
 // Helper för att formatera kort datum
 String _formatShortDate(DateTime date) {
   return '${date.day}/${date.month}';
@@ -225,11 +230,12 @@ class _ApprovedTimesheetsTabState extends State<_ApprovedTimesheetsTab> {
                         userSnap.data?.data()?['displayName'] ?? 'Okänd';
 
                     // Beräkna veckonummer och datumintervall
-                    int weekNumber = 1;
+                    int weekNumber = _readStoredWeekNumber(data) ?? 1;
                     String dateRange = '';
                     try {
                       final weekStartDate = DateTime.parse(weekStart);
-                      weekNumber = _getWeekNumber(weekStartDate);
+                      weekNumber =
+                          _readStoredWeekNumber(data) ?? _getWeekNumber(weekStartDate);
                       final weekEndDate = weekStartDate.add(
                         const Duration(days: 4),
                       );

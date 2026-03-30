@@ -306,11 +306,27 @@ List<Map<String, dynamic>> getActivityTemplate(
   }
 }
 
+int _resolveWeekNumberFromWeekStart(String weekStart) {
+  final parts = weekStart.split('-');
+  if (parts.length != 3) return 1;
+
+  final year = int.parse(parts[0]);
+  final month = int.parse(parts[1]);
+  final day = int.parse(parts[2]);
+  final startDate = DateTime(year, month, day);
+  final jan4 = DateTime(startDate.year, 1, 4);
+  final monday = jan4.subtract(
+    Duration(days: jan4.weekday - DateTime.monday),
+  );
+  return startDate.difference(monday).inDays ~/ 7 + 1;
+}
+
 class WeeklyTimesheetScreen extends StatefulWidget {
   final String studentUid;
   final String teacherUid;
   final String? classId;
   final String weekStart;
+  final int? displayWeekNumber;
   final bool readOnly;
   final String? lockedMessage;
   final String? specialization;
@@ -321,6 +337,7 @@ class WeeklyTimesheetScreen extends StatefulWidget {
     required this.teacherUid,
     this.classId,
     required this.weekStart,
+    this.displayWeekNumber,
     required this.readOnly,
     this.lockedMessage,
     this.specialization,
@@ -604,21 +621,31 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
 
       final builtEntries = _buildEntries();
       final builtComments = _buildComments();
+      final resolvedWeekNumber =
+          widget.displayWeekNumber ?? _resolveWeekNumberFromWeekStart(widget.weekStart);
 
       final updatedData = <String, dynamic>{
         'studentUid': widget.studentUid,
         'teacherUid': widget.teacherUid,
         'classId': classId,
         'weekStart': widget.weekStart,
+        'weekNumber': resolvedWeekNumber,
         'entries': builtEntries,
         'comments': builtComments,
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      await FirebaseFirestore.instance
+      final docRef = FirebaseFirestore.instance
           .collection('timesheets')
-          .doc(docId)
-          .set(updatedData, SetOptions(merge: true));
+          .doc(docId);
+
+      final existingDoc = await docRef.get();
+
+      if (existingDoc.exists) {
+        await docRef.update(updatedData);
+      } else {
+        await docRef.set(updatedData);
+      }
 
       _lastSavedEntries = _normalizeEntries(builtEntries);
       _lastSavedComments = _normalizeComments(builtComments);
@@ -741,21 +768,14 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
               _hydratedFromFirestore = true;
             }
 
-            var weekNumber = 1;
-            try {
-              final parts = widget.weekStart.split('-');
-              if (parts.length == 3) {
-                final year = int.parse(parts[0]);
-                final month = int.parse(parts[1]);
-                final day = int.parse(parts[2]);
-                final startDate = DateTime(year, month, day);
-                final jan4 = DateTime(startDate.year, 1, 4);
-                final monday = jan4.subtract(
-                  Duration(days: jan4.weekday - DateTime.monday),
-                );
-                weekNumber = startDate.difference(monday).inDays ~/ 7 + 1;
-              }
-            } catch (_) {}
+            var weekNumber = widget.displayWeekNumber ?? 1;
+            if (widget.displayWeekNumber == null) {
+              try {
+                weekNumber =
+                    (data?['weekNumber'] as num?)?.toInt() ??
+                    _resolveWeekNumberFromWeekStart(widget.weekStart);
+              } catch (_) {}
+            }
 
             final weekHours = _sumWeek();
             final progress = (weekHours / 40).clamp(0.0, 1.0).toDouble();

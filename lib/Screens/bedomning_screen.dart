@@ -16,6 +16,11 @@ int _getWeekNumber(DateTime date) {
   return weekNum;
 }
 
+int? _readStoredWeekNumber(Map<String, dynamic> data) {
+  final rawWeekNumber = data['weekNumber'];
+  return rawWeekNumber is num ? rawWeekNumber.toInt() : null;
+}
+
 // Helper för att formatera kort datum
 String _formatShortDate(DateTime date) {
   return '${date.day}/${date.month}';
@@ -181,7 +186,8 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                     String weekDisplay = weekStart;
                     try {
                       final weekStartDate = DateTime.parse(weekStart);
-                      final weekNumber = _getWeekNumber(weekStartDate);
+                      final weekNumber =
+                          _readStoredWeekNumber(data) ?? _getWeekNumber(weekStartDate);
                       final weekEndDate = weekStartDate.add(
                         const Duration(days: 4),
                       );
@@ -689,7 +695,8 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
       final weekStart = data['weekStart'] as String? ?? '';
       try {
         final weekStartDate = DateTime.parse(weekStart);
-        final weekNumber = _getWeekNumber(weekStartDate);
+        final weekNumber =
+            _readStoredWeekNumber(data) ?? _getWeekNumber(weekStartDate);
         weeks.add('V. $weekNumber');
       } catch (e) {
         weeks.add(weekStart);

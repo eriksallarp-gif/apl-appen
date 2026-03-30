@@ -408,6 +408,7 @@ class _TimesheetList extends StatelessWidget {
                         teacherUid: teacherUid,
                         classId: classId,
                         weekStart: weekStartStr,
+                        weekNumber: weekNumber,
                       ),
                     ),
                   );
@@ -427,12 +428,14 @@ class _TimesheetDetailScreen extends StatefulWidget {
   final String teacherUid;
   final String classId;
   final String weekStart;
+  final int weekNumber;
 
   const _TimesheetDetailScreen({
     required this.studentUid,
     required this.teacherUid,
     required this.classId,
     required this.weekStart,
+    required this.weekNumber,
   });
 
   @override
@@ -464,6 +467,7 @@ class _TimesheetDetailScreenState extends State<_TimesheetDetailScreen> {
           teacherUid: widget.teacherUid,
           classId: widget.classId,
           weekStart: widget.weekStart,
+          displayWeekNumber: widget.weekNumber,
           readOnly: isLocked, // Låsta tidkort är read-only
           lockedMessage: isLocked
               ? (isApproved
