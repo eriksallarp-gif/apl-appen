@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { usePathname } from 'next/navigation';
 import { GraduationCap, School, Users } from 'lucide-react';
 
@@ -88,15 +88,16 @@ export default function DashboardPage() {
   const fetchStats = async (currentUserId: string, role?: string) => {
     try {
       const usersSnapshot = await getDocs(collection(db, 'users'));
-      const classesSnapshot = await getDocs(collection(db, 'classes'));
-      const timesheetsSnapshot = await getDocs(collection(db, 'timesheets'));
+      const isTeacher = role === 'teacher';
+      const classesSnapshot = isTeacher
+        ? await getDocs(query(collection(db, 'classes'), where('teacherUid', '==', currentUserId)))
+        : await getDocs(collection(db, 'classes'));
       const assessmentsSnapshot = await getDocs(collection(db, 'assessmentRequests'));
       const schoolsSnapshot = await getDocs(collection(db, 'schools'));
 
-      const isTeacher = role === 'teacher';
       console.log('DEBUG: currentUserId', currentUserId, 'role', role);
       const classDocs = isTeacher
-        ? classesSnapshot.docs.filter(c => c.data().teacherUid === currentUserId)
+        ? classesSnapshot.docs
         : classesSnapshot.docs;
       const classIds = new Set(classDocs.map(doc => doc.id));
       const classesData = classDocs.map(doc => ({
@@ -130,15 +131,24 @@ export default function DashboardPage() {
       setStudents(studentSummaries);
       const studentIds = new Set(studentSummaries.map(doc => doc.id));
 
+      let timesheetsDocs: any[] = [];
+      try {
+        if (isTeacher) {
+          const teacherTimesheetsSnapshot = await getDocs(
+            query(collection(db, 'timesheets'), where('teacherUid', '==', currentUserId))
+          );
+          timesheetsDocs = teacherTimesheetsSnapshot.docs;
+        } else {
+          const timesheetsSnapshot = await getDocs(collection(db, 'timesheets'));
+          timesheetsDocs = timesheetsSnapshot.docs;
+        }
+      } catch (error) {
+        console.warn('Could not fetch timesheets for dashboard stats:', error);
+      }
+
       const timesheets = isTeacher
-        ? timesheetsSnapshot.docs.filter(doc => {
-            const data = doc.data();
-            const classId = (data.classId || '').toString();
-            const teacherUid = (data.teacherUid || '').toString();
-            const studentUid = (data.studentUid || '').toString();
-            return teacherUid === currentUserId || (classId && classIds.has(classId)) || studentIds.has(studentUid);
-          })
-        : timesheetsSnapshot.docs;
+        ? timesheetsDocs.filter(doc => studentIds.has((doc.data().studentUid || '').toString()))
+        : timesheetsDocs;
       const assessments = isTeacher
         ? assessmentsSnapshot.docs.filter(doc => {
             const studentUid = (doc.data().studentUid || '').toString();

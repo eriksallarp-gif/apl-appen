@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class SupervisorAssessmentPage extends StatefulWidget {
   final String requestId;
@@ -71,52 +71,23 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
 
   Future<void> _validateAndLoadRequest() async {
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('assessmentRequests')
-          .doc(widget.requestId)
-          .get();
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'getSupervisorAssessmentRequest',
+      );
+      final result = await callable.call({
+        'requestId': widget.requestId,
+        'token': widget.token,
+      });
 
-      if (!doc.exists) {
+      final resultData = (result.data as Map?)?.cast<String, dynamic>() ?? {};
+      final data =
+          (resultData['request'] as Map?)?.cast<String, dynamic>() ?? {};
+
+      if (data.isEmpty) {
         setState(() {
           _isLoading = false;
           _isValid = false;
           _errorMessage = 'Bedömningsförfrågan hittades inte';
-        });
-        return;
-      }
-
-      final data = doc.data()!;
-      final token = data['token'] as String?;
-      final status = data['status'] as String?;
-      final expiresAt = (data['expiresAt'] as Timestamp?)?.toDate();
-
-      // Validera token
-      if (token != widget.token) {
-        setState(() {
-          _isLoading = false;
-          _isValid = false;
-          _errorMessage = 'Ogiltig eller utgången länk';
-        });
-        return;
-      }
-
-      // Kontrollera om redan inskickad
-      if (status == 'submitted') {
-        setState(() {
-          _isLoading = false;
-          _isValid = false;
-          _errorMessage =
-              'Denna bedömning har redan skickats in och kan inte ändras';
-        });
-        return;
-      }
-
-      // Kontrollera om utgången
-      if (expiresAt != null && expiresAt.isBefore(DateTime.now())) {
-        setState(() {
-          _isLoading = false;
-          _isValid = false;
-          _errorMessage = 'Denna länk har utgått';
         });
         return;
       }
@@ -131,6 +102,21 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
         _isLoading = false;
         _isValid = true;
         _requestData = data;
+      });
+    } on FirebaseFunctionsException catch (e) {
+      var message = 'Ogiltig eller utgången länk';
+      if (e.code == 'not-found') {
+        message = 'Bedömningsförfrågan hittades inte';
+      } else if (e.code == 'failed-precondition') {
+        message = e.message ?? 'Denna länk är inte längre giltig';
+      } else if (e.code == 'invalid-argument') {
+        message = 'Felaktig länk';
+      }
+
+      setState(() {
+        _isLoading = false;
+        _isValid = false;
+        _errorMessage = message;
       });
     } catch (e) {
       setState(() {
@@ -180,11 +166,7 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
     final travelCount = _requestData!['travelCount'] as int? ?? 0;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Bedömning - Handledare'),
-        backgroundColor: Colors.orange,
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: const Text('Bedömning - Handledare')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -192,7 +174,7 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
           children: [
             // Elevinfo
             Card(
-              color: Colors.orange.shade50,
+              color: const Color(0xFFFFF1E5),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -200,7 +182,7 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.person, color: Colors.orange),
+                        const Icon(Icons.person, color: Color(0xFFE56A00)),
                         const SizedBox(width: 8),
                         Text(
                           studentName,
@@ -217,7 +199,7 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
                         const Icon(
                           Icons.event_note,
                           size: 20,
-                          color: Colors.orange,
+                          color: Color(0xFFE56A00),
                         ),
                         const SizedBox(width: 8),
                         Text('Veckor: ${weeks.join(', ')}'),
@@ -229,7 +211,7 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
                         const Icon(
                           Icons.access_time,
                           size: 20,
-                          color: Colors.orange,
+                          color: Color(0xFFE56A00),
                         ),
                         const SizedBox(width: 8),
                         Text('Total arbetstid: $totalHours timmar'),
@@ -448,12 +430,12 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
                               height: 50,
                               decoration: BoxDecoration(
                                 color: isSelected
-                                    ? Colors.orange
+                                    ? const Color(0xFFFF6A00)
                                     : Colors.grey.shade200,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                   color: isSelected
-                                      ? Colors.orange.shade700
+                                      ? const Color(0xFFE65A00)
                                       : Colors.grey.shade400,
                                   width: 2,
                                 ),
@@ -559,8 +541,6 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
                 icon: const Icon(Icons.send),
                 label: const Text('Skicka bedömning'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
                   textStyle: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -657,13 +637,11 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
           ? (totalRating / ratedCount).toStringAsFixed(1)
           : '0';
 
-      // Uppdatera bedömningsförfrågan
-      await FirebaseFirestore.instance
-          .collection('assessmentRequests')
-          .doc(widget.requestId)
-          .update({
-            'status': 'submitted',
-            'submittedAt': FieldValue.serverTimestamp(),
+      await FirebaseFunctions.instance
+          .httpsCallable('submitSupervisorAssessment')
+          .call({
+            'requestId': widget.requestId,
+            'token': widget.token,
             'supervisorCompany': _companyController.text.trim(),
             'supervisorName': _nameController.text.trim(),
             'supervisorPhone': _phoneController.text.trim(),
@@ -682,7 +660,7 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
         builder: (context) => AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.check_circle, color: Colors.green, size: 32),
+              Icon(Icons.check_circle, color: Color(0xFFE56A00), size: 32),
               SizedBox(width: 12),
               Text('Tack!'),
             ],
@@ -713,7 +691,8 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
   }
 
   List<Widget> _buildSelfAssessmentCards() {
-    final selfAssessment = _requestData!['studentSelfAssessment'] as Map<String, dynamic>? ?? {};
+    final selfAssessment =
+        _requestData!['studentSelfAssessment'] as Map<String, dynamic>? ?? {};
     final cards = <Widget>[];
 
     final questions = [
@@ -757,7 +736,10 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
                 children: [
                   Row(
                     children: [
-                      Icon(q['icon'] as IconData, color: Colors.orange),
+                      Icon(
+                        q['icon'] as IconData,
+                        color: const Color(0xFFE56A00),
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
@@ -779,10 +761,7 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
                       color: Colors.grey.shade100,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
-                      answer,
-                      style: const TextStyle(fontSize: 15),
-                    ),
+                    child: Text(answer, style: const TextStyle(fontSize: 15)),
                   ),
                 ],
               ),

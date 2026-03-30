@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../core/assessment_visibility.dart';
 import 'student_detail_statistics_screen.dart';
 
 class StatisticsScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class StatisticsScreen extends StatefulWidget {
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
   String? _selectedClassId;
+  String? _selectedClassName;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +57,11 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       return const Text('Inga klasser hittades');
                     }
 
+                    final classNamesById = <String, String>{
+                      for (final doc in classes)
+                        doc.id: (doc.data()['name']?.toString() ?? doc.id),
+                    };
+
                     return DropdownButtonFormField<String>(
                       initialValue: _selectedClassId,
                       decoration: InputDecoration(
@@ -77,6 +84,8 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                       onChanged: (value) {
                         setState(() {
                           _selectedClassId = value;
+                          _selectedClassName =
+                              value == null ? null : classNamesById[value];
                         });
                       },
                     );
@@ -97,6 +106,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   )
                 : _StatisticsContent(
                     classId: _selectedClassId!,
+                    className: _selectedClassName,
                     onExport: _exportToCSV,
                   ),
           ),
@@ -137,7 +147,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           }
         }
         
-        if (tsClassId == _selectedClassId) {
+        final normalizedTsClass = (tsClassId ?? '').trim().toLowerCase();
+        final normalizedSelectedId = (_selectedClassId ?? '').trim().toLowerCase();
+        final normalizedSelectedName = (_selectedClassName ?? '').trim().toLowerCase();
+
+        if (normalizedTsClass == normalizedSelectedId ||
+            (normalizedSelectedName.isNotEmpty &&
+                normalizedTsClass == normalizedSelectedName)) {
           timesheetDocs.add(doc);
         }
       }
@@ -234,10 +250,12 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
 class _StatisticsContent extends StatefulWidget {
   final String classId;
+  final String? className;
   final VoidCallback onExport;
 
   const _StatisticsContent({
     required this.classId,
+    this.className,
     required this.onExport,
   });
 
@@ -250,20 +268,41 @@ class _StatisticsContentState extends State<_StatisticsContent> {
 
   @override
   Widget build(BuildContext context) {
+    final teacherUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('timesheets')
-          .snapshots(),
+      stream: teacherUid.isEmpty
+          ? const Stream.empty()
+          : FirebaseFirestore.instance
+                .collection('timesheets')
+                .where('teacherUid', isEqualTo: teacherUid)
+                .snapshots(),
       builder: (outerContext, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Kunde inte läsa tidkort för statistik: ${snapshot.error}',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
         }
 
         final allTimesheets = snapshot.data?.docs ?? [];
 
         // Filtrera tidkort för denna klass
         return FutureBuilder<List<DocumentSnapshot<Map<String, dynamic>>>>(
-          future: _filterTimesheetsByClass(allTimesheets, widget.classId),
+          future: _filterTimesheetsByClass(
+            allTimesheets,
+            widget.classId,
+            widget.className,
+          ),
           builder: (innerContext, filteredSnapshot) {
             if (filteredSnapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
@@ -315,6 +354,7 @@ class _StatisticsContentState extends State<_StatisticsContent> {
                 .snapshots(),
               builder: (assessmentContext, assessmentSnapshot) {
                 final allAssessments = assessmentSnapshot.data?.docs ?? [];
+
                 // Debug: log assessmentRequests count and a few docs
                 print('DEBUG: assessmentRequests snapshot count=${allAssessments.length}');
                 for (var d in allAssessments.take(10)) {
@@ -323,9 +363,13 @@ class _StatisticsContentState extends State<_StatisticsContent> {
                 }
 
                 final assessments = allAssessments.where((doc) {
+                  final data = doc.data();
                   final studentUid =
-                      doc.data()['studentUid']?.toString() ?? '';
-                  return studentUids.contains(studentUid);
+                      data['studentUid']?.toString() ?? '';
+                  final isVisible = isAssessmentVisibleStatus(
+                    data['status']?.toString(),
+                  );
+                  return studentUids.contains(studentUid) && isVisible;
                 }).toList();
 
                 // Beräkna statistik
@@ -401,8 +445,11 @@ class _StatisticsContentState extends State<_StatisticsContent> {
   Future<List<DocumentSnapshot<Map<String, dynamic>>>> _filterTimesheetsByClass(
     List<DocumentSnapshot<Map<String, dynamic>>> timesheets,
     String classId,
+    String? className,
   ) async {
     final filtered = <DocumentSnapshot<Map<String, dynamic>>>[];
+    final normalizedClassId = classId.trim().toLowerCase();
+    final normalizedClassName = (className ?? '').trim().toLowerCase();
     
     for (var doc in timesheets) {
       final data = doc.data() ?? {};
@@ -424,7 +471,10 @@ class _StatisticsContentState extends State<_StatisticsContent> {
         }
       }
       
-      if (tsClassId == classId) {
+      final normalizedTsClass = (tsClassId ?? '').trim().toLowerCase();
+      if (normalizedTsClass == normalizedClassId ||
+          (normalizedClassName.isNotEmpty &&
+              normalizedTsClass == normalizedClassName)) {
         filtered.add(doc);
       }
     }

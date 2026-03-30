@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class StudentDetailStatisticsScreen extends StatefulWidget {
   final String studentUid;
@@ -24,16 +25,33 @@ class _StudentDetailStatisticsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+
     return Scaffold(
       appBar: AppBar(title: Text(widget.studentName)),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('timesheets')
-            .where('studentUid', isEqualTo: widget.studentUid)
-            .snapshots(),
+        stream: currentUid == null
+            ? const Stream.empty()
+            : FirebaseFirestore.instance
+                  .collection('timesheets')
+                  .where('studentUid', isEqualTo: widget.studentUid)
+                  .where('teacherUid', isEqualTo: currentUid)
+                  .snapshots(),
         builder: (context, timesheetSnapshot) {
           if (timesheetSnapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
+
+          if (timesheetSnapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Kunde inte läsa elevens tidkort: ${timesheetSnapshot.error}',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
           }
 
           final timesheets = timesheetSnapshot.data?.docs ?? [];
@@ -50,7 +68,28 @@ class _StudentDetailStatisticsScreenState
                 return const Center(child: CircularProgressIndicator());
               }
 
+              if (assessmentSnapshot.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'Kunde inte läsa bedömningar: ${assessmentSnapshot.error}',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                );
+              }
+
               final assessments = assessmentSnapshot.data?.docs ?? [];
+              final submittedAssessments = assessments.where((doc) {
+                final data = doc.data();
+                final status =
+                    (data['status'] ?? '').toString().toLowerCase();
+                final hasRating =
+                    (data['averageRating'] ?? '').toString().trim().isNotEmpty &&
+                    (data['averageRating'] ?? '').toString().trim() != '0';
+                return status == 'submitted' || status == 'approved' || hasRating;
+              }).toList();
               print('DEBUG: assessmentRequests for ${widget.studentUid} count=${assessments.length}');
               for (var d in assessments) {
                 final dd = d.data() ?? {};
@@ -85,7 +124,7 @@ class _StudentDetailStatisticsScreenState
               }
 
               // Beräkna statistik från både timesheets och assessments
-              final stats = _calculateStats(timesheets, assessments);
+              final stats = _calculateStats(timesheets, submittedAssessments);
 
               return SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -93,7 +132,7 @@ class _StudentDetailStatisticsScreenState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Översiktskort
-                    _buildOverviewCard(stats, assessments),
+                    _buildOverviewCard(stats, submittedAssessments),
                     const SizedBox(height: 24),
 
                     if (_showActivityBreakdown) ...[

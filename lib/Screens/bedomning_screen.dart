@@ -32,10 +32,22 @@ class _BedomningScreenState extends State<BedomningScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Skapa bedömning'),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                'Bedömning',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          const Expanded(child: _CreateAssessmentTab()),
+        ],
       ),
-      body: const _CreateAssessmentTab(),
     );
   }
 }
@@ -52,11 +64,16 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
   final Set<String> _selectedTimesheetIds = {};
   final TextEditingController _lunchController = TextEditingController();
   final TextEditingController _travelController = TextEditingController();
-  final TextEditingController _selfAssessment1Controller = TextEditingController(); // Vad har du fått göra?
-  final TextEditingController _selfAssessment2Controller = TextEditingController(); // Vad var positivt?
-  final TextEditingController _selfAssessment3Controller = TextEditingController(); // Vad kunde varit bättre?
-  final TextEditingController _selfAssessment4Controller = TextEditingController(); // Vad kunde du gjort annorlunda?
-  final TextEditingController _selfAssessment5Controller = TextEditingController(); // Vilket betyg?
+  final TextEditingController _selfAssessment1Controller =
+      TextEditingController(); // Vad har du fått göra?
+  final TextEditingController _selfAssessment2Controller =
+      TextEditingController(); // Vad var positivt?
+  final TextEditingController _selfAssessment3Controller =
+      TextEditingController(); // Vad kunde varit bättre?
+  final TextEditingController _selfAssessment4Controller =
+      TextEditingController(); // Vad kunde du gjort annorlunda?
+  final TextEditingController _selfAssessment5Controller =
+      TextEditingController(); // Vilket betyg?
   final List<XFile> _selectedImages = [];
   final ImagePicker _picker = ImagePicker();
   bool _isUploading = false;
@@ -97,7 +114,11 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.info_outline, size: 64, color: Colors.orange.shade300),
+                Icon(
+                  Icons.info_outline,
+                  size: 64,
+                  color: Colors.orange.shade300,
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   'Inga tidkort',
@@ -196,9 +217,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                             },
                       title: Text(
                         weekDisplay,
-                        style: TextStyle(
-                          color: isLocked ? Colors.grey : null,
-                        ),
+                        style: TextStyle(color: isLocked ? Colors.grey : null),
                       ),
                       subtitle: Text(
                         statusText,
@@ -206,14 +225,17 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                           color: isLocked
                               ? Colors.grey
                               : (isApproved ? Colors.green : Colors.orange),
-                          fontWeight:
-                              isLocked ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isLocked
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
                       secondary: Icon(
                         isLocked
                             ? Icons.lock
-                            : (isApproved ? Icons.check_circle : Icons.schedule),
+                            : (isApproved
+                                  ? Icons.check_circle
+                                  : Icons.schedule),
                         color: isLocked
                             ? Colors.grey
                             : (isApproved ? Colors.green : Colors.orange),
@@ -236,7 +258,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                     ),
                     const SizedBox(height: 12),
                     Card(
-                      color: Colors.orange.shade50,
+                      color: const Color(0xFFFFF1E5),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -246,7 +268,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                               children: [
                                 const Icon(
                                   Icons.event_note,
-                                  color: Colors.orange,
+                                  color: Color(0xFFE56A00),
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
@@ -262,7 +284,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                               children: [
                                 const Icon(
                                   Icons.access_time,
-                                  color: Colors.orange,
+                                  color: Color(0xFFE56A00),
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
@@ -364,7 +386,8 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                       maxLines: 3,
                       decoration: InputDecoration(
                         labelText: '3. Vad skulle kunnat vara bättre?',
-                        hintText: 'Vad var utmanande? Vad skulle kunna förbättras?',
+                        hintText:
+                            'Vad var utmanande? Vad skulle kunna förbättras?',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -379,7 +402,8 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                       maxLines: 3,
                       decoration: InputDecoration(
                         labelText: '4. Vad kunde du som elev gjort annorlunda?',
-                        hintText: 'Hur kunde du bidragit mer? Vad kan du förbättra till nästa gång?',
+                        hintText:
+                            'Hur kunde du bidragit mer? Vad kan du förbättra till nästa gång?',
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -418,7 +442,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                       style: TextStyle(color: Colors.grey),
                     ),
                     const SizedBox(height: 12),
-                    
+
                     // Bildgalleri
                     if (_selectedImages.isNotEmpty)
                       SizedBox(
@@ -465,7 +489,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                         ),
                       ),
                     const SizedBox(height: 12),
-                    
+
                     // Lägg till bild-knappar
                     Row(
                       children: [
@@ -511,10 +535,10 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                     onPressed: _isUploading
                         ? null
                         : () => _createAssessmentRequest(
-                              context,
-                              availableTimesheets,
-                              totalHours,
-                            ),
+                            context,
+                            availableTimesheets,
+                            totalHours,
+                          ),
                     icon: _isUploading
                         ? const SizedBox(
                             width: 20,
@@ -532,8 +556,6 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                     ),
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size.fromHeight(50),
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
                     ),
                   ),
                 ),
@@ -660,10 +682,11 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
 
       // Ladda upp bilder till Firebase Storage
       final List<Map<String, dynamic>> uploadedImages = [];
-      
+
       for (int i = 0; i < _selectedImages.length; i++) {
         final image = _selectedImages[i];
-        final fileName = '${user.uid}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
+        final fileName =
+            '${user.uid}_${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
         final storageRef = FirebaseStorage.instance
             .ref()
             .child('assessment_images')
@@ -677,7 +700,8 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
 
           uploadedImages.add({
             'url': downloadUrl,
-            'uploadedAt': Timestamp.now(), // Använd Timestamp.now() istället för FieldValue.serverTimestamp()
+            'uploadedAt':
+                Timestamp.now(), // Använd Timestamp.now() istället för FieldValue.serverTimestamp()
             'fileName': fileName,
           });
         } catch (uploadError) {
@@ -687,7 +711,6 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Varning: Bild ${i + 1} kunde inte laddas upp'),
-              backgroundColor: Colors.orange,
               duration: const Duration(seconds: 2),
             ),
           );
@@ -717,7 +740,8 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
               'whatDidYouDo': _selfAssessment1Controller.text.trim(),
               'whatWasPositive': _selfAssessment2Controller.text.trim(),
               'whatCouldBeBetter': _selfAssessment3Controller.text.trim(),
-              'whatCouldYouDoDifferently': _selfAssessment4Controller.text.trim(),
+              'whatCouldYouDoDifferently': _selfAssessment4Controller.text
+                  .trim(),
               'overallRating': _selfAssessment5Controller.text.trim(),
             },
           });
@@ -746,19 +770,20 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
       setState(() {
         _isUploading = false;
       });
-      
+
       if (!context.mounted) return;
-      
+
       // Visa mer detaljerat felmeddelande
       String errorMessage = 'Fel vid skapande av bedömning';
       if (e.toString().contains('permission')) {
-        errorMessage = 'Saknar behörighet. Kontrollera att appen har tillgång till internet.';
+        errorMessage =
+            'Saknar behörighet. Kontrollera att appen har tillgång till internet.';
       } else if (e.toString().contains('network')) {
         errorMessage = 'Nätverksfel. Kontrollera internetanslutningen.';
       } else if (e.toString().contains('storage')) {
         errorMessage = 'Fel vid bilduppladdning. Försök igen.';
       }
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('$errorMessage\n\nDetaljer: $e'),
@@ -766,7 +791,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
           duration: const Duration(seconds: 5),
         ),
       );
-      
+
       print('Komplett fel: $e');
     }
   }
@@ -790,9 +815,10 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text('Bedömning skapad!'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             const Text(
               'Visa denna QR-kod för din handledare, eller skicka länken nedan:',
               textAlign: TextAlign.center,
@@ -860,6 +886,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
               ),
             ),
           ],
+        ),
         ),
         actions: [
           TextButton(

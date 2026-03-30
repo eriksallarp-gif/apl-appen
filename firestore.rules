@@ -39,6 +39,11 @@
           return isSignedIn() && getUserStatus() != 'frozen';
         }
 
+        function hasCurrentGdprConsent() {
+          return userDocExists() &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('gdprConsentVersion', '') == '2026-03-25';
+        }
+
         function userSchool() {
           return userDocExists()
             ? (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('school', ''))
@@ -121,28 +126,35 @@
 
         // Timesheets collection
         match /timesheets/{timesheetId} {
-          // Anyone authenticated can read timesheets
-          allow read: if isSignedIn();
+          // Students can only read their own timesheets.
+          // Teachers can read timesheets belonging to their students.
+          // Admins can read all.
+          allow read: if isSignedIn() && (
+            request.auth.uid == resource.data.studentUid ||
+            request.auth.uid == resource.data.teacherUid ||
+            isAdmin()
+          );
 
-          // Students can create their own timesheets (if active)
-          allow create: if isUserActive() && 
-            request.auth.uid == request.resource.data.studentUid;
+          // Students can create their own timesheets (if active).
+          // They cannot pre-set approved or locked to true on creation.
+          allow create: if isUserActive() && hasCurrentGdprConsent() &&
+            request.auth.uid == request.resource.data.studentUid &&
+            request.resource.data.get('approved', false) == false &&
+            request.resource.data.get('locked', false) == false;
 
-          // Students can update their own timesheets (unless locked/approved) - must be active
-          // Teachers can update any timesheet (for approval)
-          // Anyone (including unauthenticated) can ONLY set approved=true and locked=true
-          // (for supervisor assessments via QR code)
+          // Students can update their own non-locked timesheets,
+          // but are NOT allowed to change the approved or locked fields.
+          // Teachers can update any of their students' timesheets (incl. approval).
+          // Admins can update any timesheet.
           allow update: if isUserActive() && (
-            (request.auth.uid == resource.data.get('studentUid', '') && 
-             resource.data.get('locked', false) != true) ||
+            (
+              request.auth.uid == resource.data.get('studentUid', '') &&
+              hasCurrentGdprConsent() &&
+              resource.data.get('locked', false) != true &&
+              !request.resource.data.diff(resource.data).affectedKeys().hasAny(['approved', 'locked'])
+            ) ||
             request.auth.uid == resource.data.get('teacherUid', '') ||
             isAdmin()
-          ) || (
-            // Tillåt vem som helst att ENDAST sätta approved och locked till true
-            // Detta används när handledare godkänner via assessmentRequest (QR-kod)
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approved', 'locked']) &&
-            request.resource.data.approved == true &&
-            request.resource.data.locked == true
           );
 
           // Only teachers and admins can delete
@@ -187,13 +199,14 @@
           allow read: if isSignedIn();
 
           // Students can create their own compensation claims (if active)
-          allow create: if isUserActive() && 
+          allow create: if isUserActive() && hasCurrentGdprConsent() && 
             request.auth.uid == request.resource.data.studentUid;
 
           // Students can update their own (unless approved) - must be active
           // Teachers can update any (for approval)
           allow update: if isUserActive() && (
             (request.auth.uid == resource.data.studentUid && 
+             hasCurrentGdprConsent() &&
              resource.data.approved != true) ||
             isTeacherOrAdmin()
           );
@@ -219,16 +232,28 @@
 
         // Assessment Requests collection (för bedömningsförfrågningar med QR-kod)
         match /assessmentRequests/{requestId} {
-          // Tillåt alla att läsa (säkerheten hanteras av token-validering i klienten)
-          allow read: if true;
+          // Endast inloggade användare med rätt roll får läsa direkt.
+          // Handledarflöde går via Cloud Function som validerar token server-side.
+          allow read: if isTeacherOrAdmin() ||
+            (isSignedIn() && request.auth.uid == resource.data.studentUid);
 
-          // Students can create their own assessment requests
-          allow create: if isSignedIn() && 
-            request.auth.uid == request.resource.data.studentUid;
+          // Elev kan skapa sin egen request med ett begränsat schema.
+          allow create: if isUserActive() && hasCurrentGdprConsent() &&
+            request.auth.uid == request.resource.data.studentUid &&
+            request.resource.data.get('status', 'pending') == 'pending' &&
+            request.resource.data.keys().hasOnly([
+              'studentUid', 'studentName',
+              'timesheetIds', 'weeks',
+              'totalHours', 'lunchCount', 'travelCount',
+              'status', 'createdAt', 'token', 'expiresAt',
+              'images',
+              'linkedCompanyName', 'studentCompanyName',
+              'studentSelfAssessment'
+            ]);
 
-          // Anyone can update requests (för handledare utan inloggning)
-          // Detta är säkert eftersom token valideras i client-side kod
-          allow update: if true;
+          // Endast lärare/admin får uppdatera direkt i klient.
+          // Handledarens inskick sker via Cloud Function.
+          allow update: if isTeacherOrAdmin();
 
           // Only teachers and admins can delete
           allow delete: if isTeacherOrAdmin();

@@ -31,6 +31,152 @@ async function assertTeacherOrAdmin(context) {
   return role;
 }
 
+function asNonNegativeInt(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+}
+
+function toSafeString(value) {
+  return (value || '').toString().trim();
+}
+
+exports.getSupervisorAssessmentRequest = functions.https.onCall(async (data) => {
+  const requestId = toSafeString(data && data.requestId);
+  const token = toSafeString(data && data.token);
+
+  if (!requestId || !token) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing requestId or token.');
+  }
+
+  const doc = await db.collection('assessmentRequests').doc(requestId).get();
+  if (!doc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Bedomningsforfragan hittades inte.');
+  }
+
+  const requestData = doc.data() || {};
+  if (toSafeString(requestData.token) !== token) {
+    throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
+  }
+
+  if ((requestData.status || 'pending') === 'submitted') {
+    throw new functions.https.HttpsError('failed-precondition', 'Denna bedomning har redan skickats in och kan inte andras.');
+  }
+
+  const expiresAt = requestData.expiresAt && requestData.expiresAt.toDate
+    ? requestData.expiresAt.toDate()
+    : null;
+  if (expiresAt && expiresAt < new Date()) {
+    throw new functions.https.HttpsError('failed-precondition', 'Denna lank har utgatt.');
+  }
+
+  const images = Array.isArray(requestData.images)
+    ? requestData.images.map((img) => ({
+      url: toSafeString(img && img.url),
+      fileName: toSafeString(img && img.fileName),
+      uploadedAt: img && img.uploadedAt ? img.uploadedAt : null,
+    }))
+    : [];
+
+  return {
+    request: {
+      studentName: toSafeString(requestData.studentName) || 'Elev',
+      weeks: Array.isArray(requestData.weeks) ? requestData.weeks : [],
+      totalHours: asNonNegativeInt(requestData.totalHours),
+      lunchCount: asNonNegativeInt(requestData.lunchCount),
+      travelCount: asNonNegativeInt(requestData.travelCount),
+      images,
+      studentSelfAssessment:
+        requestData.studentSelfAssessment && typeof requestData.studentSelfAssessment === 'object'
+          ? requestData.studentSelfAssessment
+          : {},
+      linkedCompanyName: toSafeString(requestData.linkedCompanyName),
+      studentCompanyName: toSafeString(requestData.studentCompanyName),
+    },
+  };
+});
+
+exports.submitSupervisorAssessment = functions.https.onCall(async (data) => {
+  const requestId = toSafeString(data && data.requestId);
+  const token = toSafeString(data && data.token);
+
+  if (!requestId || !token) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing requestId or token.');
+  }
+
+  const supervisorCompany = toSafeString(data && data.supervisorCompany);
+  const supervisorName = toSafeString(data && data.supervisorName);
+  const supervisorPhone = toSafeString(data && data.supervisorPhone);
+  const supervisorOtherInfo = toSafeString(data && data.supervisorOtherInfo);
+  if (!supervisorCompany || !supervisorName || !supervisorPhone) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing required supervisor fields.');
+  }
+
+  const lunchApproved = asNonNegativeInt(data && data.lunchApproved);
+  const travelApproved = asNonNegativeInt(data && data.travelApproved);
+  const assessmentData = data && typeof data.assessmentData === 'object' && data.assessmentData !== null
+    ? data.assessmentData
+    : {};
+  const imageComments = data && typeof data.imageComments === 'object' && data.imageComments !== null
+    ? data.imageComments
+    : {};
+  const averageRating = toSafeString(data && data.averageRating);
+
+  await db.runTransaction(async (tx) => {
+    const ref = db.collection('assessmentRequests').doc(requestId);
+    const snap = await tx.get(ref);
+
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Bedomningsforfragan hittades inte.');
+    }
+
+    const requestData = snap.data() || {};
+    if (toSafeString(requestData.token) !== token) {
+      throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
+    }
+
+    if ((requestData.status || 'pending') === 'submitted') {
+      throw new functions.https.HttpsError('failed-precondition', 'Denna bedomning har redan skickats in och kan inte andras.');
+    }
+
+    const expiresAt = requestData.expiresAt && requestData.expiresAt.toDate
+      ? requestData.expiresAt.toDate()
+      : null;
+    if (expiresAt && expiresAt < new Date()) {
+      throw new functions.https.HttpsError('failed-precondition', 'Denna lank har utgatt.');
+    }
+
+    tx.update(ref, {
+      status: 'submitted',
+      submittedAt: admin.firestore.FieldValue.serverTimestamp(),
+      supervisorCompany,
+      supervisorName,
+      supervisorPhone,
+      supervisorOtherInfo,
+      lunchApproved,
+      travelApproved,
+      assessmentData,
+      imageComments,
+      averageRating,
+    });
+
+    // Behall befintligt beteende fran web-flow: godkann och las kopplade tidkort.
+    const timesheetIds = Array.isArray(requestData.timesheetIds)
+      ? requestData.timesheetIds.map((id) => toSafeString(id)).filter(Boolean)
+      : [];
+
+    for (const timesheetId of timesheetIds) {
+      const timesheetRef = db.collection('timesheets').doc(timesheetId);
+      tx.set(timesheetRef, {
+        approved: true,
+        locked: true,
+      }, { merge: true });
+    }
+  });
+
+  return { ok: true };
+});
+
 exports.createUser = functions.https.onCall(async (data, context) => {
   await assertAdmin(context);
 
@@ -349,3 +495,118 @@ exports.setUserStatus = functions.https.onCall(async (data, context) => {
 
   return { ok: true, uid, status };
 });
+
+// ---------------------------------------------------------------------------
+// Account deletion (GDPR Article 17 – Right to erasure)
+// ---------------------------------------------------------------------------
+
+/**
+ * requestAccountDeletion — callable by authenticated student.
+ * Marks the user document for deletion after a 30-day grace period.
+ * The student can cancel within those 30 days via cancelAccountDeletion.
+ */
+exports.requestAccountDeletion = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+  }
+  const uid = context.auth.uid;
+
+  const userSnap = await db.collection('users').doc(uid).get();
+  if (!userSnap.exists) {
+    throw new functions.https.HttpsError('not-found', 'User not found.');
+  }
+  const role = (userSnap.data().role || '').toString().trim();
+  if (role !== 'student') {
+    throw new functions.https.HttpsError('permission-denied', 'Only students can request self-deletion.');
+  }
+
+  await db.collection('users').doc(uid).set({
+    deletionRequested: true,
+    deletionRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return { ok: true };
+});
+
+/**
+ * cancelAccountDeletion — callable by authenticated student.
+ * Removes the deletion flag so the account is no longer scheduled for deletion.
+ */
+exports.cancelAccountDeletion = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+  }
+  const uid = context.auth.uid;
+
+  await db.collection('users').doc(uid).update({
+    deletionRequested: admin.firestore.FieldValue.delete(),
+    deletionRequestedAt: admin.firestore.FieldValue.delete(),
+  });
+
+  return { ok: true };
+});
+
+/**
+ * processScheduledDeletions — runs every 24 hours.
+ * Anonymizes and permanently deletes accounts where the 30-day grace period has passed.
+ */
+exports.processScheduledDeletions = functions.pubsub
+  .schedule('every 24 hours')
+  .onRun(async () => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    const cutoffTimestamp = admin.firestore.Timestamp.fromDate(cutoff);
+
+    const snap = await db.collection('users')
+      .where('deletionRequested', '==', true)
+      .where('deletionRequestedAt', '<=', cutoffTimestamp)
+      .get();
+
+    for (const userDoc of snap.docs) {
+      const uid = userDoc.id;
+      const userData = userDoc.data() || {};
+
+      try {
+        // 1. Anonymize related documents (keep records for school archives).
+        const batch = db.batch();
+
+        const timesheetsSnap = await db.collection('timesheets')
+          .where('studentUid', '==', uid).get();
+        for (const ts of timesheetsSnap.docs) {
+          batch.update(ts.ref, { studentName: '[Raderad]' });
+        }
+
+        const requestsSnap = await db.collection('assessmentRequests')
+          .where('studentUid', '==', uid).get();
+        for (const req of requestsSnap.docs) {
+          batch.update(req.ref, { studentName: '[Raderad]' });
+        }
+
+        const compSnap = await db.collection('compensation')
+          .where('studentUid', '==', uid).get();
+        for (const comp of compSnap.docs) {
+          batch.update(comp.ref, { studentName: '[Raderad]' });
+        }
+
+        await batch.commit();
+
+        // 2. Remove from class subcollection.
+        const classId = (userData.classId || '').toString().trim();
+        if (classId) {
+          await db.collection('classes').doc(classId).collection('students').doc(uid).delete();
+        }
+
+        // 3. Delete user document.
+        await db.collection('users').doc(uid).delete();
+
+        // 4. Delete Firebase Auth account.
+        await admin.auth().deleteUser(uid);
+
+        console.log(`[processScheduledDeletions] Account ${uid} deleted.`);
+      } catch (err) {
+        console.error(`[processScheduledDeletions] Failed for ${uid}:`, err);
+      }
+    }
+
+    return null;
+  });

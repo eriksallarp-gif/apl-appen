@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../core/assessment_visibility.dart';
 
 class SupervisorAssessmentsTab extends StatelessWidget {
   final String classId;
@@ -11,7 +12,6 @@ class SupervisorAssessmentsTab extends StatelessWidget {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection('assessmentRequests')
-          .where('status', isEqualTo: 'submitted')
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -32,6 +32,10 @@ class SupervisorAssessmentsTab extends StatelessWidget {
             }
 
             var assessments = filteredSnap.data ?? [];
+            assessments = assessments.where((doc) {
+              final data = doc.data() ?? {};
+              return isAssessmentVisibleStatus(data['status']?.toString());
+            }).toList();
 
             // Sortera efter submittedAt i kod istället
             assessments.sort((a, b) {
@@ -76,7 +80,8 @@ class SupervisorAssessmentsTab extends StatelessWidget {
                     data['supervisorName'] as String? ?? 'Okänd';
                 final supervisorCompany =
                     data['supervisorCompany'] as String? ?? '';
-                final averageRating = data['averageRating'] as String? ?? '0';
+                final resolvedRating = resolveAssessmentDisplayRating(data);
+                final averageRating = resolvedRating.toStringAsFixed(1);
                 final lunchApproved = data['lunchApproved'] as int? ?? 0;
                 final travelApproved = data['travelApproved'] as int? ?? 0;
 
@@ -127,7 +132,7 @@ class SupervisorAssessmentsTab extends StatelessWidget {
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
                                   color: _getRatingColor(
-                                    double.tryParse(averageRating) ?? 0,
+                                    resolvedRating,
                                   ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),

@@ -54,4 +54,7 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Local backups (stored offline)
+/backups/
+
 /web_dashboard/.next-dev/

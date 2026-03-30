@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, Timestamp, writeBatch, collection, getDocs, query, where } from 'firebase/firestore';
+import { db, functions } from '@/lib/firebase';
+import { collection, getDocs } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 
 const CRITERIA = [
   'Engagemang',
@@ -66,26 +67,13 @@ export default function SupervisorPage() {
     }
 
     try {
-      const docRef = doc(db, 'assessmentRequests', requestId);
-      const docSnap = await getDoc(docRef);
+      const getRequestCallable = httpsCallable(functions, 'getSupervisorAssessmentRequest');
+      const result = await getRequestCallable({ requestId, token });
+      const payload = (result.data || {}) as { request?: any };
+      const requestData = payload.request;
 
-      if (!docSnap.exists()) {
+      if (!requestData) {
         setValidationError('Bedömningsförfrågan hittades inte');
-        setLoading(false);
-        return;
-      }
-
-      const requestData = docSnap.data();
-
-      if (requestData.status !== 'pending' || requestData.token !== token) {
-        setValidationError('Ogiltig eller använd länk');
-        setLoading(false);
-        return;
-      }
-
-      const expiresAt = requestData.expiresAt.toDate();
-      if (expiresAt < new Date()) {
-        setValidationError('Denna länk har gått ut');
         setLoading(false);
         return;
       }
@@ -158,17 +146,14 @@ export default function SupervisorPage() {
         };
       });
 
-      // Använd batch för att uppdatera både bedömningen och godkänna tidkorten
-      const batch = writeBatch(db);
-
-      // Uppdatera bedömningen
-      const docRef = doc(db, 'assessmentRequests', requestId);
-      batch.update(docRef, {
-        status: 'submitted',
-        submittedAt: Timestamp.now(),
+      const submitCallable = httpsCallable(functions, 'submitSupervisorAssessment');
+      await submitCallable({
+        requestId,
+        token,
         supervisorCompany: companyToSave,
         supervisorName: name,
         supervisorPhone: phone,
+        // Behalls for kompatibilitet ifall annan UI visar detta falt.
         supervisorOtherInfo: otherInfo,
         lunchApproved,
         travelApproved,
@@ -176,23 +161,6 @@ export default function SupervisorPage() {
         averageRating,
         imageComments,
       });
-
-      // Godkänn och lås automatiskt alla tidkort som är kopplade till bedömningen
-      if (request?.timesheetIds && Array.isArray(request.timesheetIds)) {
-        console.log('Uppdaterar tidkort:', request.timesheetIds);
-        for (const timesheetId of request.timesheetIds) {
-          const timesheetRef = doc(db, 'timesheets', timesheetId);
-          // Använd set med merge för att skapa dokumentet om det inte finns
-          batch.set(timesheetRef, { 
-            approved: true,
-            locked: true  // Låser tidkorten så att eleven inte kan ändra dem
-          }, { merge: true });
-        }
-      }
-
-      console.log('Committing batch...');
-      await batch.commit();
-      console.log('Batch committed successfully');
 
       setSuccess(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });

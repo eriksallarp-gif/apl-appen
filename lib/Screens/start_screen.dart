@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../main.dart' show WeeklyTimesheetScreen;
 import 'apl_documents_screen.dart';
+import 'weekly_timesheet_screen.dart';
 
 String _ymd(DateTime d) {
   String two(int n) => n.toString().padLeft(2, '0');
@@ -38,8 +38,10 @@ class StartScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser!;
-    final userDocStream =
-        FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots();
+    final userDocStream = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots();
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: userDocStream,
@@ -70,8 +72,9 @@ class StartScreen extends StatelessWidget {
 
             // Beräkna denna veckas timmar
             final now = DateTime.now();
-            final monday =
-                now.subtract(Duration(days: now.weekday - DateTime.monday));
+            final monday = now.subtract(
+              Duration(days: now.weekday - DateTime.monday),
+            );
             final weekStart = _ymd(monday);
 
             int thisWeekHours = 0;
@@ -99,21 +102,26 @@ class StartScreen extends StatelessWidget {
               if (ws == weekStart) {
                 thisWeekHours = sum;
                 thisWeekExists = true;
-                
+
                 // Summera per dag
                 for (final entry in entries.entries) {
-                  final dayMap = (entry.value as Map?)?.cast<String, dynamic>() ?? {};
+                  final dayMap =
+                      (entry.value as Map?)?.cast<String, dynamic>() ?? {};
                   for (final day in dayHours.keys) {
                     final val = dayMap[day];
-                    dayHours[day] = (dayHours[day] ?? 0) + (val is int ? val : int.tryParse(val.toString()) ?? 0);
+                    dayHours[day] =
+                        (dayHours[day] ?? 0) +
+                        (val is int ? val : int.tryParse(val.toString()) ?? 0);
                   }
                 }
               }
             }
 
             final daysRemaining = 5 - (now.weekday - DateTime.monday);
-            final emoji = _getGreeting().contains('morgon') ? '🌅' : 
-                          _getGreeting().contains('eftermiddag') ? '☀️' : '🌙';
+            final weekProgress = (thisWeekHours / 40)
+                .clamp(0.0, 1.0)
+                .toDouble();
+            final remainingHours = (40 - thisWeekHours).clamp(0, 40);
 
             // Hämta teacherUid för navigering
             final teacherUid = (userData['teacherUid'] ?? '').toString().trim();
@@ -125,9 +133,10 @@ class StartScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      const SafeArea(bottom: false, child: SizedBox(height: 8)),
                       // Välkomsthälsning
                       Text(
-                        '${_getGreeting()} $emoji',
+                        _getGreeting(),
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w500,
@@ -141,7 +150,7 @@ class StartScreen extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 14),
 
                       // Denna veckas status — stor kort med circular progress (KLICKBAR)
                       GestureDetector(
@@ -161,138 +170,182 @@ class StartScreen extends StatelessWidget {
                             : null,
                         child: Container(
                           width: double.infinity,
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
+                            gradient: const LinearGradient(
                               colors: [
-                                Colors.orange.shade400,
-                                Colors.orange.shade600,
+                                Color(0xFFFF8A00),
+                                Color(0xFFFF6A00),
+                                Color(0xFFE65A00),
                               ],
+                              stops: [0.0, 0.68, 1.0],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
+                            borderRadius: BorderRadius.circular(26),
+                            boxShadow: const [
                               BoxShadow(
-                                color: Colors.orange.shade200,
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              )
+                                color: Color(0x52FF8A00),
+                                blurRadius: 30,
+                                offset: Offset(0, 14),
+                              ),
                             ],
                           ),
-                          child: Column(
+                          child: Stack(
                             children: [
-                              const Text(
-                                'Denna vecka',
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              // Circular progress
-                              Stack(
-                                alignment: Alignment.center,
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  SizedBox(
-                                    width: 100,
-                                    height: 100,
-                                    child: CircularProgressIndicator(
-                                      value: (thisWeekHours / 40).clamp(0.0, 1.0),
-                                      strokeWidth: 6,
-                                      backgroundColor: Colors.white.withValues(alpha: 0.2),
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
+                                  Text(
+                                    'Denna vecka',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.82,
                                       ),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
-                                  Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        '$thisWeekHours',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.bold,
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '$thisWeekHours timmar',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 34,
+                                                fontWeight: FontWeight.w800,
+                                                height: 1.0,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              thisWeekExists
+                                                  ? 'Din pågående registrering'
+                                                  : 'Ingen tid registrerad ännu',
+                                              style: TextStyle(
+                                                color: Colors.white.withValues(
+                                                  alpha: 0.82,
+                                                ),
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      const Text(
-                                        'timmar',
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 10,
+                                      const SizedBox(width: 16),
+                                      SizedBox(
+                                        width: 72,
+                                        height: 72,
+                                        child: TweenAnimationBuilder<double>(
+                                          tween: Tween<double>(
+                                            begin: 0,
+                                            end: weekProgress,
+                                          ),
+                                          duration: const Duration(
+                                            milliseconds: 700,
+                                          ),
+                                          builder: (context, animatedValue, _) {
+                                            return Stack(
+                                              fit: StackFit.expand,
+                                              children: [
+                                                CircularProgressIndicator(
+                                                  value: animatedValue,
+                                                  strokeWidth: 6,
+                                                  backgroundColor: Colors.white
+                                                      .withValues(alpha: 0.22),
+                                                  valueColor:
+                                                      const AlwaysStoppedAnimation(
+                                                        Colors.white,
+                                                      ),
+                                                ),
+                                                Center(
+                                                  child: Text(
+                                                    '${(weekProgress * 100).round()}%',
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            );
+                                          },
                                         ),
                                       ),
                                     ],
                                   ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    remainingHours == 0
+                                        ? 'Målet är uppnått denna vecka'
+                                        : '$remainingHours timmar kvar till 40 h',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.90,
+                                      ),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    daysRemaining > 0
+                                        ? '$daysRemaining dagar kvar (fredag 23:59)'
+                                        : 'Veckan är avslutad',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.74,
+                                      ),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  if (thisWeekExists && teacherUid.isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.18,
+                                        ),
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.arrow_forward_rounded,
+                                            color: Colors.white,
+                                            size: 14,
+                                          ),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            'Öppna tidkort',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                 ],
                               ),
-                              const SizedBox(height: 12),
-                              // Status text
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: thisWeekHours >= 40
-                                      ? Colors.green.shade400
-                                      : Colors.amber.shade400,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  thisWeekHours >= 40
-                                      ? '✅ Målet nått! Bra jobbat!'
-                                      : '${40 - thisWeekHours} timmar kvar',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              if (daysRemaining > 0)
-                                Text(
-                                  '$daysRemaining dagar kvar (Fredag kl 23:59)',
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              const SizedBox(height: 12),
-                              if (thisWeekExists && teacherUid.isNotEmpty)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.3),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.touch_app,
-                                        color: Colors.white,
-                                        size: 14,
-                                      ),
-                                      SizedBox(width: 6),
-                                      Text(
-                                        'Tryck för att redigera',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
                             ],
                           ),
                         ),
@@ -350,28 +403,39 @@ class StartScreen extends StatelessWidget {
                           child: Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              border: Border.all(color: Colors.blue.shade200, width: 2),
-                              borderRadius: BorderRadius.circular(12),
-                              color: Colors.white,
+                              border: Border.all(
+                                color: const Color(0xFFFFCBA8),
+                                width: 1.6,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              color: const Color(0xFFFFF8F2),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x1FFF8A00),
+                                  blurRadius: 12,
+                                  offset: Offset(0, 5),
+                                ),
+                              ],
                             ),
                             child: Row(
                               children: [
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius: BorderRadius.circular(8),
+                                    color: const Color(0xFFFFE7D1),
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: Icon(
+                                  child: const Icon(
                                     Icons.folder_open,
-                                    color: Colors.blue.shade600,
+                                    color: Color(0xFFE56A00),
                                     size: 28,
                                   ),
                                 ),
                                 const SizedBox(width: 16),
                                 const Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         'APL-dokument',
@@ -391,10 +455,10 @@ class StartScreen extends StatelessWidget {
                                     ],
                                   ),
                                 ),
-                                Icon(
+                                const Icon(
                                   Icons.arrow_forward_ios,
                                   size: 16,
-                                  color: Colors.grey,
+                                  color: Color(0xFFC27A35),
                                 ),
                               ],
                             ),
@@ -408,15 +472,18 @@ class StartScreen extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            border: Border.all(color: Colors.green.shade300, width: 2),
-                            borderRadius: BorderRadius.circular(12),
+                            color: const Color(0xFFFFF1E5),
+                            border: Border.all(
+                              color: const Color(0xFFFFC38D),
+                              width: 1.5,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
                           ),
                           child: Row(
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.check_circle,
-                                color: Colors.green.shade600,
+                                color: Color(0xFFE56A00),
                                 size: 28,
                               ),
                               const SizedBox(width: 16),
@@ -424,10 +491,10 @@ class StartScreen extends StatelessWidget {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
+                                    const Text(
                                       'Godkända tidkort',
                                       style: TextStyle(
-                                        color: Colors.green.shade700,
+                                        color: Color(0xFF9A4E00),
                                         fontWeight: FontWeight.bold,
                                         fontSize: 14,
                                       ),
@@ -435,8 +502,8 @@ class StartScreen extends StatelessWidget {
                                     const SizedBox(height: 4),
                                     Text(
                                       '$approvedCount tidkort godkänd av läraren ✅',
-                                      style: TextStyle(
-                                        color: Colors.green.shade600,
+                                      style: const TextStyle(
+                                        color: Color(0xFFB25C05),
                                         fontSize: 12,
                                       ),
                                     ),
@@ -464,22 +531,27 @@ class _DayCard extends StatelessWidget {
   final String day;
   final int hours;
 
-  const _DayCard({
-    required this.day,
-    required this.hours,
-  });
+  const _DayCard({required this.day, required this.hours});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: hours > 0 ? Colors.orange.shade50 : Colors.grey.shade100,
+        color: hours > 0 ? const Color(0xFFFFF1E7) : Colors.white,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: hours > 0 ? Colors.orange.shade300 : Colors.grey.shade300,
-          width: 2,
+          color: hours > 0 ? const Color(0xFFFFCBA8) : const Color(0xFFE5E0DB),
         ),
-        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: hours > 0
+                ? const Color(0x26FF8A00)
+                : const Color(0x14000000),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -496,8 +568,8 @@ class _DayCard extends StatelessWidget {
             '$hours h',
             style: TextStyle(
               fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: hours > 0 ? Colors.orange.shade600 : Colors.grey.shade600,
+              fontWeight: FontWeight.w800,
+              color: hours > 0 ? const Color(0xFFE65A00) : Colors.grey.shade600,
             ),
           ),
         ],

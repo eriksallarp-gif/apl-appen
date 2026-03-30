@@ -1,34 +1,81 @@
-# CLOUD RUN DEPLOYMENT GUIDE
+# RELEASE CHECKLIST
 
-## Status: Docker Build in Progress ✅
+Den här checklistan är till för en faktisk release av APL-appen och samlar verifiering, deploy och efterkontroll på ett ställe.
 
-Build ID: `545cb25c-cd97-4597-be3c-88c913129364`
-Status: WORKING (będzie gotowy za ~10-15 minut)
+## 1. Förberedelser
 
----
+- Bekräfta vilken release som ska ut: appändringar, Firestore-regler, Functions och/eller web dashboard.
+- Kontrollera versionsnumret i `pubspec.yaml` och höj det vid behov.
+- Säkerställ att rätt Firebase-projekt används: `apl-appen-aa472`.
+- Säkerställ att du är inloggad i Firebase CLI och gcloud om webben ska deployas.
 
-## Step 1: Verifiera Docker Image (när bygget är klart)
+## 2. Lokal kvalitetskontroll
 
-```powershell
-$gcloudPath = "C:\Users\$env:USERNAME\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin"
-$env:Path += ";$gcloudPath"
-
-# Kontrollera om image finns
-gcloud artifacts docker images list europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen
-```
-
-**Förväntat resultat:**
-```
-europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web
-```
-
----
-
-## Step 2: Deploy till Cloud Run
+Kör dessa kommandon från projektroten `d:\apl_appen`:
 
 ```powershell
-$gcloudPath = "C:\Users\$env:USERNAME\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin"
-$env:Path += ";$gcloudPath"
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --debug
+```
+
+Förväntat resultat:
+
+- `flutter analyze` utan nya relevanta fel.
+- `flutter test` passerar.
+- APK-builden går igenom.
+
+## 3. Manuell smoke test i appen
+
+Verifiera minst detta innan release:
+
+- Elev kan logga in.
+- Elev kan öppna sitt tidkort för en vecka.
+- Ändringar i tidkort sparas korrekt och gamla värden kommer inte tillbaka efter ominläsning.
+- Varning för osparade ändringar visas när användaren ändrar data och försöker lämna sidan.
+- Elev kan inte redigera låst eller godkänt tidkort.
+- Lärare kan öppna elevens tidkort och godkänna det.
+- Supervisor-flödet via QR-länk går att öppna och skicka in en bedömning en gång.
+
+## 4. Deploy av Firestore-regler
+
+Kör detta när regler har ändrats:
+
+```powershell
+firebase deploy --only firestore:rules --project=apl-appen-aa472
+```
+
+Verifiera efter deploy:
+
+- Elev kan fortfarande läsa och uppdatera sitt eget olåsta tidkort.
+- Lärare kan fortfarande läsa och godkänna tidkort.
+- Objektsåtkomst mellan olika elever nekas.
+- Supervisor-bedömning kan skickas in, men samma request kan inte skrivas om fritt efter submission.
+
+## 5. Deploy av Cloud Functions
+
+Kör detta om något i `functions/` har ändrats:
+
+```powershell
+firebase deploy --only functions --project=apl-appen-aa472
+```
+
+Verifiera efter deploy:
+
+- Eventuella backfill- eller API-flöden fungerar som förväntat.
+- Inga nya fel syns i Firebase Functions-logger.
+
+## 6. Deploy av web dashboard och hosting
+
+Det här behövs om `web_dashboard/`, `firebase.json` eller hosting-routing har ändrats.
+
+Bygg och deploya Cloud Run-tjänsten:
+
+```powershell
+gcloud builds submit web_dashboard `
+  --tag=europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web:latest `
+  --region=europe-north1
 
 gcloud run deploy apl-appen-web `
   --image=europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web:latest `
@@ -41,146 +88,50 @@ gcloud run deploy apl-appen-web `
   --project=apl-appen-aa472
 ```
 
-**Vänta tills du får:**
-```
-Service [apl-appen-web] deployed successfully.
-URL: https://apl-appen-web-xxxxx-xx.a.run.app
-```
-
----
-
-## Step 3: Hämta Cloud Run Service URL
+Deploya därefter hosting:
 
 ```powershell
-$gcloudPath = "C:\Users\$env:USERNAME\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin"
-$env:Path += ";$gcloudPath"
-
-gcloud run services describe apl-appen-web `
-  --region=europe-north1 `
-  --format='value(status.url)'
-```
-
-**Spara denna URL - du behöver den senare**
-
----
-
-## Step 4: Deploy Firebase Hosting
-
-```powershell
-cd d:\apl_appen
 firebase deploy --only hosting --project=apl-appen-aa472
 ```
 
----
+Verifiera efter deploy:
 
-## Step 5: Uppdatera DNS i Squarespace
+- Hosting rewrite pekar fortsatt mot `apl-appen-web`.
+- Startsidan laddar via hosting-domänen.
+- Inloggning fungerar.
+- Sidor som använder Firestore fungerar utan permissions-fel.
 
-1. Gå till Firebase Console: https://console.firebase.google.com/
-2. Välj `apl-appen-aa472` projekt
-3. Gå till **Hosting** i menyn
-4. Klicka **Connect domain**
-5. Ange `apl-appen.com`
-6. Följ instruktionerna för DNS-records
+## 7. Efterkontroll i produktion
 
-**Firebase kommer att ge dig 2-3 DNS-records att lägga in i Squarespace Admin:**
-- Vanligtvis två A-records för IPv4
-- Eventuellt AAAA-record för IPv6
+Verifiera i produktion direkt efter release:
 
-Lägg in dessa i:
-- Squarespace > Domains > apl-appen.com > DNS
+- Logga in som elev och öppna tidkort.
+- Logga in som lärare och kontrollera godkännandeflödet.
+- Testa minst en QR-baserad supervisorbedömning.
+- Kontrollera Firestore Rules i Firebase Console.
+- Kontrollera Cloud Run-loggar om webben har deployats.
 
----
-
-## Monitoring
+Exempel för loggar:
 
 ```powershell
-$gcloudPath = "C:\Users\$env:USERNAME\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin"
-$env:Path += ";$gcloudPath"
-
-# Se logs från Cloud Run
-gcloud run logs read apl-appen-web `
-  --region=europe-north1 `
-  --limit=50
-
-# Real-time monitoring
-gcloud run logs read apl-appen-web `
-  --region=europe-north1 `
-  --limit=20
+gcloud run logs read apl-appen-web --region=europe-north1 --limit=50
 ```
 
----
+## 8. Rollback-plan
 
-## Troubleshooting
+Om release orsakar problem:
 
-**Problem: "Service account lacks necessary permissions"**
-```powershell
-gcloud projects add-iam-policy-binding apl-appen-aa472 `
-  --member=serviceAccount:apl-appen-web@appspot.gserviceaccount.com `
-  --role=roles/datastore.user
-```
+- Stoppa vidare deployer tills orsaken är bekräftad.
+- Återställ senast fungerande Firestore-regler i Firebase Console eller deploya föregående kända rules-fil.
+- Deploya föregående fungerande version av Cloud Run-tjänsten om webbreleasen är orsaken.
+- Om problemet bara gäller Flutter-klienten: distribuera inte vidare APK förrän ny verifierad build finns.
 
-**Problem: "Container failed to start"**
-```powershell
-$gcloudPath = "C:\Users\$env:USERNAME\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin"
-$env:Path += ";$gcloudPath"
+## 9. Release sign-off
 
-gcloud run logs read apl-appen-web `
-  --region=europe-north1 `
-  --limit=100
-```
+Releasen är klar först när följande är uppfyllt:
 
-**Problem: "Domain already exists"**
-- Gå till Firebase Console
-- Hosting > Domains
-- Ta bort befintlig domain-binding
-- Gör om från steg 5
-
----
-
-## Expected Timeline
-
-1. **Docker Build**: ~10-15 minuter (pågår nu ✅)
-2. **Cloud Run Deploy**: ~2-3 minuter
-3. **Firebase Hosting Deploy**: ~1 minut
-4. **DNS Propagation**: 5 minuter - 48 timmar
-   - Kan testa med: `nslookup apl-appen.com`
-
----
-
-## Verification
-
-```powershell
-# Efter att allt är deployat:
-# 1. Öppna https://apl-appen-web-xxxxx.a.run.app (Cloud Run URL)
-# 2. Öppna https://apl-appen.com (Custom domain - när DNS är propagerad)
-# 3. Gå till /login för att verifiera Firebase Auth
-# 4. Gå till /dashboard för att verifiera Firestore access
-```
-
----
-
-## Rollback om något går fel
-
-```powershell
-$gcloudPath = "C:\Users\$env:USERNAME\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin"
-$env:Path += ";$gcloudPath"
-
-# Ta bort Cloud Run service
-gcloud run services delete apl-appen-web `
-  --region=europe-north1 `
-  --project=apl-appen-aa472
-
-# Cloud Build kan inte rollbackas, men du kan deploya tidigare version
-# eller radera image och bygga om
-```
-
----
-
-## Nästa steg när Docker-build är klar
-
-Jag kommer automatiskt att:
-1. ✅ Kontrollera build-status
-2. 🔄 Köra Cloud Run deployment
-3. 📍 Hämta service URL
-4. 🔥 Deploy Firebase Hosting
-5. 📋 Ge dig DNS-instruktioner för Squarespace
+- Automatisk testning klar.
+- Manuell smoke test klar.
+- Nödvändiga deploysteg genomförda.
+- Produktion verifierad utan blockerande fel.
+- Eventuella kända begränsningar dokumenterade i release notes.

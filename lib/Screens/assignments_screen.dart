@@ -49,23 +49,30 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
         .snapshots();
 
     return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 8),
-            const Text(
-              'Uppgifter',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Text(
+                'Uppgifter',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              ),
             ),
-            const SizedBox(height: 8),
-            Text(
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text(
               'Här ser du uppgifter som din lärare har tilldelat.',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
-            const SizedBox(height: 16),
-            Expanded(
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
               child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: assignmentsStream,
                 builder: (context, assignmentSnap) {
@@ -99,6 +106,7 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
 
                   return ListView.separated(
                     itemCount: assignments.length,
+                    padding: EdgeInsets.zero,
                     separatorBuilder: (context, index) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final assignment = assignments[index];
@@ -211,8 +219,8 @@ class _AssignmentsScreenState extends State<AssignmentsScreen> {
                 },
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

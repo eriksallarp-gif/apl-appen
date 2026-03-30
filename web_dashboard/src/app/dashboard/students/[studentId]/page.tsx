@@ -255,10 +255,30 @@ export default function StudentDetailPage() {
         specialization: studentData.specialization || '-',
       });
 
-      // Hämta tidkort FÖRST så vi kan använda det för bedömningar
-      const timesheetsSnapshot = await getDocs(
-        query(collection(db, 'timesheets'), where('studentUid', '==', studentId))
-      );
+      // Hämta tidkort FÖRST så vi kan använda det för bedömningar.
+      // For teachers we must scope by both studentUid + teacherUid to satisfy Firestore rules.
+      const currentUser = auth.currentUser;
+      const currentUserId = currentUser?.uid;
+      let currentUserRole: string | null = null;
+      if (currentUserId) {
+        const currentUserDoc = await getDoc(doc(db, 'users', currentUserId));
+        currentUserRole = currentUserDoc.exists() ? (currentUserDoc.data().role || null) : null;
+      }
+
+      let timesheetsSnapshot;
+      if (currentUserRole === 'teacher' && currentUserId) {
+        timesheetsSnapshot = await getDocs(
+          query(
+            collection(db, 'timesheets'),
+            where('studentUid', '==', studentId),
+            where('teacherUid', '==', currentUserId)
+          )
+        );
+      } else {
+        timesheetsSnapshot = await getDocs(
+          query(collection(db, 'timesheets'), where('studentUid', '==', studentId))
+        );
+      }
       const timesheetsData = timesheetsSnapshot.docs.map(doc => {
         const data = doc.data();
         let totalHours = 0;
@@ -314,6 +334,7 @@ export default function StudentDetailPage() {
           studentSelfAssessment: data.studentSelfAssessment || undefined,
         } as Assessment;
       });
+      const approvedAssessmentsData = assessmentsData.filter(isAssessmentApprovedForDisplay);
       // Debug each doc to help trace missing fields / casing
       for (const d of assessmentsSnapshot.docs) {
         const dt = d.data();
@@ -330,8 +351,8 @@ export default function StudentDetailPage() {
           }
         });
       }
-      console.debug('DEBUG: flattened weeks for', studentId, assessmentsData.flatMap(a => a.weeks));
-      setAssessments(assessmentsData);
+      console.debug('DEBUG: flattened weeks for', studentId, approvedAssessmentsData.flatMap(a => a.weeks));
+      setAssessments(approvedAssessmentsData);
 
       // Hämta ersättningar
       const compensationsSnapshot = await getDocs(

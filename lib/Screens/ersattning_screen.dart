@@ -11,14 +11,27 @@ class ErsattningScreen extends StatefulWidget {
 
 class _ErsattningScreenState extends State<ErsattningScreen> {
   bool _showActivityBreakdown = false;
+  bool _showAssessments = false;
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Statistik'), elevation: 0),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Text(
+                'Statistik',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          Expanded(child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: FirebaseFirestore.instance
             .collection('timesheets')
             .where('studentUid', isEqualTo: user.uid)
@@ -36,7 +49,12 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                   .where('studentUid', isEqualTo: user.uid)
                   .snapshots(),
             builder: (context, assessmentSnapshot) {
-              final assessments = assessmentSnapshot.data?.docs ?? [];
+              final allAssessments = assessmentSnapshot.data?.docs ?? [];
+              final assessments = allAssessments.where((doc) {
+                final status =
+                    (doc.data()['status'] ?? '').toString().toLowerCase();
+                return status != 'pending';
+              }).toList();
 
               // Debug logs to help diagnose missing assessmentRequests
               print('DEBUG: assessmentRequests for ${user.uid} count=${assessments.length}');
@@ -335,166 +353,218 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
 
                     // Bedömningar från handledare
                     Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.star, color: Colors.amber.shade700),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'Bedömningar från handledare',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            if (assessments.isEmpty)
-                              const Text(
-                                'Inga bedömningar än',
-                                style: TextStyle(color: Colors.grey),
-                              )
-                            else
-                              ...assessments.map((doc) {
-                                final data = doc.data();
-                                final averageRating =
-                                    data['averageRating'] as String? ?? '0';
-                                final supervisorName =
-                                    data['supervisorName'] as String? ??
-                                    'Okänd';
-                                final supervisorCompany =
-                                    data['supervisorCompany'] as String? ?? '';
-                                final weeks =
-                                    (data['weeks'] as List?)?.cast<String>() ??
-                                    [];
-
-                                Color ratingColor;
-                                if (double.tryParse(averageRating) != null) {
-                                  final rating = double.parse(averageRating);
-                                  if (rating >= 4.5) {
-                                    ratingColor = Colors.green;
-                                  } else if (rating >= 3.5) {
-                                    ratingColor = Colors.lightGreen;
-                                  } else if (rating >= 2.5) {
-                                    ratingColor = Colors.orange;
-                                  } else {
-                                    ratingColor = Colors.red;
-                                  }
-                                } else {
-                                  ratingColor = Colors.grey;
-                                }
-
-                                return InkWell(
-                                  onTap: () => _showAssessmentDetails(
-                                    context,
-                                    doc.id,
-                                    data,
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Card(
-                                    color: Colors.grey.shade50,
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(12),
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      supervisorName,
-                                                      style: const TextStyle(
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                        fontSize: 14,
-                                                      ),
-                                                    ),
-                                                    if (supervisorCompany
-                                                        .isNotEmpty)
-                                                      Text(
-                                                        supervisorCompany,
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          color: Colors
-                                                              .grey
-                                                              .shade600,
-                                                        ),
-                                                      ),
-                                                    const SizedBox(height: 4),
-                                                    Text(
-                                                      weeks.join(', '),
-                                                      style: TextStyle(
-                                                        fontSize: 12,
-                                                        color: Colors
-                                                            .grey
-                                                            .shade600,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 8,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: ratingColor
-                                                      .withOpacity(0.2),
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                                child: Text(
-                                                  averageRating,
-                                                  style: TextStyle(
-                                                    fontSize: 20,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: ratingColor,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            children: [
-                                              Icon(
-                                                Icons.touch_app,
-                                                size: 14,
-                                                color: Colors.grey.shade600,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                'Tryck för att se detaljer',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Colors.grey.shade600,
-                                                  fontStyle: FontStyle.italic,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            _showAssessments = !_showAssessments;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.star, color: Colors.amber.shade700),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Text(
+                                      'Bedömningar från handledare',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ),
-                                );
-                              }),
-                          ],
+                                  Icon(
+                                    _showAssessments
+                                        ? Icons.keyboard_arrow_up
+                                        : Icons.keyboard_arrow_down,
+                                    color: Colors.grey,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                assessments.isEmpty
+                                    ? 'Inga bedömningar än'
+                                    : '${assessments.length} bedömningar',
+                                style: TextStyle(
+                                  color: Colors.grey.shade700,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              if (!_showAssessments)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(
+                                    'Tryck för att se detaljer',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              if (_showAssessments) ...[
+                                const SizedBox(height: 14),
+                                if (assessments.isNotEmpty)
+                                  ...assessments.map((doc) {
+                                    final data = doc.data();
+                                    final averageRating =
+                                        data['averageRating'] as String? ?? '0';
+                                    final supervisorName =
+                                        data['supervisorName'] as String? ??
+                                        'Okänd';
+                                    final supervisorCompany =
+                                        data['supervisorCompany'] as String? ??
+                                        '';
+                                    final weeks =
+                                        (data['weeks'] as List?)
+                                            ?.cast<String>() ??
+                                        [];
+
+                                    Color ratingColor;
+                                    if (double.tryParse(averageRating) != null) {
+                                      final rating = double.parse(averageRating);
+                                      if (rating >= 4.5) {
+                                        ratingColor = Colors.green;
+                                      } else if (rating >= 3.5) {
+                                        ratingColor = Colors.lightGreen;
+                                      } else if (rating >= 2.5) {
+                                        ratingColor = Colors.orange;
+                                      } else {
+                                        ratingColor = Colors.red;
+                                      }
+                                    } else {
+                                      ratingColor = Colors.grey;
+                                    }
+
+                                    return InkWell(
+                                      onTap: () => _showAssessmentDetails(
+                                        context,
+                                        doc.id,
+                                        data,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Card(
+                                        color: Colors.grey.shade50,
+                                        margin: const EdgeInsets.only(
+                                          bottom: 12,
+                                        ),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(12),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment
+                                                        .spaceBetween,
+                                                children: [
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        Text(
+                                                          supervisorName,
+                                                          style:
+                                                              const TextStyle(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .bold,
+                                                                fontSize: 14,
+                                                              ),
+                                                        ),
+                                                        if (supervisorCompany
+                                                            .isNotEmpty)
+                                                          Text(
+                                                            supervisorCompany,
+                                                            style: TextStyle(
+                                                              fontSize: 12,
+                                                              color: Colors
+                                                                  .grey
+                                                                  .shade600,
+                                                            ),
+                                                          ),
+                                                        const SizedBox(
+                                                          height: 4,
+                                                        ),
+                                                        Text(
+                                                          weeks.join(', '),
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            color: Colors
+                                                                .grey
+                                                                .shade600,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 8,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color: ratingColor
+                                                          .withOpacity(0.2),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            8,
+                                                          ),
+                                                    ),
+                                                    child: Text(
+                                                      averageRating,
+                                                      style: TextStyle(
+                                                        fontSize: 20,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: ratingColor,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+                                              Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.touch_app,
+                                                    size: 14,
+                                                    color:
+                                                        Colors.grey.shade600,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    'Tryck för att se detaljer',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                      fontStyle:
+                                                          FontStyle.italic,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -504,6 +574,8 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
             },
           );
         },
+      )),
+        ],
       ),
     );
   }

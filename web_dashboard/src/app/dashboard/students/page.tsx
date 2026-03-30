@@ -269,24 +269,45 @@ export default function StudentsPage() {
           };
         });
 
-      const timesheetsSnapshot = await getDocs(collection(db, 'timesheets'));
-      const assessmentsSnapshot = await getDocs(collection(db, 'assessmentRequests'));
+      // Load stats collections defensively so a single permission error does not block student visibility.
+      let timesheetsDocs: any[] = [];
+      let assessmentDocs: any[] = [];
+      try {
+        if (isTeacher) {
+          const { query, where, collection } = await import('firebase/firestore');
+          const teacherTimesheetsSnapshot = await getDocs(
+            query(collection(db, 'timesheets'), where('teacherUid', '==', currentUserId))
+          );
+          timesheetsDocs = teacherTimesheetsSnapshot.docs;
+        } else {
+          const timesheetsSnapshot = await getDocs(collection(db, 'timesheets'));
+          timesheetsDocs = timesheetsSnapshot.docs;
+        }
+      } catch (error) {
+        console.warn('Could not fetch timesheets stats, continuing without them:', error);
+      }
+      try {
+        const assessmentsSnapshot = await getDocs(collection(db, 'assessmentRequests'));
+        assessmentDocs = assessmentsSnapshot.docs;
+      } catch (error) {
+        console.warn('Could not fetch assessment stats, continuing without them:', error);
+      }
       const studentIds = new Set(studentUsers.map(student => student.id));
       const filteredTimesheets = isTeacher
-        ? timesheetsSnapshot.docs.filter(doc => {
-            const data = doc.data();
-            const classId = (data.classId || '').toString();
-            const teacherUid = (data.teacherUid || '').toString();
-            const studentUid = (data.studentUid || '').toString();
-            return teacherUid === currentUserId || (classId && classIds.has(classId)) || studentIds.has(studentUid);
-          })
-        : timesheetsSnapshot.docs;
+        ? timesheetsDocs.filter(doc => studentIds.has((doc.data().studentUid || '').toString()))
+        : timesheetsDocs;
       const filteredAssessments = isTeacher
-        ? assessmentsSnapshot.docs.filter(doc => {
+        ? assessmentDocs.filter(doc => {
             const studentUid = (doc.data().studentUid || '').toString();
             return studentIds.has(studentUid);
           })
-        : assessmentsSnapshot.docs;
+        : assessmentDocs;
+
+      const teacherVisibleAssessments = filteredAssessments.filter(doc => {
+        const data = doc.data() || {};
+        const status = (data.status || '').toString().toLowerCase();
+        return status === 'submitted' || status === 'approved' || Boolean(data.averageRating);
+      });
       
       const studentsWithStats = studentUsers.map(student => {
         const studentTimesheets = filteredTimesheets.filter(
@@ -309,7 +330,7 @@ export default function StudentsPage() {
           });
         });
 
-        const studentAssessmentDocs = filteredAssessments.filter(
+        const studentAssessmentDocs = teacherVisibleAssessments.filter(
           doc => doc.data().studentUid === student.id
         );
         const uniqueWeeks = new Set<string>();

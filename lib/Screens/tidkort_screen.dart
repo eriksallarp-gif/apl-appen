@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../main.dart' show WeeklyTimesheetScreen;
+import 'weekly_timesheet_screen.dart';
 
 String _ymd(DateTime d) {
   String two(int n) => n.toString().padLeft(2, '0');
@@ -28,28 +28,46 @@ class TidkortScreen extends StatelessWidget {
         .doc(user.uid)
         .snapshots();
 
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: userDocStream,
-      builder: (context, userSnap) {
-        if (userSnap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
+    return Scaffold(
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                'Tidkort',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
+          Expanded(
+            child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: userDocStream,
+              builder: (context, userSnap) {
+                if (userSnap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-        final userData = userSnap.data?.data() ?? {};
-        final teacherUid = (userData['teacherUid'] ?? '').toString().trim();
-        final classId = (userData['classId'] ?? '').toString().trim();
+                final userData = userSnap.data?.data() ?? {};
+                final teacherUid = (userData['teacherUid'] ?? '').toString().trim();
+                final classId = (userData['classId'] ?? '').toString().trim();
 
-        if (teacherUid.isEmpty) {
-          return const Center(child: Text('Ingen lärare kopplad.'));
-        }
+                if (teacherUid.isEmpty) {
+                  return const Center(child: Text('Ingen lärare kopplad.'));
+                }
 
-        // Hämta veckkonfiguration för klassen och eleven
-        return _WeekEnabledLoader(
-          classId: classId,
-          studentUid: user.uid,
-          teacherUid: teacherUid,
-        );
-      },
+                return _WeekEnabledLoader(
+                  classId: classId,
+                  studentUid: user.uid,
+                  teacherUid: teacherUid,
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -90,16 +108,9 @@ class _WeekEnabledLoader extends StatelessWidget {
             // Bestäm vilka veckor som är aktiverade
             Map<int, bool> weekEnabled = {};
 
-            print('DEBUG TIDKORT: Checking override for student $studentUid');
-            print(
-              'DEBUG TIDKORT: Override exists: ${overrideSnap.data?.exists}',
-            );
-            print('DEBUG TIDKORT: Override data: ${overrideSnap.data?.data()}');
-
             if (overrideSnap.data?.exists == true) {
               // Använd elevens överskrivningar
               final rawData = overrideSnap.data?.data()?['weekEnabled'];
-              print('DEBUG TIDKORT: Using OVERRIDE weekEnabled: $rawData');
               if (rawData is Map) {
                 for (var entry in (rawData).entries) {
                   final key = int.tryParse(entry.key.toString());
@@ -112,7 +123,6 @@ class _WeekEnabledLoader extends StatelessWidget {
             } else if (classSnap.data?.exists == true) {
               // Använd klassens standard
               final rawData = classSnap.data?.data()?['weekEnabled'];
-              print('DEBUG TIDKORT: Using CLASS weekEnabled: $rawData');
               if (rawData is Map) {
                 for (var entry in (rawData).entries) {
                   final key = int.tryParse(entry.key.toString());
@@ -123,14 +133,6 @@ class _WeekEnabledLoader extends StatelessWidget {
                 }
               }
             }
-
-            print(
-              'DEBUG TIDKORT: Final weekEnabled has ${weekEnabled.length} weeks enabled',
-            );
-            print(
-              'DEBUG TIDKORT: Weeks: ${weekEnabled.keys.take(10).toList()}...',
-            );
-
             // Om ingen konfiguration finns, visa alla veckor
             if (weekEnabled.isEmpty) {
               return _TimesheetList(
@@ -277,21 +279,16 @@ class _TimesheetList extends StatelessWidget {
               final data = doc.data();
               final entries =
                   (data['entries'] as Map?)?.cast<String, dynamic>() ?? {};
-              print('DEBUG tidkort_screen: WeekStart=$weekStartStr');
-              print('DEBUG tidkort_screen: Entries har ${entries.length} aktiviteter');
-              print('DEBUG tidkort_screen: Entries = $entries');
               for (final row in entries.values) {
                 if (row is Map) {
                   for (final v in row.values) {
                     final hours = (v is int)
                         ? v
                         : int.tryParse(v.toString()) ?? 0;
-                    print('DEBUG tidkort_screen: Lägger till $hours timmar');
                     totalHours += hours;
                   }
                 }
               }
-              print('DEBUG tidkort_screen: Total = $totalHours timmar');
             }
 
             return Card(
