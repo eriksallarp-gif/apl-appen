@@ -62,6 +62,22 @@ class _StudentRegistrationScreenState extends State<StudentRegistrationScreen> {
                     _selectedStudentUids.clear();
                   }),
                 ),
+              const SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Klasshanteraren',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               _buildClassSelector(user.uid),
               Expanded(child: _buildStudentBody(user.uid)),
             ],

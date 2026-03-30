@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'dart:math';
 import 'dart:async';
+import 'core/program_catalog.dart';
 import 'firebase_options.dart';
 import 'Screens/tidkort_screen.dart';
 import 'Screens/start_screen.dart';
@@ -456,11 +457,11 @@ class AplApp extends StatelessWidget {
           seedColor: const Color(0xFFFF8A00),
           primary: const Color(0xFFFF6A00),
           secondary: const Color(0xFF5A3D33),
-          surface: const Color(0xFFF5F2EF),
+          surface: const Color(0xFFFFF8F2),
         ),
-        scaffoldBackgroundColor: const Color(0xFFF5F2EF),
+        scaffoldBackgroundColor: const Color(0xFFFFF8F2),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFF5F2EF),
+          backgroundColor: Color(0xFFFFF8F2),
           foregroundColor: Color(0xFF2A2421),
           centerTitle: false,
           elevation: 0,
@@ -531,7 +532,7 @@ class AplApp extends StatelessWidget {
           color: Color(0xFFFF6A00),
         ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          backgroundColor: Color(0xFFF5F2EF),
+          backgroundColor: Color(0xFFFFF8F2),
           selectedItemColor: Color(0xFFFF6A00),
           unselectedItemColor: Color(0xFF8B837D),
           type: BottomNavigationBarType.fixed,
@@ -593,20 +594,18 @@ class StudentOnboardingScreen extends StatefulWidget {
 
 class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   final _classCodeCtrl = TextEditingController();
+  late final Future<List<ProgramOption>> _programOptionsFuture;
+  String? _selectedProgram;
   String? _selectedSpecialization;
   bool _loading = false;
   String? _error;
-  int _step = 1; // 1 = klasskod, 2 = yrkesutgång
+  int _step = 1; // 1 = klasskod, 2 = program, 3 = yrkesutgång
 
-  final specializations = [
-    'Träarbetare',
-    'Murare',
-    'Målare',
-    'Plåtslagare',
-    'Elektriker',
-    'VVS',
-    'Anläggare',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _programOptionsFuture = loadProgramOptions();
+  }
 
   @override
   void dispose() {
@@ -686,7 +685,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
             'addedAt': FieldValue.serverTimestamp(),
           });
 
-      // Gå vidare till specialiseringsval
+      // Gå vidare till programval
       setState(() {
         _step = 2;
         _loading = false;
@@ -700,8 +699,40 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     }
   }
 
-  Future<void> _submitSpecialization() async {
-    if (_selectedSpecialization == null) {
+  Future<void> _submitProgram(List<ProgramOption> availablePrograms) async {
+    if (_selectedProgram == null) {
+      setState(() => _error = 'Välj ett program');
+      return;
+    }
+
+    final specializations = getSpecializationsForProgram(
+      _selectedProgram,
+      options: availablePrograms,
+    );
+
+    if (specializations.isEmpty) {
+      await _completeOnboarding(availablePrograms);
+      return;
+    }
+
+    setState(() {
+      _selectedSpecialization = null;
+      _error = null;
+      _step = 3;
+    });
+  }
+
+  Future<void> _completeOnboarding(List<ProgramOption> availablePrograms) async {
+    if (_selectedProgram == null) {
+      setState(() => _error = 'Välj ett program');
+      return;
+    }
+
+    final requiresSpecialization = programRequiresSpecialization(
+      _selectedProgram,
+      options: availablePrograms,
+    );
+    if (requiresSpecialization && _selectedSpecialization == null) {
       setState(() => _error = 'Välj en yrkesutgång');
       return;
     }
@@ -714,10 +745,19 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     try {
       final user = FirebaseAuth.instance.currentUser!;
 
-      // Uppdatera med yrkesutgång och markera onboarding som klar
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
-        {'specialization': _selectedSpecialization, 'onboardingComplete': true},
-      );
+      final updateData = <String, dynamic>{
+        'program': _selectedProgram,
+        'onboardingComplete': true,
+      };
+      if (_selectedSpecialization != null) {
+        updateData['specialization'] = _selectedSpecialization;
+      }
+
+      // Uppdatera med program och ev. yrkesutgång och markera onboarding som klar
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update(updateData);
 
       // Appen kommer automatiskt uppdatera sig via StreamBuilder
     } catch (e) {
@@ -748,7 +788,19 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
             constraints: const BoxConstraints(maxWidth: 500),
             child: _step == 1
                 ? _buildClassCodeStep()
-                : _buildSpecializationStep(),
+                : FutureBuilder<List<ProgramOption>>(
+                    future: _programOptionsFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final availablePrograms = snapshot.data ?? programOptions;
+                      return _step == 2
+                          ? _buildProgramStep(availablePrograms)
+                          : _buildSpecializationStep(availablePrograms);
+                    },
+                  ),
           ),
         ),
       ),
@@ -833,7 +885,101 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     );
   }
 
-  Widget _buildSpecializationStep() {
+  Widget _buildProgramStep(List<ProgramOption> availablePrograms) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Icon(Icons.school_outlined, size: 80, color: Colors.orange),
+                const SizedBox(height: 24),
+                const Text(
+                  'Välj ditt program',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Programvalet hjälper oss att senare visa rätt yrkesutgång och rätt innehåll.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 32),
+                ...availablePrograms.map((program) {
+                  final hasSpecializations = program.specializations.isNotEmpty;
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: RadioListTile<String>(
+                      value: program.name,
+                      groupValue: _selectedProgram,
+                      onChanged: _loading
+                          ? null
+                          : (value) {
+                              setState(() {
+                                _selectedProgram = value;
+                                _error = null;
+                              });
+                            },
+                      title: Text(
+                        program.name,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                      subtitle: Text(
+                        hasSpecializations
+                            ? 'Yrkesutgång väljs i nästa steg'
+                            : 'Yrkesutgång läggs till senare',
+                      ),
+                      controlAffinity: ListTileControlAffinity.trailing,
+                      activeColor: Colors.orange,
+                    ),
+                  );
+                }),
+                if (_error != null) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _loading
+                      ? null
+                      : () => _submitProgram(availablePrograms),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: _loading
+                      ? const CircularProgressIndicator()
+                      : Text(
+                          programRequiresSpecialization(
+                            _selectedProgram,
+                            options: availablePrograms,
+                          )
+                              ? 'Fortsätt'
+                              : 'Slutför',
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSpecializationStep(List<ProgramOption> availablePrograms) {
+    final specializations = getSpecializationsForProgram(
+      _selectedProgram,
+      options: availablePrograms,
+    );
+
     return LayoutBuilder(
       builder: (context, constraints) {
         return SingleChildScrollView(
@@ -851,10 +997,10 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Din yrkesutgång avgör vilka arbetsmoment du ser i tidkorten',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
+                  style: const TextStyle(color: Colors.grey),
                 ),
                 const SizedBox(height: 32),
                 ...specializations.map((spec) {
@@ -870,7 +1016,7 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                                 _selectedSpecialization = value;
                                 _error = null;
                               });
-                              _submitSpecialization();
+                              _completeOnboarding(availablePrograms);
                             },
                       title: Text(spec, style: const TextStyle(fontSize: 16)),
                       controlAffinity: ListTileControlAffinity.trailing,
@@ -2232,7 +2378,7 @@ class _StudentRegistrationDialogState
               ),
               const SizedBox(height: 8),
               const Text(
-                'Du kommer att ange klasskod och yrkesutgång efter att kontot skapats',
+                'Du kommer att ange klasskod, program och eventuell yrkesutgång efter att kontot skapats',
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
               if (_error != null) ...[
@@ -4609,8 +4755,8 @@ class _MainNavigationState extends State<MainNavigation> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
-      width: selected ? 48 : 40,
-      height: selected ? 48 : 40,
+      width: selected ? 44 : 36,
+      height: selected ? 44 : 36,
       decoration: BoxDecoration(
         color: selected ? const Color(0xFFFF6A00) : const Color(0xFFF3F1EE),
         shape: BoxShape.circle,
@@ -4626,7 +4772,7 @@ class _MainNavigationState extends State<MainNavigation> {
       ),
       child: Icon(
         icon,
-        size: selected ? 23 : 21,
+        size: selected ? 21 : 19,
         color: selected ? Colors.white : const Color(0xFF1E1A18),
       ),
     );
@@ -4636,10 +4782,10 @@ class _MainNavigationState extends State<MainNavigation> {
     return SafeArea(
       minimum: const EdgeInsets.fromLTRB(22, 0, 22, 10),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
         decoration: BoxDecoration(
           color: const Color(0xFFF8F7F5),
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: BorderRadius.circular(24),
           boxShadow: const [
             BoxShadow(
               color: Color(0x1F000000),
@@ -4648,17 +4794,22 @@ class _MainNavigationState extends State<MainNavigation> {
             ),
           ],
         ),
-        child: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          selectedItemColor: const Color(0xFFFF6A00),
-          unselectedItemColor: const Color(0xFF1E1A18),
-          showSelectedLabels: false,
-          showUnselectedLabels: false,
-          items: items,
+        child: SizedBox(
+          height: 56,
+          child: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: (index) => setState(() => _currentIndex = index),
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            selectedItemColor: const Color(0xFFFF6A00),
+            unselectedItemColor: const Color(0xFF1E1A18),
+            showSelectedLabels: false,
+            showUnselectedLabels: false,
+            selectedFontSize: 0,
+            unselectedFontSize: 0,
+            items: items,
+          ),
         ),
       ),
     );
@@ -4677,12 +4828,12 @@ class _MainNavigationState extends State<MainNavigation> {
 
   Widget _buildTeacherBottomNavigationBar() {
     return _buildStyledBottomNavigationBar([
-      _styledNavItem(icon: Icons.dashboard_rounded, label: 'Hem'),
+      _styledNavItem(icon: Icons.home_rounded, label: 'Hem'),
       _styledNavItem(icon: Icons.person_add_alt_1_rounded, label: 'Elever'),
-      _styledNavItem(icon: Icons.analytics_rounded, label: 'Statistik'),
+      _styledNavItem(icon: Icons.bar_chart_rounded, label: 'Statistik'),
       _styledNavItem(icon: Icons.calendar_today_rounded, label: 'Veckor'),
       if (_isAdmin) _styledNavItem(icon: Icons.school_rounded, label: 'Skolor'),
-      _styledNavItem(icon: Icons.settings_rounded, label: 'Inställningar'),
+      _styledNavItem(icon: Icons.person_outline_rounded, label: 'Profil'),
     ]);
   }
 

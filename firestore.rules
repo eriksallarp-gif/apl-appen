@@ -126,10 +126,16 @@
 
         // Timesheets collection
         match /timesheets/{timesheetId} {
+          function isOwnTimesheetPath() {
+            return isSignedIn() && isStudent() &&
+              timesheetId.matches('^' + request.auth.uid + '_.*$');
+          }
+
           // Students can only read their own timesheets.
           // Teachers can read timesheets belonging to their students.
           // Admins can read all.
           allow read: if isSignedIn() && (
+            isOwnTimesheetPath() ||
             request.auth.uid == resource.data.studentUid ||
             request.auth.uid == resource.data.teacherUid ||
             isAdmin()
@@ -290,6 +296,44 @@
 
           // Teachers and admins can update/delete documents (must be active)
           allow update, delete: if isUserActive() && isTeacherOrAdmin();
+        }
+
+        // App settings and shared catalogs
+        match /appSettings/{documentId} {
+          allow read: if isSignedIn();
+          allow create, update, delete: if isAdmin();
+        }
+
+        // Teacher-specific timesheet templates
+        match /timesheetTemplates/{templateId} {
+          allow read: if isSignedIn() && (
+            isAdmin() ||
+            (isTeacher() && templateId.matches('^' + request.auth.uid + '__.*$')) ||
+            (
+              isStudent() &&
+              templateId.matches(
+                '^' +
+                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teacherUid +
+                '__.*$'
+              )
+            )
+          );
+
+          allow create: if isSignedIn() && (
+            isAdmin() ||
+            (isTeacher() && request.resource.data.teacherUid == request.auth.uid)
+          );
+
+          allow update, delete: if isSignedIn() && (
+            isAdmin() ||
+            (isTeacher() && resource.data.teacherUid == request.auth.uid)
+          );
+        }
+
+        // Admin-managed default timesheet templates per program/specialization
+        match /defaultTimesheetTemplates/{templateId} {
+          allow read: if isSignedIn();
+          allow create, update, delete: if isAdmin();
         }
 
         // Assignments collection (uppgifter)

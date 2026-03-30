@@ -18,7 +18,8 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { usePathname } from 'next/navigation';
-import { Building2, ShieldCheck, Calendar, AlertTriangle, HardHat, Paperclip, FileText } from 'lucide-react';
+import { Building2, School, ShieldCheck, Calendar, AlertTriangle, HardHat, Paperclip, FileText } from 'lucide-react';
+import sharedCategories from '@/lib/aplDocumentCategories.json';
 
 interface AplDocument {
   id: string;
@@ -40,14 +41,21 @@ interface UserProfile {
   teacherId?: string;
 }
 
-const CATEGORIES = [
-  { id: 'kontakt_foretag', name: 'Kontakt företag', icon: Building2, emoji: '🏢' },
-  { id: 'forsakringar', name: 'Försäkringar', icon: ShieldCheck, emoji: '🛡️' },
-  { id: 'apl_tider', name: 'APL-tider för läsår', icon: Calendar, emoji: '📅' },
-  { id: 'skadeanmalan', name: 'Skadeanmälan', icon: AlertTriangle, emoji: '⚠️' },
-  { id: 'arbetsmiljoverket', name: 'Arbetsmiljöverket', icon: HardHat, emoji: '🏗️' },
-  { id: 'ovrigt', name: 'Övrigt', icon: Paperclip, emoji: '📎' },
-];
+const CATEGORY_VISUALS = {
+  kontakt_foretag: { icon: Building2, emoji: '🏢' },
+  kontakt_skola: { icon: School, emoji: '🏫' },
+  forsakringar: { icon: ShieldCheck, emoji: '🛡️' },
+  apl_tider: { icon: Calendar, emoji: '📅' },
+  skadeanmalan: { icon: AlertTriangle, emoji: '⚠️' },
+  arbetsmiljoverket: { icon: HardHat, emoji: '🏗️' },
+  ovrigt: { icon: Paperclip, emoji: '📎' },
+} as const;
+
+const CATEGORIES = sharedCategories.map((category) => ({
+  ...category,
+  icon: CATEGORY_VISUALS[category.id as keyof typeof CATEGORY_VISUALS]?.icon ?? FileText,
+  emoji: CATEGORY_VISUALS[category.id as keyof typeof CATEGORY_VISUALS]?.emoji ?? '📄',
+}));
 
 export default function DocumentsPage() {
   const [user, setUser] = useState<any>(null);

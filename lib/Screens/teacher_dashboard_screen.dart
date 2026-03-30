@@ -12,72 +12,108 @@ class TeacherDashboardScreen extends StatefulWidget {
 }
 
 class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) {
+      return 'God morgon';
+    } else if (hour < 18) {
+      return 'God eftermiddag';
+    } else {
+      return 'God kväll';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser!;
+
     return Scaffold(
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Välkomstmeddelande
-              const SizedBox(height: 16),
-              const Text(
-                'Lärarvy',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Översikt och status',
-                style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 32),
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .snapshots(),
+        builder: (context, userSnap) {
+          if (userSnap.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-              // Status-kort
-              _buildStatusCard(),
-              const SizedBox(height: 32),
+          final userData = userSnap.data?.data() ?? {};
+          final displayName = (userData['displayName'] ?? '').toString().trim();
 
-              // Instruktioner
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.shade200),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Så här använder du lärarvyn:',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+          return SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SafeArea(bottom: false, child: SizedBox(height: 8)),
+                  Text(
+                    _getGreeting(),
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey.shade600,
                     ),
-                    const SizedBox(height: 12),
-                    _buildInstructionItem(
-                      '1. Lägg till elever i klasser och tilldela roller',
+                  ),
+                  Text(
+                    displayName.isEmpty ? 'Där' : displayName,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
                     ),
-                    _buildInstructionItem(
-                      '2. Eleverna fyller i tidkort varje vecka',
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Översikt och status',
+                    style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                  ),
+                  const SizedBox(height: 32),
+
+                  _buildStatusCard(),
+                  const SizedBox(height: 32),
+
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
                     ),
-                    _buildInstructionItem(
-                      '3. Granska och godkänn tidkortet + ersättning',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Så här använder du lärarvyn:',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _buildInstructionItem(
+                          '1. Lägg till elever i klasser och tilldela roller',
+                        ),
+                        _buildInstructionItem(
+                          '2. Eleverna fyller i tidkort varje vecka',
+                        ),
+                        _buildInstructionItem(
+                          '3. Granska och godkänn tidkortet + ersättning',
+                        ),
+                        _buildInstructionItem(
+                          '4. Låsa kortet så elev inte kan ändra',
+                        ),
+                        _buildInstructionItem(
+                          '5. Övervaka elevernas totala timmar',
+                        ),
+                      ],
                     ),
-                    _buildInstructionItem(
-                      '4. Låsa kortet så elev inte kan ändra',
-                    ),
-                    _buildInstructionItem(
-                      '5. Övervaka elevernas totala timmar',
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }

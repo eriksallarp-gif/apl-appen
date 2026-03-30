@@ -1,4 +1,4 @@
-type ActivityGroup = {
+export type ActivityGroup = {
   group: string;
   items: string[];
 };
@@ -113,6 +113,72 @@ export function getActivityTemplateBySpecialization(specialization?: string): Ac
     default:
       return activityTemplateTrabetare;
   }
+}
+
+export function getActivityTemplate(
+  specialization?: string,
+  program?: string,
+): ActivityGroup[] {
+  switch (specialization) {
+    case 'Träarbetare':
+      return activityTemplateTrabetare;
+    case 'Murare':
+      return activityTemplateMurare;
+    case 'Målare':
+      return activityTemplateMalare;
+    case 'Anläggare':
+      return activityTemplateAnlaggare;
+    case 'VVS':
+      return activityTemplateVVS;
+    case 'Plåtslagare':
+      return activityTemplatePlatslagare;
+    case 'Elektriker':
+      return activityTemplateDefault;
+    default:
+      if (!program) {
+        return activityTemplateTrabetare;
+      }
+      if (program === 'Bygg- och anläggningsprogrammet') {
+        return activityTemplateTrabetare;
+      }
+      return activityTemplateDefault;
+  }
+}
+
+export function hasBuiltInActivityTemplate(
+  specialization?: string,
+  program?: string,
+): boolean {
+  switch (specialization) {
+    case 'Träarbetare':
+    case 'Murare':
+    case 'Målare':
+    case 'Anläggare':
+    case 'VVS':
+    case 'Plåtslagare':
+    case 'Elektriker':
+      return true;
+    default:
+      return program === 'Bygg- och anläggningsprogrammet' && !specialization;
+  }
+}
+
+export function getBuiltInActivityTemplate(
+  specialization?: string,
+  program?: string,
+): ActivityGroup[] {
+  if (!hasBuiltInActivityTemplate(specialization, program)) {
+    return [];
+  }
+
+  return getActivityTemplate(specialization, program);
+}
+
+export function cloneActivityTemplate(groups: ActivityGroup[]): ActivityGroup[] {
+  return groups.map((group) => ({
+    group: group.group,
+    items: [...group.items],
+  }));
 }
 
 export function parseScopedActivityKey(activityKey: string): { group?: string; item: string } {

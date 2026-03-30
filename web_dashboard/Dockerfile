@@ -46,7 +46,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 # Copy built app from builder
-COPY --from=builder /app/.next-dev ./.next-dev
+COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/server.js ./server.js
 COPY --from=builder /app/next.config.js ./next.config.js
 

@@ -37,6 +37,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { href: '/dashboard/students', label: 'Elever', match: (p: string) => p.startsWith('/dashboard/students') },
         { href: '/dashboard/schools', label: 'Skolor', match: (p: string) => p.startsWith('/dashboard/schools') },
         { href: '/dashboard/admin', label: 'Lärare', match: (p: string) => p.startsWith('/dashboard/admin') },
+        { href: '/dashboard/programs', label: 'Program', match: (p: string) => p.startsWith('/dashboard/programs') },
+        { href: '/dashboard/tidkort', label: 'Tidkort', match: (p: string) => p.startsWith('/dashboard/tidkort') },
         { href: '/dashboard/settings', label: 'Inställningar', match: (p: string) => p === '/dashboard/settings' || p.startsWith('/dashboard/settings/') },
       ]
     : [
@@ -45,6 +47,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         ...(isTeacher ? [
           { href: '/dashboard/veckohanterare', label: 'Veckohanterare', match: (p: string) => p.startsWith('/dashboard/veckohanterare') },
           { href: '/dashboard/klasser', label: 'Klasser', match: (p: string) => p.startsWith('/dashboard/klasser') },
+          { href: '/dashboard/tidkort', label: 'Tidkort', match: (p: string) => p.startsWith('/dashboard/tidkort') },
           { href: '/dashboard/assignments', label: 'Uppgifter', match: (p: string) => p.startsWith('/dashboard/assignments') },
         ] : []),
         { href: '/dashboard/companies', label: 'Företag', match: (p: string) => p.startsWith('/dashboard/companies') },

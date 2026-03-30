@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:apl_appen/core/program_catalog.dart';
 
 const activityTemplateTrabetare = <Map<String, dynamic>>[
   {
@@ -164,7 +165,121 @@ const activityTemplateDefault = <Map<String, dynamic>>[
   },
 ];
 
-List<Map<String, dynamic>> getActivityTemplate(String? specialization) {
+String _buildTimesheetTemplateId(
+  String teacherUid,
+  String? program,
+  String? specialization,
+) {
+  final normalizedProgram = Uri.encodeComponent((program ?? '').trim());
+  final normalizedSpecialization = Uri.encodeComponent(
+    (specialization ?? '').trim(),
+  );
+  return '${teacherUid}__${normalizedProgram}__${normalizedSpecialization}';
+}
+
+String _buildDefaultTimesheetTemplateId(
+  String? program,
+  String? specialization,
+) {
+  final normalizedProgram = Uri.encodeComponent((program ?? '').trim());
+  final normalizedSpecialization = Uri.encodeComponent(
+    (specialization ?? '').trim(),
+  );
+  return '${normalizedProgram}__${normalizedSpecialization}';
+}
+
+List<Map<String, dynamic>>? _parseStoredActivityTemplate(dynamic rawGroups) {
+  if (rawGroups is! List) return null;
+
+  final parsedGroups = <Map<String, dynamic>>[];
+
+  for (final rawGroup in rawGroups) {
+    if (rawGroup is! Map) continue;
+
+    final groupName = (rawGroup['group'] ?? '').toString().trim();
+    if (groupName.isEmpty) continue;
+
+    final rawItems = rawGroup['items'];
+    if (rawItems is! List) continue;
+
+    final items = <String>[];
+    final seenItems = <String>{};
+
+    for (final rawItem in rawItems) {
+      if (rawItem is! Map) continue;
+
+      final enabled = rawItem['enabled'] != false;
+      if (!enabled) continue;
+
+      final itemName = (rawItem['name'] ?? '').toString().trim();
+      if (itemName.isEmpty) continue;
+
+      final normalizedItemName = itemName.toLowerCase();
+      if (seenItems.contains(normalizedItemName)) continue;
+      seenItems.add(normalizedItemName);
+      items.add(itemName);
+    }
+
+    if (items.isEmpty) continue;
+
+    parsedGroups.add({
+      'group': groupName,
+      'items': items,
+    });
+  }
+
+  return parsedGroups.isEmpty ? null : parsedGroups;
+}
+
+Future<List<Map<String, dynamic>>?> loadTeacherActivityTemplate({
+  required String teacherUid,
+  String? program,
+  String? specialization,
+}) async {
+  try {
+    final templateId = _buildTimesheetTemplateId(
+      teacherUid,
+      program,
+      specialization,
+    );
+
+    final doc = await FirebaseFirestore.instance
+        .collection('timesheetTemplates')
+        .doc(templateId)
+        .get();
+
+    if (!doc.exists) return null;
+
+    return _parseStoredActivityTemplate(doc.data()?['groups']);
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<List<Map<String, dynamic>>?> loadDefaultActivityTemplate({
+  String? program,
+  String? specialization,
+}) async {
+  try {
+    final templateId = _buildDefaultTimesheetTemplateId(program, specialization);
+
+    final doc = await FirebaseFirestore.instance
+        .collection('defaultTimesheetTemplates')
+        .doc(templateId)
+        .get();
+
+    if (!doc.exists) return null;
+
+    return _parseStoredActivityTemplate(doc.data()?['groups']);
+  } catch (_) {
+    return null;
+  }
+}
+
+List<Map<String, dynamic>> getActivityTemplate(
+  String? specialization, {
+  String? program,
+}) {
   switch (specialization) {
     case 'Träarbetare':
       return activityTemplateTrabetare;
@@ -181,7 +296,13 @@ List<Map<String, dynamic>> getActivityTemplate(String? specialization) {
     case 'Elektriker':
       return activityTemplateDefault;
     default:
-      return activityTemplateTrabetare;
+      if (program == null || program.isEmpty) {
+        return activityTemplateTrabetare;
+      }
+      if (program == 'Bygg- och anläggningsprogrammet') {
+        return activityTemplateTrabetare;
+      }
+      return activityTemplateDefault;
   }
 }
 
@@ -302,14 +423,17 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
     return normalized;
   }
 
+  bool _computeHasUnsavedChanges() {
+    final currentEntries = _buildEntries();
+    final currentComments = _buildComments();
+    return !_mapsDeepEqual(currentEntries, _lastSavedEntries) ||
+        !_mapsDeepEqual(currentComments, _lastSavedComments);
+  }
+
   void _recomputeUnsavedState() {
     if (_isProgrammaticControllerUpdate) return;
 
-    final currentEntries = _buildEntries();
-    final currentComments = _buildComments();
-    final hasChanges =
-        !_mapsDeepEqual(currentEntries, _lastSavedEntries) ||
-        !_mapsDeepEqual(currentComments, _lastSavedComments);
+    final hasChanges = _computeHasUnsavedChanges();
 
     if (hasChanges != _hasUnsavedChanges && mounted) {
       setState(() {
@@ -319,7 +443,7 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
   }
 
   Future<bool> _confirmDiscardIfNeeded({required bool effectiveReadOnly}) async {
-    if (effectiveReadOnly || !_hasUnsavedChanges) return true;
+    if (effectiveReadOnly || !_computeHasUnsavedChanges()) return true;
 
     final shouldLeave =
         await showDialog<bool>(
@@ -352,6 +476,7 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
     if (_controllersInitialized) return;
 
     String? specialization = widget.specialization;
+    String? program;
 
     if (specialization == null) {
       try {
@@ -360,12 +485,29 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
             .doc(widget.studentUid)
             .get();
         specialization = userDoc.data()?['specialization'] as String?;
+        program =
+            (userDoc.data()?['program'] as String?) ??
+            inferProgramFromSpecialization(specialization);
       } catch (e) {
         print('Kunde inte hämta specialisering: $e');
       }
     }
 
-    _activityTemplate = getActivityTemplate(specialization);
+    final customTemplate = await loadTeacherActivityTemplate(
+      teacherUid: widget.teacherUid,
+      program: program,
+      specialization: specialization,
+    );
+
+    final defaultTemplate = await loadDefaultActivityTemplate(
+      program: program,
+      specialization: specialization,
+    );
+
+    _activityTemplate =
+        customTemplate ??
+        defaultTemplate ??
+        getActivityTemplate(specialization, program: program);
 
     for (final g in _activityTemplate!) {
       final group = (g['group'] ?? '').toString();
@@ -449,20 +591,6 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
       _msg = null;
     });
     final docId = '${widget.studentUid}_${widget.weekStart}';
-    final snap = await FirebaseFirestore.instance
-        .collection('timesheets')
-        .doc(docId)
-        .get();
-    final approved = (snap.data()?['approved'] ?? false) == true;
-    final locked = (snap.data()?['locked'] ?? false) == true;
-
-    if (approved || locked) {
-      setState(() {
-        _msg = 'Tidkortet är godkänt och låst.';
-        _saving = false;
-      });
-      return;
-    }
 
     try {
       String classId = widget.classId ?? '';
@@ -474,18 +602,10 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
         classId = userDoc.data()?['classId'] ?? '';
       }
 
-      final existingDoc = await FirebaseFirestore.instance
-          .collection('timesheets')
-          .doc(docId)
-          .get();
-
-      final existingData = existingDoc.data() ?? {};
-
       final builtEntries = _buildEntries();
       final builtComments = _buildComments();
 
       final updatedData = <String, dynamic>{
-        ...existingData,
         'studentUid': widget.studentUid,
         'teacherUid': widget.teacherUid,
         'classId': classId,
@@ -495,26 +615,24 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      updatedData.putIfAbsent('approved', () => false);
-      updatedData.putIfAbsent('locked', () => false);
-
       await FirebaseFirestore.instance
           .collection('timesheets')
           .doc(docId)
-          .set(updatedData);
+          .set(updatedData, SetOptions(merge: true));
 
-      _lastSavedEntries = builtEntries;
-      _lastSavedComments = builtComments;
+      _lastSavedEntries = _normalizeEntries(builtEntries);
+      _lastSavedComments = _normalizeComments(builtComments);
+      final hasUnsavedChanges = _computeHasUnsavedChanges();
 
       setState(() {
         _msg = 'Sparat ✅';
-        _hasUnsavedChanges = false;
+        _hasUnsavedChanges = hasUnsavedChanges;
       });
     } catch (e) {
       var errorMsg = 'Fel: $e';
       if (e.toString().contains('permission-denied')) {
         errorMsg =
-            'Kan inte spara: Du saknar rättigheter att redigera detta tidkort. Kontakta din lärare.';
+            'Kan inte spara tidkortet just nu. Om problemet kvarstår behöver Firestore-reglerna uppdateras för elevens egna tidkort.';
       }
       setState(() => _msg = errorMsg);
     } finally {
@@ -548,6 +666,8 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
             final approved = (data?['approved'] ?? false) as bool;
             final locked = (data?['locked'] ?? false) as bool;
             final effectiveReadOnly = widget.readOnly || approved || locked;
+            final hasUnsavedChanges =
+              !effectiveReadOnly && _computeHasUnsavedChanges();
 
             if (!_hydratedFromFirestore && snap.hasData) {
               _isProgrammaticControllerUpdate = true;
@@ -912,24 +1032,6 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
                           ),
                           const SizedBox(height: 16),
                         ],
-                        if (!effectiveReadOnly && _hasUnsavedChanges) ...[
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.shade50,
-                              border: Border.all(color: Colors.amber.shade200),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              'Du har osparade ändringar. Tryck på Spara innan du lämnar tidkortet.',
-                              style: TextStyle(
-                                color: Colors.amber.shade900,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
                         const Text(
                           'Arbetssyssla',
                           style: TextStyle(
@@ -1044,6 +1146,7 @@ class _TimesheetRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
+        color: Colors.white,
         border: Border.all(color: Colors.grey.shade200, width: 1),
         borderRadius: BorderRadius.circular(10),
       ),

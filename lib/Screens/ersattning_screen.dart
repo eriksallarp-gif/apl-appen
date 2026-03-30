@@ -156,7 +156,7 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                               Row(
                                 children: [
                                   Icon(
-                                    Icons.access_time,
+                                    Icons.access_time_rounded,
                                     color: Colors.orange.shade700,
                                   ),
                                   const SizedBox(width: 8),
@@ -171,8 +171,8 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                                   ),
                                   Icon(
                                     _showActivityBreakdown
-                                        ? Icons.keyboard_arrow_up
-                                        : Icons.keyboard_arrow_down,
+                                      ? Icons.keyboard_arrow_up_rounded
+                                      : Icons.keyboard_arrow_down_rounded,
                                     color: Colors.grey,
                                   ),
                                 ],
@@ -277,7 +277,7 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                             Row(
                               children: [
                                 Icon(
-                                  Icons.restaurant,
+                                  Icons.receipt_long_rounded,
                                   color: Colors.green.shade700,
                                 ),
                                 const SizedBox(width: 8),
@@ -295,7 +295,7 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                               Row(
                                 children: [
                                   Icon(
-                                    Icons.lunch_dining,
+                                    Icons.restaurant_outlined,
                                     size: 20,
                                     color: Colors.grey.shade600,
                                   ),
@@ -319,7 +319,7 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                               Row(
                                 children: [
                                   Icon(
-                                    Icons.directions_car,
+                                    Icons.directions_car_outlined,
                                     size: 20,
                                     color: Colors.grey.shade600,
                                   ),
@@ -367,7 +367,10 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                             children: [
                               Row(
                                 children: [
-                                  Icon(Icons.star, color: Colors.amber.shade700),
+                                  Icon(
+                                    Icons.star_rounded,
+                                    color: Colors.amber.shade700,
+                                  ),
                                   const SizedBox(width: 8),
                                   const Expanded(
                                     child: Text(
@@ -380,8 +383,8 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                                   ),
                                   Icon(
                                     _showAssessments
-                                        ? Icons.keyboard_arrow_up
-                                        : Icons.keyboard_arrow_down,
+                                      ? Icons.keyboard_arrow_up_rounded
+                                      : Icons.keyboard_arrow_down_rounded,
                                     color: Colors.grey,
                                   ),
                                 ],
@@ -651,7 +654,11 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  const Icon(Icons.lunch_dining, size: 16, color: Colors.grey),
+                  const Icon(
+                    Icons.restaurant_outlined,
+                    size: 16,
+                    color: Colors.grey,
+                  ),
                   const SizedBox(width: 4),
                   Text('$lunchApproved luncher'),
                 ],
@@ -660,7 +667,7 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
               Row(
                 children: [
                   const Icon(
-                    Icons.directions_car,
+                    Icons.directions_car_outlined,
                     size: 16,
                     color: Colors.grey,
                   ),

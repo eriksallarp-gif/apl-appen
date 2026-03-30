@@ -252,7 +252,7 @@ class _TimesheetList extends StatelessWidget {
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
           itemCount: weekItems.length,
           itemBuilder: (context, index) {
             final item = weekItems[index];
@@ -301,7 +301,7 @@ class _TimesheetList extends StatelessWidget {
                     : BorderSide(color: Colors.grey.shade200, width: 1),
               ),
               child: ListTile(
-                contentPadding: const EdgeInsets.all(16),
+                contentPadding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                 title: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -339,31 +339,17 @@ class _TimesheetList extends StatelessWidget {
                         if (locked)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
+                              horizontal: 9,
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
                               color: Colors.red.shade100,
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.lock,
-                                  size: 12,
-                                  color: Colors.red.shade700,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Låst',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.red.shade700,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
+                            child: Icon(
+                              Icons.lock_outline_rounded,
+                              size: 15,
+                              color: Colors.red.shade700,
                             ),
                           )
                         else if (approved)

@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class _UserScope {
@@ -45,28 +48,111 @@ Future<_UserScope> _resolveUserScope(String uid) async {
   return _UserScope(school: school, teacherId: teacherId);
 }
 
+class _AplDocumentCategory {
+  final String id;
+  final String name;
+  final IconData icon;
+
+  const _AplDocumentCategory({
+    required this.id,
+    required this.name,
+    required this.icon,
+  });
+}
+
+IconData _iconForCategory(String id) {
+  switch (id) {
+    case 'kontakt_foretag':
+      return Icons.business_outlined;
+    case 'kontakt_skola':
+      return Icons.school_outlined;
+    case 'forsakringar':
+      return Icons.verified_user_outlined;
+    case 'apl_tider':
+      return Icons.calendar_today_rounded;
+    case 'skadeanmalan':
+      return Icons.warning_amber_rounded;
+    case 'arbetsmiljoverket':
+      return Icons.health_and_safety_outlined;
+    case 'ovrigt':
+      return Icons.attach_file_rounded;
+    default:
+      return Icons.insert_drive_file_outlined;
+  }
+}
+
+const _fallbackCategories = [
+  _AplDocumentCategory(
+    id: 'kontakt_foretag',
+    name: 'Kontakt företag',
+    icon: Icons.business_outlined,
+  ),
+  _AplDocumentCategory(
+    id: 'kontakt_skola',
+    name: 'Kontakt skola',
+    icon: Icons.school_outlined,
+  ),
+  _AplDocumentCategory(
+    id: 'forsakringar',
+    name: 'Försäkringar',
+    icon: Icons.verified_user_outlined,
+  ),
+  _AplDocumentCategory(
+    id: 'apl_tider',
+    name: 'APL-tider för läsår',
+    icon: Icons.calendar_today_rounded,
+  ),
+  _AplDocumentCategory(
+    id: 'skadeanmalan',
+    name: 'Skadeanmälan',
+    icon: Icons.warning_amber_rounded,
+  ),
+  _AplDocumentCategory(
+    id: 'arbetsmiljoverket',
+    name: 'Arbetsmiljöverket',
+    icon: Icons.health_and_safety_outlined,
+  ),
+  _AplDocumentCategory(
+    id: 'ovrigt',
+    name: 'Övrigt',
+    icon: Icons.attach_file_rounded,
+  ),
+];
+
+Future<List<_AplDocumentCategory>> _loadAplDocumentCategories() async {
+  try {
+    final rawJson = await rootBundle.loadString(
+      'web_dashboard/src/lib/aplDocumentCategories.json',
+    );
+    final decoded = jsonDecode(rawJson);
+    if (decoded is! List) return _fallbackCategories;
+
+    final categories = decoded
+        .whereType<Map>()
+        .map((entry) {
+          final id = (entry['id'] ?? '').toString().trim();
+          final name = (entry['name'] ?? '').toString().trim();
+          if (id.isEmpty || name.isEmpty) return null;
+          return _AplDocumentCategory(
+            id: id,
+            name: name,
+            icon: _iconForCategory(id),
+          );
+        })
+        .whereType<_AplDocumentCategory>()
+        .toList();
+
+    return categories.isEmpty ? _fallbackCategories : categories;
+  } catch (_) {
+    return _fallbackCategories;
+  }
+}
+
+final Future<List<_AplDocumentCategory>> _aplDocumentCategoriesFuture =
+    _loadAplDocumentCategories();
+
 class AplDocumentsScreen extends StatelessWidget {
   const AplDocumentsScreen({super.key});
-
-  static const categories = [
-    {
-      'id': 'kontakt_foretag',
-      'name': 'Kontakt företag',
-      'icon': Icons.business,
-    },
-    {'id': 'forsakringar', 'name': 'Försäkringar', 'icon': Icons.shield},
-    {
-      'id': 'apl_tider',
-      'name': 'APL-tider för läsår',
-      'icon': Icons.calendar_today,
-    },
-    {'id': 'skadeanmalan', 'name': 'Skadeanmälan', 'icon': Icons.warning},
-    {
-      'id': 'arbetsmiljoverket',
-      'name': 'Arbetsmiljöverket',
-      'icon': Icons.health_and_safety,
-    },
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -88,22 +174,32 @@ class AplDocumentsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Expanded(
-              child: ListView.separated(
-                itemCount: categories.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final category = categories[index];
-                  final categoryId = category['id'] as String;
-                  if (categoryId == 'kontakt_foretag') {
-                    return _ContactCompanyCard(
-                      categoryName: category['name'] as String,
-                      icon: category['icon'] as IconData,
-                    );
+              child: FutureBuilder<List<_AplDocumentCategory>>(
+                future: _aplDocumentCategoriesFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
                   }
-                  return _CategoryCard(
-                    categoryId: categoryId,
-                    categoryName: category['name'] as String,
-                    icon: category['icon'] as IconData,
+
+                  final categories = snapshot.data ?? _fallbackCategories;
+
+                  return ListView.separated(
+                    itemCount: categories.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final category = categories[index];
+                      if (category.id == 'kontakt_foretag') {
+                        return _ContactCompanyCard(
+                          categoryName: category.name,
+                          icon: category.icon,
+                        );
+                      }
+                      return _CategoryCard(
+                        categoryId: category.id,
+                        categoryName: category.name,
+                        icon: category.icon,
+                      );
+                    },
                   );
                 },
               ),
@@ -222,8 +318,8 @@ class _SimpleCard extends StatelessWidget {
                 ),
               ),
               Icon(
-                Icons.arrow_forward_ios,
-                size: 16,
+                Icons.chevron_right_rounded,
+                size: 20,
                 color: Colors.grey.shade400,
               ),
             ],
@@ -327,13 +423,13 @@ class CompanyContactScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     if (contact != null && contact.isNotEmpty)
-                      _InfoRow(icon: Icons.person, label: contact),
+                      _InfoRow(icon: Icons.person_outline_rounded, label: contact),
                     if (address != null && address.isNotEmpty)
-                      _InfoRow(icon: Icons.location_on, label: address),
+                      _InfoRow(icon: Icons.location_on_outlined, label: address),
                     if (phone != null && phone.isNotEmpty)
-                      _InfoRow(icon: Icons.phone, label: phone),
+                      _InfoRow(icon: Icons.phone_outlined, label: phone),
                     if (email != null && email.isNotEmpty)
-                      _InfoRow(icon: Icons.email, label: email),
+                      _InfoRow(icon: Icons.mail_outline_rounded, label: email),
                   ],
                 ),
               ),
@@ -497,8 +593,8 @@ class _CategoryCard extends StatelessWidget {
                         ),
                       ),
                       Icon(
-                        Icons.arrow_forward_ios,
-                        size: 16,
+                        Icons.chevron_right_rounded,
+                        size: 18,
                         color: Colors.grey.shade400,
                       ),
                     ],
@@ -557,20 +653,20 @@ class CategoryDocumentsScreen extends StatelessWidget {
   }
 
   IconData _getFileIcon(String? fileType) {
-    if (fileType == null) return Icons.insert_drive_file;
+    if (fileType == null) return Icons.insert_drive_file_outlined;
 
-    if (fileType.contains('pdf')) return Icons.picture_as_pdf;
-    if (fileType.contains('doc')) return Icons.description;
+    if (fileType.contains('pdf')) return Icons.picture_as_pdf_outlined;
+    if (fileType.contains('doc')) return Icons.description_outlined;
     if (fileType.contains('image') ||
         fileType.contains('jpg') ||
         fileType.contains('png')) {
-      return Icons.image;
+      return Icons.image_outlined;
     }
     if (fileType.contains('excel') || fileType.contains('spreadsheet')) {
-      return Icons.table_chart;
+      return Icons.table_chart_outlined;
     }
 
-    return Icons.insert_drive_file;
+    return Icons.insert_drive_file_outlined;
   }
 
   @override
@@ -648,7 +744,7 @@ class CategoryDocumentsScreen extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      Icons.folder_open,
+                      Icons.folder_open_rounded,
                       size: 64,
                       color: Colors.grey.shade300,
                     ),
@@ -739,7 +835,7 @@ class CategoryDocumentsScreen extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Icon(
-                          Icons.open_in_new,
+                          Icons.open_in_new_rounded,
                           size: 20,
                           color: Colors.grey.shade400,
                         ),

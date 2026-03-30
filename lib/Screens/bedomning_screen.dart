@@ -159,12 +159,12 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   const Text(
-                    'Välj tidkort att bedöma',
+                    'Välj tidkort för att skapa en bedömning',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Välj ett eller flera tidkort som ska ingå i bedömningen',
+                    'Välj ett eller flera tidkort som ska ingå i bedömningen, när du valt tidkort kan du välja att lägga till information om ersättning, självskattning och bilder från din APL-period.',
                     style: TextStyle(color: Colors.grey),
                   ),
                   const SizedBox(height: 16),
@@ -201,44 +201,86 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                       statusText = 'Inväntar godkännande';
                     }
 
-                    return CheckboxListTile(
-                      value: isSelected,
-                      enabled: !isLocked, // Inaktivera om låst
-                      onChanged: isLocked
+                    return GestureDetector(
+                      onTap: isLocked
                           ? null
-                          : (selected) {
+                          : () {
                               setState(() {
-                                if (selected == true) {
-                                  _selectedTimesheetIds.add(doc.id);
-                                } else {
+                                if (isSelected) {
                                   _selectedTimesheetIds.remove(doc.id);
+                                } else {
+                                  _selectedTimesheetIds.add(doc.id);
                                 }
                               });
                             },
-                      title: Text(
-                        weekDisplay,
-                        style: TextStyle(color: isLocked ? Colors.grey : null),
-                      ),
-                      subtitle: Text(
-                        statusText,
-                        style: TextStyle(
-                          color: isLocked
-                              ? Colors.grey
-                              : (isApproved ? Colors.green : Colors.orange),
-                          fontWeight: isLocked
-                              ? FontWeight.bold
-                              : FontWeight.normal,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? const Color(0xFFE56A00) // Orange highlight when selected
+                              : Colors.white, // White when not selected
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isLocked
+                                ? Colors.grey.shade300
+                                : (isSelected ? const Color(0xFFE56A00) : Colors.grey.shade300),
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
-                      ),
-                      secondary: Icon(
-                        isLocked
-                            ? Icons.lock
-                            : (isApproved
-                                  ? Icons.check_circle
-                                  : Icons.schedule),
-                        color: isLocked
-                            ? Colors.grey
-                            : (isApproved ? Colors.green : Colors.orange),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    weekDisplay,
+                                    style: TextStyle(
+                                      color: isLocked
+                                          ? Colors.grey
+                                          : (isSelected ? Colors.white : Colors.black),
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    statusText,
+                                    style: TextStyle(
+                                      color: isLocked
+                                          ? Colors.grey
+                                          : (isApproved
+                                              ? Colors.green
+                                              : (isSelected ? Colors.white : Colors.orange)),
+                                      fontWeight: isLocked ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              isLocked
+                                ? Icons.lock_outline_rounded
+                                  : (isApproved
+                                  ? Icons.check_circle_rounded
+                                  : Icons.schedule_rounded),
+                              color: isLocked
+                                  ? Colors.grey
+                                  : (isApproved
+                                      ? Colors.green
+                                      : (isSelected ? Colors.white : Colors.orange)),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   }),

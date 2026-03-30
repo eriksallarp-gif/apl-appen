@@ -18,124 +18,135 @@ class _WeekManagementScreenState extends State<WeekManagementScreen> {
     final user = FirebaseAuth.instance.currentUser!;
 
     return Scaffold(
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 16),
-              const Text(
-                'Vecko-styrning',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                'Vecko-hantering',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Bestäm vilka veckor eleverna kan fylla i tidkort',
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-              ),
-              const SizedBox(height: 24),
-
-              // Klassväljare
-              const Text(
-                'Välj klass',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection('classes')
-                    .where('teacherUid', isEqualTo: user.uid)
-                    .snapshots(),
-                builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const CircularProgressIndicator();
-                  }
-                  final classes = snap.data?.docs ?? [];
-                  return DropdownButton<String>(
-                    hint: const Text('Välj klass'),
-                    isExpanded: true,
-                    value: _selectedClassId,
-                    items: classes
-                        .map(
-                          (doc) => DropdownMenuItem(
-                            value: doc.id,
-                            child: Text(doc['name'] ?? 'Okänd klass'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (classId) {
-                      setState(() {
-                        _selectedClassId = classId;
-                        _selectedStudentUid = null;
-                      });
-                    },
-                  );
-                },
-              ),
-              const SizedBox(height: 24),
-
-              // Elevväljare
-              if (_selectedClassId != null) ...[
-                const Text(
-                  'Välj elev (eller ställ in för hela klassen)',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .where('role', isEqualTo: 'student')
-                      .snapshots(),
-                  builder: (context, snap) {
-                    if (snap.connectionState == ConnectionState.waiting) {
-                      return const CircularProgressIndicator();
-                    }
-
-                    // Filtrera elever som tillhör denna klass
-                    final allUsers = snap.data?.docs ?? [];
-                    final classStudents = allUsers.where((doc) {
-                      final userClassId = (doc.data()['classId'] ?? '')
-                          .toString()
-                          .trim();
-                      final isMatch = userClassId == _selectedClassId;
-                      // Debug-logg
-                      print(
-                        'DEBUG: Checking student ${doc.data()['displayName']}: classId=$userClassId vs selected=$_selectedClassId => match=$isMatch',
-                      );
-                      return isMatch;
-                    }).toList();
-
-                    return DropdownButton<String?>(
-                      hint: const Text('Alla elever i klassen'),
-                      isExpanded: true,
-                      value: _selectedStudentUid,
-                      items: [
-                        const DropdownMenuItem(
-                          value: null,
-                          child: Text('Alla elever i klassen'),
-                        ),
-                        ...classStudents.map(
-                          (doc) => DropdownMenuItem(
-                            value: doc.id,
-                            child: Text(doc['displayName'] ?? 'Okänd elev'),
-                          ),
-                        ),
-                      ],
-                      onChanged: (uid) {
-                        setState(() => _selectedStudentUid = uid);
-                      },
-                    );
-                  },
-                ),
-                const SizedBox(height: 24),
-
-                // Veckokontroller
-                _buildWeekSelector(),
-              ],
-            ],
+            ),
           ),
-        ),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Bestäm vilka veckor eleverna ska vara ute på APL så anpassas tidkorten i elevernas app efter det.',
+                      style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Klassväljare
+                    const Text(
+                      'Välj klass',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      stream: FirebaseFirestore.instance
+                          .collection('classes')
+                          .where('teacherUid', isEqualTo: user.uid)
+                          .snapshots(),
+                      builder: (context, snap) {
+                        if (snap.connectionState == ConnectionState.waiting) {
+                          return const CircularProgressIndicator();
+                        }
+                        final classes = snap.data?.docs ?? [];
+                        return DropdownButton<String>(
+                          hint: const Text('Välj klass'),
+                          isExpanded: true,
+                          value: _selectedClassId,
+                          items: classes
+                              .map(
+                                (doc) => DropdownMenuItem(
+                                  value: doc.id,
+                                  child: Text(doc['name'] ?? 'Okänd klass'),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (classId) {
+                            setState(() {
+                              _selectedClassId = classId;
+                              _selectedStudentUid = null;
+                            });
+                          },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Elevväljare
+                    if (_selectedClassId != null) ...[
+                      const Text(
+                        'Välj elev (eller ställ in för hela klassen)',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: FirebaseFirestore.instance
+                            .collection('users')
+                            .where('role', isEqualTo: 'student')
+                            .snapshots(),
+                        builder: (context, snap) {
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const CircularProgressIndicator();
+                          }
+
+                          // Filtrera elever som tillhör denna klass
+                          final allUsers = snap.data?.docs ?? [];
+                          final classStudents = allUsers.where((doc) {
+                            final userClassId = (doc.data()['classId'] ?? '')
+                                .toString()
+                                .trim();
+                            final isMatch = userClassId == _selectedClassId;
+                            // Debug-logg
+                            print(
+                              'DEBUG: Checking student ${doc.data()['displayName']}: classId=$userClassId vs selected=$_selectedClassId => match=$isMatch',
+                            );
+                            return isMatch;
+                          }).toList();
+
+                          return DropdownButton<String?>(
+                            hint: const Text('Alla elever i klassen'),
+                            isExpanded: true,
+                            value: _selectedStudentUid,
+                            items: [
+                              const DropdownMenuItem(
+                                value: null,
+                                child: Text('Alla elever i klassen'),
+                              ),
+                              ...classStudents.map(
+                                (doc) => DropdownMenuItem(
+                                  value: doc.id,
+                                  child: Text(doc['displayName'] ?? 'Okänd elev'),
+                                ),
+                              ),
+                            ],
+                            onChanged: (uid) {
+                              setState(() => _selectedStudentUid = uid);
+                            },
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Veckokontroller
+                      _buildWeekSelector(),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -26,7 +26,18 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 
     return Scaffold(
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                'Statistik',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ),
           // Klassväljare
           Padding(
             padding: const EdgeInsets.all(16),
