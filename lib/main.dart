@@ -2156,7 +2156,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     });
     try {
       final actionCodeSettings = ActionCodeSettings(
-        url: 'https://apl-appen-aa472.firebaseapp.com',
+        url: 'https://www.apl-appen.com',
         handleCodeInApp: false,
         androidPackageName: 'com.example.apl_appen',
         androidInstallApp: false,

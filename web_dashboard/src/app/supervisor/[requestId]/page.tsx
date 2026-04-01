@@ -3,16 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { db, functions } from '@/lib/firebase';
+import {
+  defaultAssessmentTemplateSnapshot,
+  sanitizeAssessmentTemplateSnapshot,
+} from '@/lib/assessmentTemplates';
 import { collection, getDocs } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-
-const CRITERIA = [
-  'Engagemang',
-  'Initiativtagande',
-  'Samarbetsförmåga',
-  'Problemlösning',
-  'Kvalitet på arbete',
-];
 
 export default function SupervisorPage() {
   const params = useParams();
@@ -39,6 +35,8 @@ export default function SupervisorPage() {
   const [otherInfo, setOtherInfo] = useState('');
   const [lunchApproved, setLunchApproved] = useState(0);
   const [travelApproved, setTravelApproved] = useState(0);
+
+  const criteria = request?.assessmentTemplateSnapshot?.supervisorCriteria ?? defaultAssessmentTemplateSnapshot.supervisorCriteria;
 
   useEffect(() => {
     validateAndLoadRequest();
@@ -78,7 +76,20 @@ export default function SupervisorPage() {
         return;
       }
 
-      setRequest(requestData);
+      const assessmentTemplateSnapshot = sanitizeAssessmentTemplateSnapshot(
+        requestData.assessmentTemplateSnapshot,
+      );
+
+      setRequest({
+        ...requestData,
+        assessmentTemplateSnapshot,
+      });
+      setRatings(
+        Object.fromEntries(
+          assessmentTemplateSnapshot.supervisorCriteria.map((criterion) => [criterion.key, 0]),
+        ),
+      );
+      setComments({});
 
       const linked =
         (requestData?.linkedCompanyName ??
@@ -107,7 +118,7 @@ export default function SupervisorPage() {
     e.preventDefault();
     setError('');
 
-    const allRated = CRITERIA.every(c => ratings[c] > 0);
+    const allRated = criteria.every((criterion: { key: string }) => (ratings[criterion.key] || 0) > 0);
     if (!allRated) {
       setError('Vänligen betygsätt alla kriterier (1-5) innan du skickar in.');
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -135,14 +146,18 @@ export default function SupervisorPage() {
         ? linkedCompanyName
         : company;
 
-      const avg = Object.values(ratings).reduce((a, b) => a + b, 0) / CRITERIA.length;
+      const avg = criteria.reduce(
+        (sum: number, criterion: { key: string }) => sum + (ratings[criterion.key] || 0),
+        0,
+      ) / criteria.length;
       const averageRating = avg.toFixed(1);
 
       const assessmentData: any = {};
-      CRITERIA.forEach(criterion => {
-        assessmentData[criterion] = {
-          rating: ratings[criterion],
-          comment: comments[criterion] || '',
+      criteria.forEach((criterion: { key: string; label: string }) => {
+        assessmentData[criterion.key] = {
+          label: criterion.label,
+          rating: ratings[criterion.key],
+          comment: comments[criterion.key] || '',
         };
       });
 
@@ -340,17 +355,17 @@ export default function SupervisorPage() {
                 💡 Betygsätt eleven från <strong>1 (dåligt)</strong> till <strong>5 (utmärkt)</strong> för varje kriterium
               </p>
 
-              {CRITERIA.map(criterion => (
-                <div key={criterion} className="mb-6 p-5 border-2 rounded-lg hover:border-orange-300 transition bg-gray-50">
-                  <label className="block font-semibold mb-3 text-gray-800 text-lg">{criterion}</label>
+              {criteria.map((criterion: { key: string; label: string }) => (
+                <div key={criterion.key} className="mb-6 p-5 border-2 rounded-lg hover:border-orange-300 transition bg-gray-50">
+                  <label className="block font-semibold mb-3 text-gray-800 text-lg">{criterion.label}</label>
                   <div className="flex gap-3 mb-4">
                     {[1, 2, 3, 4, 5].map(rating => (
                       <button
                         key={rating}
                         type="button"
-                        onClick={() => setRatings({ ...ratings, [criterion]: rating })}
+                        onClick={() => setRatings({ ...ratings, [criterion.key]: rating })}
                         className={`flex-1 h-14 rounded-lg font-bold text-lg transition-all transform hover:scale-105 ${
-                          ratings[criterion] === rating
+                          ratings[criterion.key] === rating
                             ? 'bg-orange-600 text-white shadow-lg scale-105'
                             : 'bg-white border-2 border-gray-300 hover:border-orange-400 text-gray-700'
                         }`}
@@ -361,8 +376,8 @@ export default function SupervisorPage() {
                   </div>
                   <textarea
                     placeholder="Kommentar (valfritt) - beskriv elevens styrkor eller utvecklingsområden..."
-                    value={comments[criterion] || ''}
-                    onChange={(e) => setComments({ ...comments, [criterion]: e.target.value })}
+                    value={comments[criterion.key] || ''}
+                    onChange={(e) => setComments({ ...comments, [criterion.key]: e.target.value })}
                     className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition"
                     rows={2}
                   />

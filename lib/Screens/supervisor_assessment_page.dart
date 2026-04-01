@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import '../core/assessment_templates.dart';
 
 class SupervisorAssessmentPage extends StatefulWidget {
   final String requestId;
@@ -22,15 +23,11 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
   bool _isValid = false;
   String? _errorMessage;
   Map<String, dynamic>? _requestData;
+  AssessmentTemplateConfig _assessmentTemplateConfig =
+      defaultAssessmentTemplateConfig;
 
   // Bedömningskriterier (1-5 skala)
-  final Map<String, int> _ratings = {
-    'Engagemang': 0,
-    'Initiativtagande': 0,
-    'Samarbetsförmåga': 0,
-    'Problemlösning': 0,
-    'Kvalitet på arbete': 0,
-  };
+  Map<String, int> _ratings = {};
 
   final Map<String, String> _comments = {};
   final TextEditingController _otherCommentController = TextEditingController();
@@ -52,6 +49,7 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
   @override
   void initState() {
     super.initState();
+    _applyAssessmentTemplateConfig(defaultAssessmentTemplateConfig);
     _validateAndLoadRequest();
   }
 
@@ -82,6 +80,9 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
       final resultData = (result.data as Map?)?.cast<String, dynamic>() ?? {};
       final data =
           (resultData['request'] as Map?)?.cast<String, dynamic>() ?? {};
+      final templateConfig = sanitizeAssessmentTemplateConfig(
+        data['assessmentTemplateSnapshot'],
+      );
 
       if (data.isEmpty) {
         setState(() {
@@ -99,6 +100,7 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
           .toString();
 
       setState(() {
+        _applyAssessmentTemplateConfig(templateConfig);
         _isLoading = false;
         _isValid = true;
         _requestData = data;
@@ -125,6 +127,16 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
         _errorMessage = 'Ett fel uppstod: $e';
       });
     }
+  }
+
+  void _applyAssessmentTemplateConfig(AssessmentTemplateConfig config) {
+    final nextRatings = <String, int>{};
+    for (final criterion in config.supervisorCriteria) {
+      nextRatings[criterion.key] = _ratings[criterion.key] ?? 0;
+    }
+
+    _assessmentTemplateConfig = config;
+    _ratings = nextRatings;
   }
 
   @override
@@ -398,8 +410,9 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
             ),
             const SizedBox(height: 12),
 
-            ..._ratings.keys.map((criterion) {
+            ..._assessmentTemplateConfig.supervisorCriteria.map((criterion) {
               return Card(
+                key: ValueKey(criterion.key),
                 margin: const EdgeInsets.only(bottom: 12),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -407,7 +420,7 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        criterion,
+                        criterion.label,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -418,11 +431,11 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: List.generate(5, (index) {
                           final rating = index + 1;
-                          final isSelected = _ratings[criterion] == rating;
+                          final isSelected = _ratings[criterion.key] == rating;
                           return InkWell(
                             onTap: () {
                               setState(() {
-                                _ratings[criterion] = rating;
+                                _ratings[criterion.key] = rating;
                               });
                             },
                             child: Container(
@@ -465,7 +478,7 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
                         ),
                         maxLines: 2,
                         onChanged: (value) {
-                          _comments[criterion] = value;
+                          _comments[criterion.key] = value;
                         },
                       ),
                     ],
@@ -569,12 +582,13 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
       return;
     }
 
-    // Kontrollera att minst en bedömning har gjorts
-    final hasAnyRating = _ratings.values.any((rating) => rating > 0);
-    if (!hasAnyRating) {
+    final missingCriteria = _assessmentTemplateConfig.supervisorCriteria.where(
+      (criterion) => (_ratings[criterion.key] ?? 0) <= 0,
+    );
+    if (missingCriteria.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Vänligen betygsätt minst ett kriterium'),
+          content: Text('Vänligen betygsätt alla kriterier'),
           backgroundColor: Colors.red,
         ),
       );
@@ -607,14 +621,13 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
     try {
       // Förbered bedömningsdata
       final assessmentData = <String, dynamic>{};
-      _ratings.forEach((criterion, rating) {
-        if (rating > 0) {
-          assessmentData[criterion] = {
-            'rating': rating,
-            'comment': _comments[criterion] ?? '',
-          };
-        }
-      });
+      for (final criterion in _assessmentTemplateConfig.supervisorCriteria) {
+        assessmentData[criterion.key] = {
+          'label': criterion.label,
+          'rating': _ratings[criterion.key] ?? 0,
+          'comment': _comments[criterion.key] ?? '',
+        };
+      }
 
       if (_otherCommentController.text.trim().isNotEmpty) {
         assessmentData['Övrigt'] = _otherCommentController.text.trim();
@@ -629,12 +642,15 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
       });
 
       // Beräkna totalpoäng
-      final totalRating = _ratings.values
-          .where((r) => r > 0)
-          .fold<int>(0, (sum, rating) => sum + rating);
-      final ratedCount = _ratings.values.where((r) => r > 0).length;
-      final averageRating = ratedCount > 0
-          ? (totalRating / ratedCount).toStringAsFixed(1)
+      final totalRating = _assessmentTemplateConfig.supervisorCriteria
+          .fold<int>(
+            0,
+            (sum, criterion) => sum + (_ratings[criterion.key] ?? 0),
+          );
+      final averageRating =
+          _assessmentTemplateConfig.supervisorCriteria.isNotEmpty
+          ? (totalRating / _assessmentTemplateConfig.supervisorCriteria.length)
+                .toStringAsFixed(1)
           : '0';
 
       await FirebaseFunctions.instance
@@ -695,36 +711,11 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
         _requestData!['studentSelfAssessment'] as Map<String, dynamic>? ?? {};
     final cards = <Widget>[];
 
-    final questions = [
-      {
-        'key': 'whatDidYouDo',
-        'title': '1. Vad har du fått göra?',
-        'icon': Icons.work,
-      },
-      {
-        'key': 'whatWasPositive',
-        'title': '2. Vad har varit positivt med APLen?',
-        'icon': Icons.thumb_up,
-      },
-      {
-        'key': 'whatCouldBeBetter',
-        'title': '3. Vad skulle kunnat vara bättre?',
-        'icon': Icons.lightbulb,
-      },
-      {
-        'key': 'whatCouldYouDoDifferently',
-        'title': '4. Vad kunde du som elev gjort annorlunda?',
-        'icon': Icons.psychology,
-      },
-      {
-        'key': 'overallRating',
-        'title': '5. Vilket betyg för APL-perioden? (1-10)',
-        'icon': Icons.star,
-      },
-    ];
-
-    for (final q in questions) {
-      final answer = selfAssessment[q['key']] as String? ?? '';
+    for (final entry
+        in _assessmentTemplateConfig.selfAssessmentFields.asMap().entries) {
+      final index = entry.key;
+      final field = entry.value;
+      final answer = selfAssessment[field.key] as String? ?? '';
       if (answer.isNotEmpty) {
         cards.add(
           Card(
@@ -737,13 +728,13 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
                   Row(
                     children: [
                       Icon(
-                        q['icon'] as IconData,
+                        field.inputType == 'number' ? Icons.star : Icons.notes,
                         color: const Color(0xFFE56A00),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          q['title'] as String,
+                          '${index + 1}. ${field.label}',
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,

@@ -3,6 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
+import {
+  AssessmentTemplateSnapshot,
+  getAssessmentCriterionLabel,
+  sanitizeAssessmentTemplateSnapshot,
+} from '@/lib/assessmentTemplates';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 
@@ -25,6 +30,7 @@ interface Assessment {
   assessmentData?: any;
   images?: Array<{ url: string; fileName: string; uploadedAt: any }>;
   imageComments?: { [key: number]: string };
+  assessmentTemplateSnapshot?: AssessmentTemplateSnapshot;
 }
 
 function isAssessmentCompleted(assessment: Assessment): boolean {
@@ -87,6 +93,7 @@ export default function AssessmentsPage() {
         .map(doc => ({
           id: doc.id,
           ...doc.data(),
+          assessmentTemplateSnapshot: sanitizeAssessmentTemplateSnapshot(doc.data().assessmentTemplateSnapshot),
         })) as Assessment[];
 
       // Sortera: inskickade först, sedan efter datum
@@ -347,7 +354,9 @@ export default function AssessmentsPage() {
                   {Object.entries(selectedAssessment.assessmentData).map(([criterion, data]: [string, any]) => (
                     <div key={criterion} className="border-b py-3 last:border-0">
                       <div className="flex justify-between items-center mb-1">
-                        <strong className="text-gray-900">{criterion}</strong>
+                        <strong className="text-gray-900">
+                          {getAssessmentCriterionLabel(selectedAssessment.assessmentTemplateSnapshot, criterion, data)}
+                        </strong>
                         <div className="flex items-center gap-2">
                           <div className="flex gap-1">
                             {[1, 2, 3, 4, 5].map(i => (

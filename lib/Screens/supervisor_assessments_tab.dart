@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/assessment_visibility.dart';
+import '../core/assessment_templates.dart';
 
 class SupervisorAssessmentsTab extends StatelessWidget {
   final String classId;
@@ -131,9 +132,7 @@ class SupervisorAssessmentsTab extends StatelessWidget {
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: _getRatingColor(
-                                    resolvedRating,
-                                  ),
+                                  color: _getRatingColor(resolvedRating),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Column(
@@ -337,7 +336,8 @@ class SupervisorAssessmentsTab extends StatelessWidget {
               Text('Kilometer: $travelApproved'),
               const SizedBox(height: 16),
               // Bifogade bilder
-              if (data['images'] != null && (data['images'] as List).isNotEmpty) ...[
+              if (data['images'] != null &&
+                  (data['images'] as List).isNotEmpty) ...[
                 const Text(
                   'Bifogade bilder',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -384,6 +384,9 @@ class SupervisorAssessmentsTab extends StatelessWidget {
                     final assessment = entry.value as Map<String, dynamic>;
                     final rating = assessment['rating'] ?? 0;
                     final comment = assessment['comment'] ?? '';
+                    final templateConfig = sanitizeAssessmentTemplateConfig(
+                      data['assessmentTemplateSnapshot'],
+                    );
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: Column(
@@ -393,7 +396,11 @@ class SupervisorAssessmentsTab extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                entry.key,
+                                getAssessmentCriterionLabel(
+                                  templateConfig,
+                                  entry.key,
+                                  assessment,
+                                ),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w600,
                                 ),

@@ -87,11 +87,20 @@ Exit criteria:
 - [ ] App description finalized
 - [ ] Screenshots finalized (phone sizes)
 - [ ] Support contact and website verified
+- [ ] Production domains verified: apl-appen.com primary, www.apl-appen.com redirect, aplappen.com redirect, www.aplappen.com redirect
+- [ ] Firebase Auth templates verified to use https://www.apl-appen.com/__/auth/action
 - [ ] Age rating/content declarations complete
 - [ ] Account deletion/data handling flow verified against policy
 
 Exit criteria:
 - Both store metadata packages complete
+
+Progress notes (2026-04-01):
+- Firebase Auth email templates updated to use the custom action URL on www.apl-appen.com instead of the default firebaseapp.com domain.
+- Flutter/web auth configuration updated to use www.apl-appen.com as auth domain and action URL target.
+- Firebase Hosting custom domains configured so apl-appen.com is the primary site.
+- www.apl-appen.com configured as redirect to apl-appen.com.
+- aplappen.com and www.aplappen.com configured as additional redirects to the primary apl-appen.com domain; DNS propagation/verification was in progress during setup.
 
 ## 6) Production monitoring gate
 - [ ] Crash reporting enabled and verified

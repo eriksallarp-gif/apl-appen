@@ -5,6 +5,12 @@ import Link from "next/link";
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
+import {
+  AssessmentTemplateSnapshot,
+  getAssessmentCriterionLabel,
+  getSelfAssessmentLabel,
+  sanitizeAssessmentTemplateSnapshot,
+} from '@/lib/assessmentTemplates';
 import { translateDayToSwedish } from '@/lib/dayTranslations';
 import { getActivityDisplayLabel, getActivityGroupForItem, getActivityItemName, getActivityTemplateBySpecialization } from '@/lib/activityTemplates';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -30,13 +36,8 @@ interface Assessment {
     uploadedAt?: any;
     url: string;
   }>;
-  studentSelfAssessment?: {
-    overallRating?: string;
-    whatCouldBeBetter?: string;
-    whatCouldYouDoDifferently?: string;
-    whatDidYouDo?: string;
-    whatWasPositive?: string;
-  };
+  studentSelfAssessment?: Record<string, string>;
+  assessmentTemplateSnapshot?: AssessmentTemplateSnapshot;
 }
 
 interface Timesheet {
@@ -332,6 +333,7 @@ export default function StudentDetailPage() {
           imageComments: data.imageComments || [],
           images: data.images || [],
           studentSelfAssessment: data.studentSelfAssessment || undefined,
+          assessmentTemplateSnapshot: sanitizeAssessmentTemplateSnapshot(data.assessmentTemplateSnapshot),
         } as Assessment;
       });
       const approvedAssessmentsData = assessmentsData.filter(isAssessmentApprovedForDisplay);
@@ -836,7 +838,9 @@ export default function StudentDetailPage() {
                                   <div className="space-y-2">
                                     {Object.entries(assessment.assessmentData).map(([key, value]: [string, any]) => (
                                       <div key={key} className="flex justify-between py-2 px-3 rounded-lg bg-white/50 border border-slate-200/50">
-                                        <span className="text-slate-700">{key}</span>
+                                        <span className="text-slate-700">
+                                          {getAssessmentCriterionLabel(assessment.assessmentTemplateSnapshot, key, value)}
+                                        </span>
                                         <span className="font-semibold text-purple-600">{value.rating}/5</span>
                                       </div>
                                     ))}
@@ -873,11 +877,13 @@ export default function StudentDetailPage() {
                               {assessment.studentSelfAssessment && (
                                 <div className="mt-6 space-y-2">
                                   <h3 className="font-semibold text-lg">Elevens självskattning</h3>
-                                  <p><strong>Betyg:</strong> {assessment.studentSelfAssessment.overallRating}</p>
-                                  <p><strong>Vad gjorde du?</strong> {assessment.studentSelfAssessment.whatDidYouDo}</p>
-                                  <p><strong>Vad var positivt?</strong> {assessment.studentSelfAssessment.whatWasPositive}</p>
-                                  <p><strong>Vad kunde varit bättre?</strong> {assessment.studentSelfAssessment.whatCouldBeBetter}</p>
-                                  <p><strong>Vad kunde du gjort annorlunda?</strong> {assessment.studentSelfAssessment.whatCouldYouDoDifferently}</p>
+                                  {Object.entries(assessment.studentSelfAssessment)
+                                    .filter(([, value]) => (value || '').toString().trim().length > 0)
+                                    .map(([key, value]) => (
+                                      <p key={key}>
+                                        <strong>{getSelfAssessmentLabel(assessment.assessmentTemplateSnapshot, key)}:</strong> {value}
+                                      </p>
+                                    ))}
                                 </div>
                               )}
                               {assessment.attachments && assessment.attachments.length > 0 && (

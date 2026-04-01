@@ -39,6 +39,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { href: '/dashboard/admin', label: 'Lärare', match: (p: string) => p.startsWith('/dashboard/admin') },
         { href: '/dashboard/programs', label: 'Program', match: (p: string) => p.startsWith('/dashboard/programs') },
         { href: '/dashboard/tidkort', label: 'Tidkort', match: (p: string) => p.startsWith('/dashboard/tidkort') },
+        { href: '/dashboard/bedomning', label: 'Bedömning', match: (p: string) => p.startsWith('/dashboard/bedomning') },
         { href: '/dashboard/settings', label: 'Inställningar', match: (p: string) => p === '/dashboard/settings' || p.startsWith('/dashboard/settings/') },
       ]
     : [

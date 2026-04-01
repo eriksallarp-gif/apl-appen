@@ -41,6 +41,113 @@ function toSafeString(value) {
   return (value || '').toString().trim();
 }
 
+const DEFAULT_ASSESSMENT_TEMPLATES = {
+  selfAssessmentFields: [
+    {
+      key: 'whatDidYouDo',
+      label: 'Vad har du fått göra?',
+      placeholder: 'Beskriv de arbetsuppgifter du utförde...',
+      inputType: 'text',
+    },
+    {
+      key: 'whatWasPositive',
+      label: 'Vad har varit positivt med APLen?',
+      placeholder: 'Vad har varit bra? Vad har du lärt dig?',
+      inputType: 'text',
+    },
+    {
+      key: 'whatCouldBeBetter',
+      label: 'Vad skulle kunnat vara bättre?',
+      placeholder: 'Vad var utmanande? Vad skulle kunna förbättras?',
+      inputType: 'text',
+    },
+    {
+      key: 'whatCouldYouDoDifferently',
+      label: 'Vad kunde du som elev gjort annorlunda?',
+      placeholder: 'Hur kunde du bidragit mer? Vad kan du förbättra till nästa gång?',
+      inputType: 'text',
+    },
+    {
+      key: 'overallRating',
+      label: 'Vilket betyg för din APL-period? (1-10)',
+      placeholder: '1=mindre bra, 10=fantastiskt',
+      inputType: 'number',
+    },
+  ],
+  supervisorCriteria: [
+    { key: 'engagement', label: 'Engagemang' },
+    { key: 'initiative', label: 'Initiativtagande' },
+    { key: 'collaboration', label: 'Samarbetsförmåga' },
+    { key: 'problemSolving', label: 'Problemlösning' },
+    { key: 'workQuality', label: 'Kvalitet på arbete' },
+  ],
+};
+
+function sanitizeTemplateKey(value, fallback) {
+  const normalized = toSafeString(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return normalized || fallback;
+}
+
+function ensureUniqueTemplateKey(baseKey, usedKeys, fallback) {
+  let nextKey = baseKey || fallback;
+  let suffix = 2;
+  while (usedKeys.has(nextKey)) {
+    nextKey = `${baseKey || fallback}_${suffix}`;
+    suffix += 1;
+  }
+  usedKeys.add(nextKey);
+  return nextKey;
+}
+
+function sanitizeAssessmentTemplateSnapshot(raw) {
+  const usedSelfKeys = new Set();
+  const selfAssessmentFields = Array.isArray(raw && raw.selfAssessmentFields)
+    ? raw.selfAssessmentFields
+      .filter((field) => field && typeof field === 'object')
+      .map((field) => {
+        const label = toSafeString(field.label);
+        if (!label) return null;
+        const requestedKey = sanitizeTemplateKey(field.key, sanitizeTemplateKey(label, 'field'));
+        const key = ensureUniqueTemplateKey(requestedKey, usedSelfKeys, 'field');
+        return {
+          key,
+          label,
+          placeholder: toSafeString(field.placeholder),
+          inputType: toSafeString(field.inputType) === 'number' ? 'number' : 'text',
+        };
+      })
+      .filter(Boolean)
+    : [];
+
+  const usedCriteriaKeys = new Set();
+  const supervisorCriteria = Array.isArray(raw && raw.supervisorCriteria)
+    ? raw.supervisorCriteria
+      .filter((criterion) => criterion && typeof criterion === 'object')
+      .map((criterion) => {
+        const label = toSafeString(criterion.label);
+        if (!label) return null;
+        const requestedKey = sanitizeTemplateKey(criterion.key, sanitizeTemplateKey(label, 'criterion'));
+        const key = ensureUniqueTemplateKey(requestedKey, usedCriteriaKeys, 'criterion');
+        return { key, label };
+      })
+      .filter(Boolean)
+    : [];
+
+  return {
+    selfAssessmentFields: selfAssessmentFields.length > 0
+      ? selfAssessmentFields
+      : DEFAULT_ASSESSMENT_TEMPLATES.selfAssessmentFields,
+    supervisorCriteria: supervisorCriteria.length > 0
+      ? supervisorCriteria
+      : DEFAULT_ASSESSMENT_TEMPLATES.supervisorCriteria,
+  };
+}
+
 exports.getSupervisorAssessmentRequest = functions.https.onCall(async (data) => {
   const requestId = toSafeString(data && data.requestId);
   const token = toSafeString(data && data.token);
@@ -78,6 +185,10 @@ exports.getSupervisorAssessmentRequest = functions.https.onCall(async (data) => 
     }))
     : [];
 
+  const assessmentTemplateSnapshot = sanitizeAssessmentTemplateSnapshot(
+    requestData.assessmentTemplateSnapshot,
+  );
+
   return {
     request: {
       studentName: toSafeString(requestData.studentName) || 'Elev',
@@ -90,6 +201,7 @@ exports.getSupervisorAssessmentRequest = functions.https.onCall(async (data) => 
         requestData.studentSelfAssessment && typeof requestData.studentSelfAssessment === 'object'
           ? requestData.studentSelfAssessment
           : {},
+      assessmentTemplateSnapshot,
       linkedCompanyName: toSafeString(requestData.linkedCompanyName),
       studentCompanyName: toSafeString(requestData.studentCompanyName),
     },

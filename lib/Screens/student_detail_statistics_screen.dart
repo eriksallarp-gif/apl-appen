@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../core/assessment_templates.dart';
 
 class StudentDetailStatisticsScreen extends StatefulWidget {
   final String studentUid;
@@ -59,9 +60,9 @@ class _StudentDetailStatisticsScreenState
           // Hämta även assessments för att få lunch/resor
           return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: FirebaseFirestore.instance
-              .collection('assessmentRequests')
-              .where('studentUid', isEqualTo: widget.studentUid)
-              .snapshots(),
+                .collection('assessmentRequests')
+                .where('studentUid', isEqualTo: widget.studentUid)
+                .snapshots(),
             builder: (context, assessmentSnapshot) {
               if (assessmentSnapshot.connectionState ==
                   ConnectionState.waiting) {
@@ -83,17 +84,25 @@ class _StudentDetailStatisticsScreenState
               final assessments = assessmentSnapshot.data?.docs ?? [];
               final submittedAssessments = assessments.where((doc) {
                 final data = doc.data();
-                final status =
-                    (data['status'] ?? '').toString().toLowerCase();
+                final status = (data['status'] ?? '').toString().toLowerCase();
                 final hasRating =
-                    (data['averageRating'] ?? '').toString().trim().isNotEmpty &&
+                    (data['averageRating'] ?? '')
+                        .toString()
+                        .trim()
+                        .isNotEmpty &&
                     (data['averageRating'] ?? '').toString().trim() != '0';
-                return status == 'submitted' || status == 'approved' || hasRating;
+                return status == 'submitted' ||
+                    status == 'approved' ||
+                    hasRating;
               }).toList();
-              print('DEBUG: assessmentRequests for ${widget.studentUid} count=${assessments.length}');
+              print(
+                'DEBUG: assessmentRequests for ${widget.studentUid} count=${assessments.length}',
+              );
               for (var d in assessments) {
                 final dd = d.data() ?? {};
-                print('ASSESS_DOC: id=${d.id}, weeks=${dd['weeks'] ?? null}, travelApproved=${dd['travelApproved'] ?? null}, lunchApproved=${dd['lunchApproved'] ?? null}, status=${dd['status'] ?? null}');
+                print(
+                  'ASSESS_DOC: id=${d.id}, weeks=${dd['weeks'] ?? null}, travelApproved=${dd['travelApproved'] ?? null}, lunchApproved=${dd['lunchApproved'] ?? null}, status=${dd['status'] ?? null}',
+                );
               }
 
               if (timesheets.isEmpty) {
@@ -204,13 +213,18 @@ class _StudentDetailStatisticsScreenState
         if (w.isNotEmpty) approvedWeeks.add(w);
       }
 
-      totalKilometers += (data['travelApproved'] as int?) ?? (data['travelCount'] as int?) ?? 0;
+      totalKilometers +=
+          (data['travelApproved'] as int?) ??
+          (data['travelCount'] as int?) ??
+          0;
       totalLunches += (data['lunchApproved'] as int?) ?? 0;
       totalHoursFromAssessments += (data['totalHours'] as int?) ?? 0;
     }
 
     // Debug: list approved weeks from assessmentRequests for this student
-    print('DEBUG: assessmentRequests for ${widget.studentUid} -> docs=${assessments.length}, approvedWeeks=$approvedWeeks, totalTravel=$totalKilometers, totalLunch=$totalLunches, totalHoursFromAssessments=$totalHoursFromAssessments');
+    print(
+      'DEBUG: assessmentRequests for ${widget.studentUid} -> docs=${assessments.length}, approvedWeeks=$approvedWeeks, totalTravel=$totalKilometers, totalLunch=$totalLunches, totalHoursFromAssessments=$totalHoursFromAssessments',
+    );
 
     // Aggregate activity hours from timesheets (keep using timesheets for activity breakdown)
     for (var doc in timesheets) {
@@ -242,7 +256,9 @@ class _StudentDetailStatisticsScreenState
       approvedCount++;
     }
     // Prefer totalHours from assessments when present, otherwise fallback to timesheets
-    final int finalTotalHours = totalHoursFromAssessments > 0 ? totalHoursFromAssessments : totalHoursFromTimesheets;
+    final int finalTotalHours = totalHoursFromAssessments > 0
+        ? totalHoursFromAssessments
+        : totalHoursFromTimesheets;
 
     return {
       'totalHours': finalTotalHours,
@@ -252,7 +268,7 @@ class _StudentDetailStatisticsScreenState
       'totalLunches': totalLunches,
       'totalKilometers': totalKilometers,
       'assessmentCount': approvedWeeks.length,
-        'averagePerWeek': timesheets.isEmpty
+      'averagePerWeek': timesheets.isEmpty
           ? 0
           : (finalTotalHours / timesheets.length).round(),
     };
@@ -556,6 +572,9 @@ class _StudentDetailStatisticsScreenState
         (data['studentSelfAssessment'] as Map?)?.cast<String, dynamic>() ?? {};
     final assessmentData =
         (data['assessmentData'] as Map?)?.cast<String, dynamic>() ?? {};
+    final templateConfig = sanitizeAssessmentTemplateConfig(
+      data['assessmentTemplateSnapshot'],
+    );
     final averageRating = (data['averageRating'] ?? '0').toString();
     final supervisorName = (data['supervisorName'] ?? '').toString();
     final supervisorCompany = (data['supervisorCompany'] ?? '').toString();
@@ -941,27 +960,23 @@ class _StudentDetailStatisticsScreenState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _buildSelfAssessmentRow(
-                                '1. Vad har du fått göra?',
-                                self['whatDidYouDo']?.toString() ?? '',
-                              ),
-                              _buildSelfAssessmentRow(
-                                '2. Vad har varit positivt med APLen?',
-                                self['whatWasPositive']?.toString() ?? '',
-                              ),
-                              _buildSelfAssessmentRow(
-                                '3. Vad skulle kunnat vara bättre?',
-                                self['whatCouldBeBetter']?.toString() ?? '',
-                              ),
-                              _buildSelfAssessmentRow(
-                                '4. Vad kunde du som elev gjort annorlunda?',
-                                self['whatCouldYouDoDifferently']?.toString() ??
-                                    '',
-                              ),
-                              _buildSelfAssessmentRow(
-                                '5. Betyg (1-10)',
-                                self['overallRating']?.toString() ?? '',
-                              ),
+                              for (final field
+                                  in templateConfig.selfAssessmentFields)
+                                _buildSelfAssessmentRow(
+                                  field.label,
+                                  self[field.key]?.toString() ?? '',
+                                ),
+                              for (final entry in self.entries)
+                                if (templateConfig.selfAssessmentFields.every(
+                                  (field) => field.key != entry.key,
+                                ))
+                                  _buildSelfAssessmentRow(
+                                    getSelfAssessmentLabel(
+                                      templateConfig,
+                                      entry.key,
+                                    ),
+                                    entry.value?.toString() ?? '',
+                                  ),
                               if (self.values.every(
                                 (v) => v == null || v.toString().trim().isEmpty,
                               ))
@@ -1008,7 +1023,7 @@ class _StudentDetailStatisticsScreenState
                                             CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            '$key: $rating/5',
+                                            '${getAssessmentCriterionLabel(templateConfig, key, value)}: $rating/5',
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w600,
                                               fontSize: 15,

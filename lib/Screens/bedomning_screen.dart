@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:math';
 import 'dart:io';
+import '../core/assessment_templates.dart';
 
 // Helper för att beräkna veckonummer
 int _getWeekNumber(DateTime date) {
@@ -69,30 +70,58 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
   final Set<String> _selectedTimesheetIds = {};
   final TextEditingController _lunchController = TextEditingController();
   final TextEditingController _travelController = TextEditingController();
-  final TextEditingController _selfAssessment1Controller =
-      TextEditingController(); // Vad har du fått göra?
-  final TextEditingController _selfAssessment2Controller =
-      TextEditingController(); // Vad var positivt?
-  final TextEditingController _selfAssessment3Controller =
-      TextEditingController(); // Vad kunde varit bättre?
-  final TextEditingController _selfAssessment4Controller =
-      TextEditingController(); // Vad kunde du gjort annorlunda?
-  final TextEditingController _selfAssessment5Controller =
-      TextEditingController(); // Vilket betyg?
+  AssessmentTemplateConfig _assessmentTemplateConfig =
+      defaultAssessmentTemplateConfig;
+  List<SelfAssessmentField> _selfAssessmentFields =
+      defaultAssessmentTemplateConfig.selfAssessmentFields;
+  Map<String, TextEditingController> _selfAssessmentControllers = {};
   final List<XFile> _selectedImages = [];
   final ImagePicker _picker = ImagePicker();
   bool _isUploading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _applyAssessmentTemplateConfig(defaultAssessmentTemplateConfig);
+    _loadAssessmentTemplateConfig();
+  }
+
+  @override
   void dispose() {
     _lunchController.dispose();
     _travelController.dispose();
-    _selfAssessment1Controller.dispose();
-    _selfAssessment2Controller.dispose();
-    _selfAssessment3Controller.dispose();
-    _selfAssessment4Controller.dispose();
-    _selfAssessment5Controller.dispose();
+    for (final controller in _selfAssessmentControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  void _applyAssessmentTemplateConfig(AssessmentTemplateConfig config) {
+    final nextControllers = <String, TextEditingController>{};
+
+    for (final field in config.selfAssessmentFields) {
+      nextControllers[field.key] =
+          _selfAssessmentControllers[field.key] ?? TextEditingController();
+    }
+
+    for (final entry in _selfAssessmentControllers.entries) {
+      if (!nextControllers.containsKey(entry.key)) {
+        entry.value.dispose();
+      }
+    }
+
+    _selfAssessmentControllers = nextControllers;
+    _selfAssessmentFields = config.selfAssessmentFields;
+    _assessmentTemplateConfig = config;
+  }
+
+  Future<void> _loadAssessmentTemplateConfig() async {
+    final config = await loadAssessmentTemplateConfig();
+    if (!mounted) return;
+
+    setState(() {
+      _applyAssessmentTemplateConfig(config);
+    });
   }
 
   @override
@@ -187,7 +216,8 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                     try {
                       final weekStartDate = DateTime.parse(weekStart);
                       final weekNumber =
-                          _readStoredWeekNumber(data) ?? _getWeekNumber(weekStartDate);
+                          _readStoredWeekNumber(data) ??
+                          _getWeekNumber(weekStartDate);
                       final weekEndDate = weekStartDate.add(
                         const Duration(days: 4),
                       );
@@ -225,13 +255,17 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? const Color(0xFFE56A00) // Orange highlight when selected
+                              ? const Color(
+                                  0xFFE56A00,
+                                ) // Orange highlight when selected
                               : Colors.white, // White when not selected
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: isLocked
                                 ? Colors.grey.shade300
-                                : (isSelected ? const Color(0xFFE56A00) : Colors.grey.shade300),
+                                : (isSelected
+                                      ? const Color(0xFFE56A00)
+                                      : Colors.grey.shade300),
                             width: 2,
                           ),
                           boxShadow: [
@@ -253,7 +287,9 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                                     style: TextStyle(
                                       color: isLocked
                                           ? Colors.grey
-                                          : (isSelected ? Colors.white : Colors.black),
+                                          : (isSelected
+                                                ? Colors.white
+                                                : Colors.black),
                                       fontWeight: FontWeight.w600,
                                       fontSize: 16,
                                     ),
@@ -265,9 +301,13 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                                       color: isLocked
                                           ? Colors.grey
                                           : (isApproved
-                                              ? Colors.green
-                                              : (isSelected ? Colors.white : Colors.orange)),
-                                      fontWeight: isLocked ? FontWeight.bold : FontWeight.normal,
+                                                ? Colors.green
+                                                : (isSelected
+                                                      ? Colors.white
+                                                      : Colors.orange)),
+                                      fontWeight: isLocked
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
                                     ),
                                   ),
                                 ],
@@ -275,15 +315,17 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                             ),
                             Icon(
                               isLocked
-                                ? Icons.lock_outline_rounded
+                                  ? Icons.lock_outline_rounded
                                   : (isApproved
-                                  ? Icons.check_circle_rounded
-                                  : Icons.schedule_rounded),
+                                        ? Icons.check_circle_rounded
+                                        : Icons.schedule_rounded),
                               color: isLocked
                                   ? Colors.grey
                                   : (isApproved
-                                      ? Colors.green
-                                      : (isSelected ? Colors.white : Colors.orange)),
+                                        ? Colors.green
+                                        : (isSelected
+                                              ? Colors.white
+                                              : Colors.orange)),
                             ),
                           ],
                         ),
@@ -398,83 +440,37 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Fråga 1
-                    TextField(
-                      controller: _selfAssessment1Controller,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: '1. Vad har du fått göra?',
-                        hintText: 'Beskriv de arbetsuppgifter du utförde...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
+                    ..._selfAssessmentFields.asMap().entries.expand((entry) {
+                      final index = entry.key;
+                      final field = entry.value;
+                      final controller = _selfAssessmentControllers[field.key]!;
+                      return [
+                        TextField(
+                          controller: controller,
+                          keyboardType: field.inputType == 'number'
+                              ? TextInputType.number
+                              : TextInputType.multiline,
+                          maxLines: field.inputType == 'number' ? 1 : 3,
+                          inputFormatters: field.inputType == 'number'
+                              ? [FilteringTextInputFormatter.digitsOnly]
+                              : null,
+                          decoration: InputDecoration(
+                            labelText: '${index + 1}. ${field.label}',
+                            hintText: field.placeholder,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            prefixIcon: Icon(
+                              field.inputType == 'number'
+                                  ? Icons.star
+                                  : Icons.notes,
+                            ),
+                          ),
                         ),
-                        prefixIcon: const Icon(Icons.work),
-                      ),
-                    ),
+                        const SizedBox(height: 12),
+                      ];
+                    }).toList(),
                     const SizedBox(height: 12),
-
-                    // Fråga 2
-                    TextField(
-                      controller: _selfAssessment2Controller,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: '2. Vad har varit positivt med APLen?',
-                        hintText: 'Vad har varit bra? Vad har du lärt dig?',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        prefixIcon: const Icon(Icons.thumb_up),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Fråga 3
-                    TextField(
-                      controller: _selfAssessment3Controller,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: '3. Vad skulle kunnat vara bättre?',
-                        hintText:
-                            'Vad var utmanande? Vad skulle kunna förbättras?',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        prefixIcon: const Icon(Icons.lightbulb),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Fråga 4
-                    TextField(
-                      controller: _selfAssessment4Controller,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: '4. Vad kunde du som elev gjort annorlunda?',
-                        hintText:
-                            'Hur kunde du bidragit mer? Vad kan du förbättra till nästa gång?',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        prefixIcon: const Icon(Icons.psychology),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Fråga 5
-                    TextField(
-                      controller: _selfAssessment5Controller,
-                      keyboardType: TextInputType.number,
-                      maxLines: 2,
-                      decoration: InputDecoration(
-                        labelText: '5. Vilket betyg för din APL-period? (1-10)',
-                        hintText: '1=mindre bra, 10=fantastiskt',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        prefixIcon: const Icon(Icons.star),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
 
                     // Bilder
                     const Text(
@@ -766,6 +762,11 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
         }
       }
 
+      final studentSelfAssessment = <String, String>{
+        for (final field in _selfAssessmentFields)
+          field.key: _selfAssessmentControllers[field.key]?.text.trim() ?? '',
+      };
+
       // Skapa bedömningsförfrågan
       final docRef = await FirebaseFirestore.instance
           .collection('assessmentRequests')
@@ -784,15 +785,8 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
             'images': uploadedImages,
             'linkedCompanyName': linkedCompanyName,
             'studentCompanyName': linkedCompanyName,
-            // Selfassessment
-            'studentSelfAssessment': {
-              'whatDidYouDo': _selfAssessment1Controller.text.trim(),
-              'whatWasPositive': _selfAssessment2Controller.text.trim(),
-              'whatCouldBeBetter': _selfAssessment3Controller.text.trim(),
-              'whatCouldYouDoDifferently': _selfAssessment4Controller.text
-                  .trim(),
-              'overallRating': _selfAssessment5Controller.text.trim(),
-            },
+            'studentSelfAssessment': studentSelfAssessment,
+            'assessmentTemplateSnapshot': _assessmentTemplateConfig.toJson(),
           });
 
       setState(() {
@@ -808,11 +802,9 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
         _selectedTimesheetIds.clear();
         _lunchController.clear();
         _travelController.clear();
-        _selfAssessment1Controller.clear();
-        _selfAssessment2Controller.clear();
-        _selfAssessment3Controller.clear();
-        _selfAssessment4Controller.clear();
-        _selfAssessment5Controller.clear();
+        for (final controller in _selfAssessmentControllers.values) {
+          controller.clear();
+        }
         _selectedImages.clear();
       });
     } catch (e) {
@@ -868,74 +860,77 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-            const Text(
-              'Visa denna QR-kod för din handledare, eller skicka länken nedan:',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
+              const Text(
+                'Visa denna QR-kod för din handledare, eller skicka länken nedan:',
+                textAlign: TextAlign.center,
               ),
-              child: SizedBox(
-                width: 200,
-                height: 200,
-                child: QrImageView(
-                  data: url,
-                  version: QrVersions.auto,
-                  size: 200,
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: SizedBox(
+                  width: 200,
+                  height: 200,
+                  child: QrImageView(
+                    data: url,
+                    version: QrVersions.auto,
+                    size: 200,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            const Text('Länk:', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Container(
-              width: double.maxFinite,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade300),
+              const SizedBox(height: 24),
+              const Text(
+                'Länk:',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SelectableText(
-                      url,
-                      style: const TextStyle(fontSize: 12),
+              const SizedBox(height: 8),
+              Container(
+                width: double.maxFinite,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        url,
+                        style: const TextStyle(fontSize: 12),
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 20),
-                    tooltip: 'Kopiera länk',
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: url));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Länk kopierad!'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                  ),
-                ],
+                    IconButton(
+                      icon: const Icon(Icons.copy, size: 20),
+                      tooltip: 'Kopiera länk',
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: url));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Länk kopierad!'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Länken är giltig i 1 dag',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey,
-                fontStyle: FontStyle.italic,
+              const SizedBox(height: 16),
+              const Text(
+                'Länken är giltig i 1 dag',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         ),
         actions: [
           TextButton(

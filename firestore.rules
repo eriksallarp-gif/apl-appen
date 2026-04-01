@@ -254,7 +254,8 @@
               'status', 'createdAt', 'token', 'expiresAt',
               'images',
               'linkedCompanyName', 'studentCompanyName',
-              'studentSelfAssessment'
+              'studentSelfAssessment',
+              'assessmentTemplateSnapshot'
             ]);
 
           // Endast lärare/admin får uppdatera direkt i klient.

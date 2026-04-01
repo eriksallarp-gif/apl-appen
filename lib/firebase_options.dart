@@ -45,7 +45,7 @@ class DefaultFirebaseOptions {
     appId: '1:103324730349:web:b76e135a4a5673d1bc1de4',
     messagingSenderId: '103324730349',
     projectId: 'apl-appen-aa472',
-    authDomain: 'apl-appen-aa472.firebaseapp.com',
+    authDomain: 'www.apl-appen.com',
     storageBucket: 'apl-appen-aa472.firebasestorage.app',
   );
 
@@ -80,7 +80,7 @@ class DefaultFirebaseOptions {
     appId: '1:103324730349:web:27ad891d99687b62bc1de4',
     messagingSenderId: '103324730349',
     projectId: 'apl-appen-aa472',
-    authDomain: 'apl-appen-aa472.firebaseapp.com',
+    authDomain: 'www.apl-appen.com',
     storageBucket: 'apl-appen-aa472.firebasestorage.app',
   );
 }
