@@ -45,13 +45,13 @@ class DefaultFirebaseOptions {
     appId: '1:103324730349:web:b76e135a4a5673d1bc1de4',
     messagingSenderId: '103324730349',
     projectId: 'apl-appen-aa472',
-    authDomain: 'www.apl-appen.com',
+    authDomain: 'apl-appen-aa472.firebaseapp.com',
     storageBucket: 'apl-appen-aa472.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyClELJgKkXJWbD32yDxHrP0iMw8nNilcM8',
-    appId: '1:103324730349:android:c8465b86143f8a50bc1de4',
+    appId: '1:103324730349:android:3c3d12f164d34561bc1de4',
     messagingSenderId: '103324730349',
     projectId: 'apl-appen-aa472',
     storageBucket: 'apl-appen-aa472.firebasestorage.app',
@@ -80,7 +80,8 @@ class DefaultFirebaseOptions {
     appId: '1:103324730349:web:27ad891d99687b62bc1de4',
     messagingSenderId: '103324730349',
     projectId: 'apl-appen-aa472',
-    authDomain: 'www.apl-appen.com',
+    authDomain: 'apl-appen-aa472.firebaseapp.com',
     storageBucket: 'apl-appen-aa472.firebasestorage.app',
   );
+
 }

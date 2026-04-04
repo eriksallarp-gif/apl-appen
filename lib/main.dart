@@ -2165,7 +2165,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       final actionCodeSettings = ActionCodeSettings(
         url: 'https://www.apl-appen.com',
         handleCodeInApp: false,
-        androidPackageName: 'com.example.apl_appen',
+        androidPackageName: 'com.aplappen.app',
         androidInstallApp: false,
       );
       await widget.user.sendEmailVerification(actionCodeSettings);
