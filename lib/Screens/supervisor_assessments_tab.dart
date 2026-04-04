@@ -10,10 +10,15 @@ class SupervisorAssessmentsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('assessmentRequests')
-          .snapshots(),
+      stream: currentUser == null
+          ? const Stream.empty()
+          : FirebaseFirestore.instance
+              .collection('assessmentRequests')
+              .where('teacherUid', isEqualTo: currentUser.uid)
+              .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());

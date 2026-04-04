@@ -116,7 +116,8 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
   }
 
   Future<void> _loadAssessmentTemplateConfig() async {
-    final config = await loadAssessmentTemplateConfig();
+    final studentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final config = await loadAssessmentTemplateConfigForStudent(studentUid);
     if (!mounted) return;
 
     setState(() {
@@ -708,6 +709,17 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
     });
 
     try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final teacherUid = (userDoc.data()?['teacherUid'] ?? '')
+          .toString()
+          .trim();
+      if (teacherUid.isEmpty) {
+        throw Exception('Kunde inte hitta elevens kopplade lärare.');
+      }
+
       // Hämta elevens kopplade företag (om det finns)
       String linkedCompanyName = '';
       try {
@@ -773,6 +785,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
           .add({
             'studentUid': user.uid,
             'studentName': user.displayName ?? 'Elev',
+            'teacherUid': teacherUid,
             'timesheetIds': _selectedTimesheetIds.toList(),
             'weeks': weeks,
             'totalHours': totalHours,

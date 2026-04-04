@@ -59,9 +59,12 @@ class _StudentDetailStatisticsScreenState
 
           // Hämta även assessments för att få lunch/resor
           return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
+            stream: currentUid == null
+              ? const Stream.empty()
+              : FirebaseFirestore.instance
                 .collection('assessmentRequests')
                 .where('studentUid', isEqualTo: widget.studentUid)
+                .where('teacherUid', isEqualTo: currentUid)
                 .snapshots(),
             builder: (context, assessmentSnapshot) {
               if (assessmentSnapshot.connectionState ==

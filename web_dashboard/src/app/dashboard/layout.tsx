@@ -49,6 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           { href: '/dashboard/veckohanterare', label: 'Veckohanterare', match: (p: string) => p.startsWith('/dashboard/veckohanterare') },
           { href: '/dashboard/klasser', label: 'Klasser', match: (p: string) => p.startsWith('/dashboard/klasser') },
           { href: '/dashboard/tidkort', label: 'Tidkort', match: (p: string) => p.startsWith('/dashboard/tidkort') },
+          { href: '/dashboard/bedomning', label: 'Bedömning', match: (p: string) => p.startsWith('/dashboard/bedomning') },
           { href: '/dashboard/assignments', label: 'Uppgifter', match: (p: string) => p.startsWith('/dashboard/assignments') },
         ] : []),
         { href: '/dashboard/companies', label: 'Företag', match: (p: string) => p.startsWith('/dashboard/companies') },

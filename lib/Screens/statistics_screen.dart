@@ -358,11 +358,15 @@ class _StatisticsContentState extends State<_StatisticsContent> {
                 .map((doc) => doc.data()?['studentUid']?.toString() ?? '')
                 .where((uid) => uid.isNotEmpty)
                 .toSet();
+            final currentUser = FirebaseAuth.instance.currentUser;
 
             return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                .collection('assessmentRequests')
-                .snapshots(),
+              stream: currentUser == null
+                  ? const Stream.empty()
+                  : FirebaseFirestore.instance
+                      .collection('assessmentRequests')
+                      .where('teacherUid', isEqualTo: currentUser.uid)
+                      .snapshots(),
               builder: (assessmentContext, assessmentSnapshot) {
                 final allAssessments = assessmentSnapshot.data?.docs ?? [];
 

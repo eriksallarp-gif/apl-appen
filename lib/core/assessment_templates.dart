@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+const _teacherAssessmentTemplatesCollection = 'teacherAssessmentTemplates';
+
 class SelfAssessmentField {
   final String key;
   final String label;
@@ -44,6 +46,45 @@ class AssessmentTemplateConfig {
         .map((field) => field.toJson())
         .toList(),
     'supervisorCriteria': supervisorCriteria
+        .map((criterion) => criterion.toJson())
+        .toList(),
+  };
+}
+
+class TeacherAssessmentTemplateOverrides {
+  final List<String> hiddenSelfAssessmentFieldKeys;
+  final List<String> hiddenSupervisorCriteriaKeys;
+  final List<String> selfAssessmentOrderKeys;
+  final List<String> supervisorCriteriaOrderKeys;
+  final List<SelfAssessmentField> additionalSelfAssessmentFields;
+  final List<SupervisorCriterion> additionalSupervisorCriteria;
+
+  const TeacherAssessmentTemplateOverrides({
+    this.hiddenSelfAssessmentFieldKeys = const [],
+    this.hiddenSupervisorCriteriaKeys = const [],
+    this.selfAssessmentOrderKeys = const [],
+    this.supervisorCriteriaOrderKeys = const [],
+    this.additionalSelfAssessmentFields = const [],
+    this.additionalSupervisorCriteria = const [],
+  });
+
+  bool get isEmpty =>
+      hiddenSelfAssessmentFieldKeys.isEmpty &&
+      hiddenSupervisorCriteriaKeys.isEmpty &&
+      selfAssessmentOrderKeys.isEmpty &&
+      supervisorCriteriaOrderKeys.isEmpty &&
+      additionalSelfAssessmentFields.isEmpty &&
+      additionalSupervisorCriteria.isEmpty;
+
+  Map<String, dynamic> toJson() => {
+    'hiddenSelfAssessmentFieldKeys': hiddenSelfAssessmentFieldKeys,
+    'hiddenSupervisorCriteriaKeys': hiddenSupervisorCriteriaKeys,
+    'selfAssessmentOrderKeys': selfAssessmentOrderKeys,
+    'supervisorCriteriaOrderKeys': supervisorCriteriaOrderKeys,
+    'additionalSelfAssessmentFields': additionalSelfAssessmentFields
+        .map((field) => field.toJson())
+        .toList(),
+    'additionalSupervisorCriteria': additionalSupervisorCriteria
         .map((criterion) => criterion.toJson())
         .toList(),
   };
@@ -98,6 +139,17 @@ String _sanitizeKeyPart(String value) {
   return normalized;
 }
 
+bool _matchesTemplateKey(String first, String second) {
+  final normalizedFirst = first.trim();
+  final normalizedSecond = second.trim();
+  if (normalizedFirst.isEmpty || normalizedSecond.isEmpty) {
+    return false;
+  }
+
+  return normalizedFirst == normalizedSecond ||
+      _sanitizeKeyPart(normalizedFirst) == _sanitizeKeyPart(normalizedSecond);
+}
+
 String _ensureUniqueKey(String baseKey, Set<String> usedKeys, String fallback) {
   var key = baseKey.isNotEmpty ? baseKey : fallback;
   var suffix = 2;
@@ -109,11 +161,10 @@ String _ensureUniqueKey(String baseKey, Set<String> usedKeys, String fallback) {
   return key;
 }
 
-AssessmentTemplateConfig sanitizeAssessmentTemplateConfig(dynamic raw) {
+List<SelfAssessmentField> _sanitizeSelfAssessmentFields(dynamic rawFields) {
   final usedSelfKeys = <String>{};
   final selfAssessmentFields = <SelfAssessmentField>[];
 
-  final rawFields = raw is Map ? raw['selfAssessmentFields'] : null;
   if (rawFields is List) {
     for (final entry in rawFields.whereType<Map>()) {
       final label = (entry['label'] ?? '').toString().trim();
@@ -141,9 +192,13 @@ AssessmentTemplateConfig sanitizeAssessmentTemplateConfig(dynamic raw) {
     }
   }
 
+  return selfAssessmentFields;
+}
+
+List<SupervisorCriterion> _sanitizeSupervisorCriteria(dynamic rawCriteria) {
   final usedCriteriaKeys = <String>{};
   final supervisorCriteria = <SupervisorCriterion>[];
-  final rawCriteria = raw is Map ? raw['supervisorCriteria'] : null;
+
   if (rawCriteria is List) {
     for (final entry in rawCriteria.whereType<Map>()) {
       final label = (entry['label'] ?? '').toString().trim();
@@ -162,6 +217,73 @@ AssessmentTemplateConfig sanitizeAssessmentTemplateConfig(dynamic raw) {
     }
   }
 
+  return supervisorCriteria;
+}
+
+List<String> _sanitizeOrderKeys(dynamic rawKeys) {
+  if (rawKeys is! List) return const <String>[];
+
+  return rawKeys
+      .map((value) => value.toString().trim())
+      .where((value) => value.isNotEmpty)
+      .toSet()
+      .toList();
+}
+
+List<SelfAssessmentField> _orderSelfAssessmentFields(
+  List<SelfAssessmentField> items,
+  List<String> orderKeys,
+) {
+  if (items.length <= 1 || orderKeys.isEmpty) {
+    return List<SelfAssessmentField>.from(items);
+  }
+
+  final remaining = List<SelfAssessmentField>.from(items);
+  final ordered = <SelfAssessmentField>[];
+
+  for (final orderKey in orderKeys) {
+    final index = remaining.indexWhere(
+      (field) => _matchesTemplateKey(orderKey, field.key),
+    );
+    if (index == -1) continue;
+    ordered.add(remaining.removeAt(index));
+  }
+
+  ordered.addAll(remaining);
+  return ordered;
+}
+
+List<SupervisorCriterion> _orderSupervisorCriteria(
+  List<SupervisorCriterion> items,
+  List<String> orderKeys,
+) {
+  if (items.length <= 1 || orderKeys.isEmpty) {
+    return List<SupervisorCriterion>.from(items);
+  }
+
+  final remaining = List<SupervisorCriterion>.from(items);
+  final ordered = <SupervisorCriterion>[];
+
+  for (final orderKey in orderKeys) {
+    final index = remaining.indexWhere(
+      (criterion) => _matchesTemplateKey(orderKey, criterion.key),
+    );
+    if (index == -1) continue;
+    ordered.add(remaining.removeAt(index));
+  }
+
+  ordered.addAll(remaining);
+  return ordered;
+}
+
+AssessmentTemplateConfig sanitizeAssessmentTemplateConfig(dynamic raw) {
+  final selfAssessmentFields = _sanitizeSelfAssessmentFields(
+    raw is Map ? raw['selfAssessmentFields'] : null,
+  );
+  final supervisorCriteria = _sanitizeSupervisorCriteria(
+    raw is Map ? raw['supervisorCriteria'] : null,
+  );
+
   return AssessmentTemplateConfig(
     selfAssessmentFields: selfAssessmentFields.isNotEmpty
         ? selfAssessmentFields
@@ -169,6 +291,129 @@ AssessmentTemplateConfig sanitizeAssessmentTemplateConfig(dynamic raw) {
     supervisorCriteria: supervisorCriteria.isNotEmpty
         ? supervisorCriteria
         : defaultAssessmentTemplateConfig.supervisorCriteria,
+  );
+}
+
+TeacherAssessmentTemplateOverrides sanitizeTeacherAssessmentTemplateOverrides(
+  dynamic raw,
+) {
+  final hiddenSelfAssessmentFieldKeys =
+      raw is Map && raw['hiddenSelfAssessmentFieldKeys'] is List
+      ? (raw['hiddenSelfAssessmentFieldKeys'] as List)
+            .map((value) => value.toString().trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+      : <String>[];
+
+  final hiddenSupervisorCriteriaKeys =
+      raw is Map && raw['hiddenSupervisorCriteriaKeys'] is List
+      ? (raw['hiddenSupervisorCriteriaKeys'] as List)
+            .map((value) => value.toString().trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+      : <String>[];
+
+  return TeacherAssessmentTemplateOverrides(
+    hiddenSelfAssessmentFieldKeys: hiddenSelfAssessmentFieldKeys,
+    hiddenSupervisorCriteriaKeys: hiddenSupervisorCriteriaKeys,
+    selfAssessmentOrderKeys: _sanitizeOrderKeys(
+      raw is Map ? raw['selfAssessmentOrderKeys'] : null,
+    ),
+    supervisorCriteriaOrderKeys: _sanitizeOrderKeys(
+      raw is Map ? raw['supervisorCriteriaOrderKeys'] : null,
+    ),
+    additionalSelfAssessmentFields: _sanitizeSelfAssessmentFields(
+      raw is Map ? raw['additionalSelfAssessmentFields'] : null,
+    ),
+    additionalSupervisorCriteria: _sanitizeSupervisorCriteria(
+      raw is Map ? raw['additionalSupervisorCriteria'] : null,
+    ),
+  );
+}
+
+AssessmentTemplateConfig mergeAssessmentTemplateConfig(
+  AssessmentTemplateConfig baseConfig,
+  TeacherAssessmentTemplateOverrides overrides,
+) {
+  final hiddenSelfKeys = overrides.hiddenSelfAssessmentFieldKeys
+      .map((key) => key.trim())
+      .where((key) => key.isNotEmpty)
+      .toList();
+  final hiddenSupervisorKeys = overrides.hiddenSupervisorCriteriaKeys
+      .map((key) => key.trim())
+      .where((key) => key.isNotEmpty)
+      .toList();
+
+  final selfAssessmentFields = <SelfAssessmentField>[];
+  final usedSelfKeys = <String>{};
+
+  for (final field in baseConfig.selfAssessmentFields) {
+    if (hiddenSelfKeys.any((key) => _matchesTemplateKey(key, field.key))) {
+      continue;
+    }
+    selfAssessmentFields.add(field);
+    usedSelfKeys.add(field.key);
+  }
+
+  for (final field in overrides.additionalSelfAssessmentFields) {
+    final mergedKey = _ensureUniqueKey(
+      _sanitizeKeyPart(field.key),
+      usedSelfKeys,
+      'field',
+    );
+    selfAssessmentFields.add(
+      SelfAssessmentField(
+        key: mergedKey,
+        label: field.label,
+        placeholder: field.placeholder,
+        inputType: field.inputType,
+      ),
+    );
+  }
+
+  final orderedSelfAssessmentFields = _orderSelfAssessmentFields(
+    selfAssessmentFields,
+    overrides.selfAssessmentOrderKeys,
+  );
+
+  final supervisorCriteria = <SupervisorCriterion>[];
+  final usedSupervisorKeys = <String>{};
+
+  for (final criterion in baseConfig.supervisorCriteria) {
+    if (hiddenSupervisorKeys.any(
+      (key) => _matchesTemplateKey(key, criterion.key),
+    )) {
+      continue;
+    }
+    supervisorCriteria.add(criterion);
+    usedSupervisorKeys.add(criterion.key);
+  }
+
+  for (final criterion in overrides.additionalSupervisorCriteria) {
+    final mergedKey = _ensureUniqueKey(
+      _sanitizeKeyPart(criterion.key),
+      usedSupervisorKeys,
+      'criterion',
+    );
+    supervisorCriteria.add(
+      SupervisorCriterion(key: mergedKey, label: criterion.label),
+    );
+  }
+
+  final orderedSupervisorCriteria = _orderSupervisorCriteria(
+    supervisorCriteria,
+    overrides.supervisorCriteriaOrderKeys,
+  );
+
+  return AssessmentTemplateConfig(
+    selfAssessmentFields: orderedSelfAssessmentFields.isNotEmpty
+        ? orderedSelfAssessmentFields
+        : baseConfig.selfAssessmentFields,
+    supervisorCriteria: orderedSupervisorCriteria.isNotEmpty
+        ? orderedSupervisorCriteria
+        : baseConfig.supervisorCriteria,
   );
 }
 
@@ -184,6 +429,55 @@ Future<AssessmentTemplateConfig> loadAssessmentTemplateConfig() async {
     return sanitizeAssessmentTemplateConfig(doc.data());
   } catch (_) {
     return defaultAssessmentTemplateConfig;
+  }
+}
+
+Future<TeacherAssessmentTemplateOverrides>
+loadTeacherAssessmentTemplateOverrides({required String teacherUid}) async {
+  if (teacherUid.trim().isEmpty) {
+    return const TeacherAssessmentTemplateOverrides();
+  }
+
+  try {
+    final doc = await FirebaseFirestore.instance
+        .collection(_teacherAssessmentTemplatesCollection)
+        .doc(teacherUid)
+        .get();
+
+    if (!doc.exists) {
+      return const TeacherAssessmentTemplateOverrides();
+    }
+
+    return sanitizeTeacherAssessmentTemplateOverrides(doc.data());
+  } catch (_) {
+    return const TeacherAssessmentTemplateOverrides();
+  }
+}
+
+Future<AssessmentTemplateConfig> loadMergedAssessmentTemplateConfig({
+  required String teacherUid,
+}) async {
+  final baseConfig = await loadAssessmentTemplateConfig();
+  if (teacherUid.trim().isEmpty) return baseConfig;
+
+  final overrides = await loadTeacherAssessmentTemplateOverrides(
+    teacherUid: teacherUid,
+  );
+  return mergeAssessmentTemplateConfig(baseConfig, overrides);
+}
+
+Future<AssessmentTemplateConfig> loadAssessmentTemplateConfigForStudent(
+  String studentUid,
+) async {
+  try {
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(studentUid)
+        .get();
+    final teacherUid = (userDoc.data()?['teacherUid'] ?? '').toString().trim();
+    return loadMergedAssessmentTemplateConfig(teacherUid: teacherUid);
+  } catch (_) {
+    return loadAssessmentTemplateConfig();
   }
 }
 

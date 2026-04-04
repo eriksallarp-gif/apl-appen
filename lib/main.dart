@@ -181,14 +181,15 @@ class _AssessmentFormPageState extends State<AssessmentFormPage> {
           .collection('assessments')
           .doc(widget.assessmentId)
           .set({
-        'supervisorName': name,
-        'supervisorPhone': phone,
-        'supervisorCompany': company,
-        'feedback': feedback,
-        'status': 'completed',
-        'submittedAt': FieldValue.serverTimestamp(),
-        if (widget.timesheetId.isNotEmpty) 'timesheetId': widget.timesheetId,
-      }, SetOptions(merge: true));
+            'supervisorName': name,
+            'supervisorPhone': phone,
+            'supervisorCompany': company,
+            'feedback': feedback,
+            'status': 'completed',
+            'submittedAt': FieldValue.serverTimestamp(),
+            if (widget.timesheetId.isNotEmpty)
+              'timesheetId': widget.timesheetId,
+          }, SetOptions(merge: true));
 
       setState(() {
         _success = 'Bedömningen har skickats in!';
@@ -279,7 +280,7 @@ class _AssessmentFormPageState extends State<AssessmentFormPage> {
                       maxLines: 4,
                     ),
                   ]),
-                  if (_error != null) ...[  
+                  if (_error != null) ...[
                     const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -722,7 +723,9 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
     });
   }
 
-  Future<void> _completeOnboarding(List<ProgramOption> availablePrograms) async {
+  Future<void> _completeOnboarding(
+    List<ProgramOption> availablePrograms,
+  ) async {
     if (_selectedProgram == null) {
       setState(() => _error = 'Välj ett program');
       return;
@@ -895,7 +898,11 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(Icons.school_outlined, size: 80, color: Colors.orange),
+                const Icon(
+                  Icons.school_outlined,
+                  size: 80,
+                  color: Colors.orange,
+                ),
                 const SizedBox(height: 24),
                 const Text(
                   'Välj ditt program',
@@ -958,9 +965,9 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
                       ? const CircularProgressIndicator()
                       : Text(
                           programRequiresSpecialization(
-                            _selectedProgram,
-                            options: availablePrograms,
-                          )
+                                _selectedProgram,
+                                options: availablePrograms,
+                              )
                               ? 'Fortsätt'
                               : 'Slutför',
                           style: const TextStyle(fontSize: 16),
@@ -1780,7 +1787,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: _loading ? null : _showForgotPasswordDialog,
+                          onPressed: _loading
+                              ? null
+                              : _showForgotPasswordDialog,
                           style: TextButton.styleFrom(
                             foregroundColor: const Color(0xFFEA580C),
                             padding: const EdgeInsets.symmetric(
@@ -1940,7 +1949,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       case 'auth/network-request-failed':
         return 'Nätverksfel. Kontrollera din anslutning och försök igen.';
       default:
-        return error.message ?? 'Kunde inte skicka återställningslänken just nu.';
+        return error.message ??
+            'Kunde inte skicka återställningslänken just nu.';
     }
   }
 
@@ -2025,10 +2035,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     const SizedBox(height: 8),
                     const Text(
                       'Fyll i din e-post så skickar vi en länk för att återställa lösenordet.',
-                      style: TextStyle(
-                        color: Color(0xFF6B7280),
-                        fontSize: 14,
-                      ),
+                      style: TextStyle(color: Color(0xFF6B7280), fontSize: 14),
                     ),
                     const SizedBox(height: 20),
                     TextField(
@@ -3178,6 +3185,10 @@ class StudentDetailScreen extends StatelessWidget {
                     stream: FirebaseFirestore.instance
                         .collection('assessments')
                         .where('studentUid', isEqualTo: studentUid)
+                        .where(
+                          'teacherUid',
+                          isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? '',
+                        )
                         .orderBy('submittedAt', descending: true)
                         .snapshots(),
                     builder: (context, assessmentSnap) {
@@ -4336,6 +4347,7 @@ class AssessmentScreen extends StatelessWidget {
                         stream: FirebaseFirestore.instance
                             .collection('assessments')
                             .where('timesheetId', isEqualTo: doc.id)
+                            .where('studentUid', isEqualTo: user.uid)
                             .limit(1)
                             .snapshots()
                             .map(
@@ -4536,11 +4548,18 @@ class _QRCodeDisplay extends StatelessWidget {
 
     // Annars, skapa ett nytt
     final newId = generateAssessmentId();
+    final user = FirebaseAuth.instance.currentUser!;
+    final userDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+    final teacherUid = (userDoc.data()?['teacherUid'] ?? '').toString().trim();
 
     // Spara det i Firestore som en platshållare
     await FirebaseFirestore.instance.collection('assessments').doc(newId).set({
       'timesheetId': timesheetId,
-      'studentUid': FirebaseAuth.instance.currentUser!.uid,
+      'studentUid': user.uid,
+      'teacherUid': teacherUid,
       'createdAt': FieldValue.serverTimestamp(),
       // Övriga fält (supervisorName, etc.) fylls när handledaren skickar
     }, SetOptions(merge: true));
@@ -4719,7 +4738,6 @@ class _MainNavigationState extends State<MainNavigation> {
           },
         ),
         const StudentRegistrationScreen(),
-        // ApprovalAndAssessmentScreen borttagen från navigation men filen finns kvar för framtida bruk
         const StatisticsScreen(),
         const WeekManagementScreen(),
         if (_isAdmin) SchoolsScreen(), // Skolor-flik för admin
@@ -4748,10 +4766,7 @@ class _MainNavigationState extends State<MainNavigation> {
     );
   }
 
-  Widget _buildStyledNavIcon({
-    required IconData icon,
-    required bool selected,
-  }) {
+  Widget _buildStyledNavIcon({required IconData icon, required bool selected}) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
@@ -4822,7 +4837,10 @@ class _MainNavigationState extends State<MainNavigation> {
       _styledNavItem(icon: Icons.checklist_rounded, label: 'Bedömning'),
       _styledNavItem(icon: Icons.bar_chart_rounded, label: 'Statistik'),
       _styledNavItem(icon: Icons.assignment_outlined, label: 'Uppgifter'),
-      _styledNavItem(icon: Icons.person_outline_rounded, label: 'Inställningar'),
+      _styledNavItem(
+        icon: Icons.person_outline_rounded,
+        label: 'Inställningar',
+      ),
     ]);
   }
 
@@ -4840,9 +4858,7 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
-        body: const Center(child: CircularProgressIndicator()),
-      );
+      return Scaffold(body: const Center(child: CircularProgressIndicator()));
     }
 
     final screens = _getScreens();

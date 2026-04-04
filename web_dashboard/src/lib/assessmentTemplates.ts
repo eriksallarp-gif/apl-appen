@@ -17,6 +17,15 @@ export interface AssessmentTemplateSnapshot {
   supervisorCriteria: SupervisorCriterion[];
 }
 
+export interface TeacherAssessmentTemplateOverrides {
+  hiddenSelfAssessmentFieldKeys: string[];
+  hiddenSupervisorCriteriaKeys: string[];
+  selfAssessmentOrderKeys: string[];
+  supervisorCriteriaOrderKeys: string[];
+  additionalSelfAssessmentFields: SelfAssessmentField[];
+  additionalSupervisorCriteria: SupervisorCriterion[];
+}
+
 export const defaultAssessmentTemplateSnapshot: AssessmentTemplateSnapshot = {
   selfAssessmentFields: [
     {
@@ -68,6 +77,18 @@ function sanitizeKeyPart(value: string): string {
     .replace(/^_+|_+$/g, '');
 }
 
+function matchesTemplateKey(first: string, second: string): boolean {
+  const normalizedFirst = first.trim();
+  const normalizedSecond = second.trim();
+
+  if (!normalizedFirst || !normalizedSecond) return false;
+
+  return (
+    normalizedFirst === normalizedSecond ||
+    sanitizeKeyPart(normalizedFirst) === sanitizeKeyPart(normalizedSecond)
+  );
+}
+
 function ensureUniqueKey(baseKey: string, usedKeys: Set<string>): string {
   let nextKey = baseKey || 'field';
   let suffix = 2;
@@ -85,13 +106,16 @@ export function createAssessmentFieldKey(label: string, existingKeys: string[]):
   return ensureUniqueKey(baseKey, usedKeys);
 }
 
-export function sanitizeAssessmentTemplateSnapshot(
-  raw: Partial<AssessmentTemplateSnapshot> | null | undefined,
-): AssessmentTemplateSnapshot {
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object';
+}
+
+function sanitizeSelfAssessmentFields(rawFields: unknown): SelfAssessmentField[] {
   const usedSelfKeys = new Set<string>();
-  const selfAssessmentFields = Array.isArray(raw?.selfAssessmentFields)
-    ? raw.selfAssessmentFields
-        .filter((field): field is Partial<SelfAssessmentField> => !!field && typeof field === 'object')
+
+  return Array.isArray(rawFields)
+    ? rawFields
+        .filter(isObjectRecord)
         .map((field) => {
           const label = String(field.label ?? '').trim();
           if (!label) return null;
@@ -109,11 +133,14 @@ export function sanitizeAssessmentTemplateSnapshot(
         })
         .filter((field): field is SelfAssessmentField => field !== null)
     : [];
+}
 
+function sanitizeSupervisorCriteria(rawCriteria: unknown): SupervisorCriterion[] {
   const usedCriteriaKeys = new Set<string>();
-  const supervisorCriteria = Array.isArray(raw?.supervisorCriteria)
-    ? raw.supervisorCriteria
-        .filter((criterion): criterion is Partial<SupervisorCriterion> => !!criterion && typeof criterion === 'object')
+
+  return Array.isArray(rawCriteria)
+    ? rawCriteria
+        .filter(isObjectRecord)
         .map((criterion) => {
           const label = String(criterion.label ?? '').trim();
           if (!label) return null;
@@ -128,6 +155,67 @@ export function sanitizeAssessmentTemplateSnapshot(
         })
         .filter((criterion): criterion is SupervisorCriterion => criterion !== null)
     : [];
+}
+
+function sanitizeOrderKeys(rawKeys: unknown): string[] {
+  return Array.isArray(rawKeys)
+    ? Array.from(
+        new Set(
+          rawKeys
+            .map((key) => String(key ?? '').trim())
+            .filter(Boolean),
+        ),
+      )
+    : [];
+}
+
+function orderItemsByKeys<T extends { key: string }>(items: T[], orderKeys: string[]): T[] {
+  if (items.length <= 1 || orderKeys.length === 0) return [...items];
+
+  const remaining = [...items];
+  const ordered: T[] = [];
+
+  for (const orderKey of orderKeys) {
+    const index = remaining.findIndex((item) => matchesTemplateKey(orderKey, item.key));
+    if (index === -1) continue;
+    ordered.push(remaining.splice(index, 1)[0]);
+  }
+
+  ordered.push(...remaining);
+  return ordered;
+}
+
+export function orderTeacherSelfAssessmentFieldsForView(
+  baseSnapshot: AssessmentTemplateSnapshot,
+  overrides: TeacherAssessmentTemplateOverrides,
+): SelfAssessmentField[] {
+  return orderItemsByKeys(
+    [
+      ...baseSnapshot.selfAssessmentFields,
+      ...overrides.additionalSelfAssessmentFields,
+    ],
+    overrides.selfAssessmentOrderKeys,
+  );
+}
+
+export function orderTeacherSupervisorCriteriaForView(
+  baseSnapshot: AssessmentTemplateSnapshot,
+  overrides: TeacherAssessmentTemplateOverrides,
+): SupervisorCriterion[] {
+  return orderItemsByKeys(
+    [
+      ...baseSnapshot.supervisorCriteria,
+      ...overrides.additionalSupervisorCriteria,
+    ],
+    overrides.supervisorCriteriaOrderKeys,
+  );
+}
+
+export function sanitizeAssessmentTemplateSnapshot(
+  raw: Partial<AssessmentTemplateSnapshot> | null | undefined,
+): AssessmentTemplateSnapshot {
+  const selfAssessmentFields = sanitizeSelfAssessmentFields(raw?.selfAssessmentFields);
+  const supervisorCriteria = sanitizeSupervisorCriteria(raw?.supervisorCriteria);
 
   return {
     selfAssessmentFields:
@@ -139,6 +227,92 @@ export function sanitizeAssessmentTemplateSnapshot(
         ? supervisorCriteria
         : defaultAssessmentTemplateSnapshot.supervisorCriteria,
   };
+}
+
+export function sanitizeTeacherAssessmentTemplateOverrides(
+  raw: Partial<TeacherAssessmentTemplateOverrides> | null | undefined,
+): TeacherAssessmentTemplateOverrides {
+  return {
+    hiddenSelfAssessmentFieldKeys: sanitizeOrderKeys(raw?.hiddenSelfAssessmentFieldKeys),
+    hiddenSupervisorCriteriaKeys: sanitizeOrderKeys(raw?.hiddenSupervisorCriteriaKeys),
+    selfAssessmentOrderKeys: sanitizeOrderKeys(raw?.selfAssessmentOrderKeys),
+    supervisorCriteriaOrderKeys: sanitizeOrderKeys(raw?.supervisorCriteriaOrderKeys),
+    additionalSelfAssessmentFields: sanitizeSelfAssessmentFields(raw?.additionalSelfAssessmentFields),
+    additionalSupervisorCriteria: sanitizeSupervisorCriteria(raw?.additionalSupervisorCriteria),
+  };
+}
+
+export function mergeAssessmentTemplateSnapshot(
+  baseSnapshot: AssessmentTemplateSnapshot,
+  overrides: TeacherAssessmentTemplateOverrides,
+): AssessmentTemplateSnapshot {
+  const hiddenSelfKeys = overrides.hiddenSelfAssessmentFieldKeys.map((key) => key.trim()).filter(Boolean);
+  const hiddenSupervisorKeys = overrides.hiddenSupervisorCriteriaKeys.map((key) => key.trim()).filter(Boolean);
+
+  const selfAssessmentFields: SelfAssessmentField[] = [];
+  const usedSelfKeys = new Set<string>();
+
+  for (const field of baseSnapshot.selfAssessmentFields) {
+    if (hiddenSelfKeys.some((key) => matchesTemplateKey(key, field.key))) continue;
+    selfAssessmentFields.push(field);
+    usedSelfKeys.add(field.key);
+  }
+
+  for (const field of overrides.additionalSelfAssessmentFields) {
+    const key = ensureUniqueKey(sanitizeKeyPart(field.key) || 'field', usedSelfKeys);
+    selfAssessmentFields.push({
+      key,
+      label: field.label,
+      placeholder: field.placeholder,
+      inputType: field.inputType,
+    });
+  }
+
+  const orderedSelfAssessmentFields = orderItemsByKeys(
+    selfAssessmentFields,
+    overrides.selfAssessmentOrderKeys,
+  );
+
+  const supervisorCriteria: SupervisorCriterion[] = [];
+  const usedCriteriaKeys = new Set<string>();
+
+  for (const criterion of baseSnapshot.supervisorCriteria) {
+    if (hiddenSupervisorKeys.some((key) => matchesTemplateKey(key, criterion.key))) continue;
+    supervisorCriteria.push(criterion);
+    usedCriteriaKeys.add(criterion.key);
+  }
+
+  for (const criterion of overrides.additionalSupervisorCriteria) {
+    const key = ensureUniqueKey(sanitizeKeyPart(criterion.key) || 'criterion', usedCriteriaKeys);
+    supervisorCriteria.push({ key, label: criterion.label });
+  }
+
+  const orderedSupervisorCriteria = orderItemsByKeys(
+    supervisorCriteria,
+    overrides.supervisorCriteriaOrderKeys,
+  );
+
+  return {
+    selfAssessmentFields:
+      orderedSelfAssessmentFields.length > 0
+        ? orderedSelfAssessmentFields
+        : baseSnapshot.selfAssessmentFields,
+    supervisorCriteria:
+      orderedSupervisorCriteria.length > 0
+        ? orderedSupervisorCriteria
+        : baseSnapshot.supervisorCriteria,
+  };
+}
+
+export function hasTeacherAssessmentOverrides(overrides: TeacherAssessmentTemplateOverrides): boolean {
+  return (
+    overrides.hiddenSelfAssessmentFieldKeys.length > 0 ||
+    overrides.hiddenSupervisorCriteriaKeys.length > 0 ||
+    overrides.selfAssessmentOrderKeys.length > 0 ||
+    overrides.supervisorCriteriaOrderKeys.length > 0 ||
+    overrides.additionalSelfAssessmentFields.length > 0 ||
+    overrides.additionalSupervisorCriteria.length > 0
+  );
 }
 
 export function getSelfAssessmentLabel(

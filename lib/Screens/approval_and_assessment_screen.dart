@@ -571,11 +571,13 @@ class _AssessmentTabState extends State<_AssessmentTab> {
           ElevatedButton(
             onPressed: () async {
               try {
+                final teacherUid = FirebaseAuth.instance.currentUser?.uid ?? '';
                 await FirebaseFirestore.instance
                     .collection('assessments')
                     .doc(studentUid)
                     .set({
                       'studentUid': studentUid,
+                      'teacherUid': teacherUid,
                       'assessment': assessmentController.text,
                       'updatedAt': FieldValue.serverTimestamp(),
                     });
