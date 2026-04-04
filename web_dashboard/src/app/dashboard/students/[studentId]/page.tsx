@@ -304,12 +304,13 @@ export default function StudentDetailPage() {
       setTimesheets(timesheetsData);
 
       // Hämta bedömningar direkt från assessmentRequests (alla) — vi bestämmer godkända lokalt
-      console.debug('QUERY: fetching assessmentRequests for studentUid=', studentId);
+      console.debug('QUERY: fetching assessmentRequests for studentUid=', studentId, 'teacherUid=', currentUserId);
+      const assessmentConstraints = [where('studentUid', '==', studentId)];
+      if (currentUserRole === 'teacher' && currentUserId) {
+        assessmentConstraints.push(where('teacherUid', '==', currentUserId));
+      }
       const assessmentsSnapshot = await getDocs(
-        query(
-          collection(db, 'assessmentRequests'),
-          where('studentUid', '==', studentId)
-        )
+        query(collection(db, 'assessmentRequests'), ...assessmentConstraints)
       );
       console.debug('DEBUG: assessmentRequests for', studentId, 'count=', assessmentsSnapshot.size);
       const assessmentsData = assessmentsSnapshot.docs.map(doc => {
@@ -328,8 +329,8 @@ export default function StudentDetailPage() {
           weeks,
           weekStart: data.weekStart || null,
           totalHours: data.totalHours || 0,
-          lunchApproved: data.lunchApproved || (data.assessmentData?.lunchApproved ?? 0) || 0,
-          travelApproved: data.travelApproved || (data.assessmentData?.travelApproved ?? 0) || 0,
+          lunchApproved: data.lunchApproved ?? data.lunchCount ?? data.assessmentData?.lunchApproved ?? 0,
+          travelApproved: data.travelApproved ?? data.travelCount ?? data.assessmentData?.travelApproved ?? 0,
           imageComments: data.imageComments || [],
           images: data.images || [],
           studentSelfAssessment: data.studentSelfAssessment || undefined,

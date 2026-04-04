@@ -39,6 +39,11 @@ interface RawData {
   assessments: Array<{ id: string; [key: string]: any }>;
 }
 
+function isAssessmentCompleted(data: { [key: string]: any }): boolean {
+  const status = (data.status || '').toString().toLowerCase();
+  return status === 'submitted' || status === 'approved' || Boolean(data.averageRating);
+}
+
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -92,7 +97,6 @@ export default function DashboardPage() {
       const classesSnapshot = isTeacher
         ? await getDocs(query(collection(db, 'classes'), where('teacherUid', '==', currentUserId)))
         : await getDocs(collection(db, 'classes'));
-      const assessmentsSnapshot = await getDocs(collection(db, 'assessmentRequests'));
       const schoolsSnapshot = await getDocs(collection(db, 'schools'));
 
       console.log('DEBUG: currentUserId', currentUserId, 'role', role);
@@ -132,6 +136,7 @@ export default function DashboardPage() {
       const studentIds = new Set(studentSummaries.map(doc => doc.id));
 
       let timesheetsDocs: any[] = [];
+      let assessmentDocs: any[] = [];
       try {
         if (isTeacher) {
           const teacherTimesheetsSnapshot = await getDocs(
@@ -146,15 +151,29 @@ export default function DashboardPage() {
         console.warn('Could not fetch timesheets for dashboard stats:', error);
       }
 
+      try {
+        if (isTeacher) {
+          const teacherAssessmentsSnapshot = await getDocs(
+            query(collection(db, 'assessmentRequests'), where('teacherUid', '==', currentUserId))
+          );
+          assessmentDocs = teacherAssessmentsSnapshot.docs;
+        } else {
+          const assessmentsSnapshot = await getDocs(collection(db, 'assessmentRequests'));
+          assessmentDocs = assessmentsSnapshot.docs;
+        }
+      } catch (error) {
+        console.warn('Could not fetch assessments for dashboard stats:', error);
+      }
+
       const timesheets = isTeacher
         ? timesheetsDocs.filter(doc => studentIds.has((doc.data().studentUid || '').toString()))
         : timesheetsDocs;
       const assessments = isTeacher
-        ? assessmentsSnapshot.docs.filter(doc => {
+        ? assessmentDocs.filter(doc => {
             const studentUid = (doc.data().studentUid || '').toString();
             return studentIds.has(studentUid);
           })
-        : assessmentsSnapshot.docs;
+        : assessmentDocs;
       const raw = {
         timesheets: timesheets.map(doc => ({ id: doc.id, ...doc.data() })),
         assessments: assessments.map(doc => ({ id: doc.id, ...doc.data() })),
@@ -217,14 +236,8 @@ export default function DashboardPage() {
     });
 
     const assessments = raw.assessments.filter(a => studentIds.has(a.studentUid));
-    const pendingAssessments = assessments.filter(a => {
-      const status = (a.status || '').toLowerCase();
-      return status !== 'submitted' && status !== 'approved';
-    });
-    const submittedAssessments = assessments.filter(a => {
-      const status = (a.status || '').toLowerCase();
-      return status === 'submitted' || status === 'approved';
-    });
+    const pendingAssessments = assessments.filter(a => !isAssessmentCompleted(a));
+    const submittedAssessments = assessments.filter(isAssessmentCompleted);
 
     setFilteredStudents(activeStudents);
       setStats(prev => ({
