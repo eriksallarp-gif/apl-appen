@@ -148,6 +148,34 @@ function sanitizeAssessmentTemplateSnapshot(raw) {
   };
 }
 
+function sanitizeTimesheetSummaries(raw) {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => {
+      const activities = Array.isArray(item.activities)
+        ? item.activities
+            .filter((activity) => activity && typeof activity === 'object')
+            .map((activity) => ({
+              name: toSafeString(activity.name),
+              hours: asNonNegativeInt(activity.hours),
+            }))
+            .filter((activity) => activity.name && activity.hours > 0)
+        : [];
+
+      return {
+        timesheetId: toSafeString(item.timesheetId),
+        weekLabel: toSafeString(item.weekLabel),
+        totalHours: asNonNegativeInt(item.totalHours),
+        activities,
+      };
+    })
+    .filter((summary) => summary.activities.length > 0);
+}
+
 exports.getSupervisorAssessmentRequest = functions.https.onCall(async (data) => {
   const requestId = toSafeString(data && data.requestId);
   const token = toSafeString(data && data.token);
@@ -188,6 +216,9 @@ exports.getSupervisorAssessmentRequest = functions.https.onCall(async (data) => 
   const assessmentTemplateSnapshot = sanitizeAssessmentTemplateSnapshot(
     requestData.assessmentTemplateSnapshot,
   );
+  const timesheetSummaries = sanitizeTimesheetSummaries(
+    requestData.timesheetSummaries,
+  );
 
   return {
     request: {
@@ -197,6 +228,7 @@ exports.getSupervisorAssessmentRequest = functions.https.onCall(async (data) => 
       lunchCount: asNonNegativeInt(requestData.lunchCount),
       travelCount: asNonNegativeInt(requestData.travelCount),
       images,
+      timesheetSummaries,
       studentSelfAssessment:
         requestData.studentSelfAssessment && typeof requestData.studentSelfAssessment === 'object'
           ? requestData.studentSelfAssessment

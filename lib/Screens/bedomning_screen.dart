@@ -27,6 +27,68 @@ String _formatShortDate(DateTime date) {
   return '${date.day}/${date.month}';
 }
 
+String _formatWeekLabel(Map<String, dynamic> data) {
+  final weekStart = (data['weekStart'] ?? '').toString();
+  try {
+    final weekStartDate = DateTime.parse(weekStart);
+    final weekNumber =
+        _readStoredWeekNumber(data) ?? _getWeekNumber(weekStartDate);
+    return 'V. $weekNumber';
+  } catch (_) {
+    return weekStart;
+  }
+}
+
+List<Map<String, dynamic>> _buildTimesheetSummaries(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> availableTimesheets,
+  Set<String> selectedTimesheetIds,
+) {
+  final summaries = <Map<String, dynamic>>[];
+
+  for (final id in selectedTimesheetIds) {
+    final matchingDocs = availableTimesheets.where((d) => d.id == id);
+    if (matchingDocs.isEmpty) continue;
+
+    final doc = matchingDocs.first;
+    final data = doc.data();
+    final entries = (data['entries'] as Map<String, dynamic>?) ?? {};
+    final activities = <Map<String, dynamic>>[];
+    var timesheetTotalHours = 0;
+
+    for (final entry in entries.entries) {
+      final activityName = entry.key.toString().trim();
+      if (activityName.isEmpty) continue;
+
+      var activityHours = 0;
+      final dayMap = entry.value;
+      if (dayMap is Map<String, dynamic>) {
+        for (final rawHours in dayMap.values) {
+          activityHours += (rawHours as num?)?.toInt() ?? 0;
+        }
+      }
+
+      if (activityHours <= 0) continue;
+
+      timesheetTotalHours += activityHours;
+      activities.add({
+        'name': activityName,
+        'hours': activityHours,
+      });
+    }
+
+    if (activities.isEmpty) continue;
+
+    summaries.add({
+      'timesheetId': doc.id,
+      'weekLabel': _formatWeekLabel(data),
+      'totalHours': timesheetTotalHours,
+      'activities': activities,
+    });
+  }
+
+  return summaries;
+}
+
 class BedomningScreen extends StatefulWidget {
   const BedomningScreen({super.key});
 
@@ -700,6 +762,11 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
       }
     }
 
+    final timesheetSummaries = _buildTimesheetSummaries(
+      availableTimesheets,
+      _selectedTimesheetIds,
+    );
+
     // Generera unik token
     final token = _generateToken();
     final expiresAt = DateTime.now().add(const Duration(days: 1));
@@ -789,6 +856,7 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
             'timesheetIds': _selectedTimesheetIds.toList(),
             'weeks': weeks,
             'totalHours': totalHours,
+            'timesheetSummaries': timesheetSummaries,
             'lunchCount': lunchCount,
             'travelCount': travelCount,
             'status': 'pending',

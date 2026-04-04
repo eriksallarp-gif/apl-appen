@@ -4,11 +4,67 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { db, functions } from '@/lib/firebase';
 import {
+  AssessmentTemplateSnapshot,
   defaultAssessmentTemplateSnapshot,
   sanitizeAssessmentTemplateSnapshot,
 } from '@/lib/assessmentTemplates';
 import { collection, getDocs } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
+
+type SupervisorTimesheetActivity = {
+  name: string;
+  hours: number;
+};
+
+type SupervisorTimesheetSummary = {
+  timesheetId: string;
+  weekLabel: string;
+  totalHours: number;
+  activities: SupervisorTimesheetActivity[];
+};
+
+type SupervisorRequestPayload = {
+  studentName?: string;
+  weeks?: string[];
+  totalHours?: number;
+  lunchCount?: number;
+  travelCount?: number;
+  images?: Array<{ url?: string; fileName?: string; uploadedAt?: unknown }>;
+  studentSelfAssessment?: Record<string, string>;
+  assessmentTemplateSnapshot?: unknown;
+  linkedCompanyName?: string;
+  studentCompanyName?: string;
+  companyName?: string;
+  timesheetSummaries?: SupervisorTimesheetSummary[];
+};
+
+function sanitizeSupervisorTimesheetSummaries(raw: unknown): SupervisorTimesheetSummary[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+    .map((item) => {
+      const activities = Array.isArray(item.activities)
+        ? item.activities
+            .filter((activity): activity is Record<string, unknown> => !!activity && typeof activity === 'object')
+            .map((activity) => ({
+              name: String(activity.name ?? '').trim(),
+              hours: Number(activity.hours ?? 0) || 0,
+            }))
+            .filter((activity) => activity.name && activity.hours > 0)
+        : [];
+
+      return {
+        timesheetId: String(item.timesheetId ?? '').trim(),
+        weekLabel: String(item.weekLabel ?? '').trim(),
+        totalHours: Number(item.totalHours ?? 0) || 0,
+        activities,
+      };
+    })
+    .filter((summary) => summary.activities.length > 0);
+}
 
 export default function SupervisorPage() {
   const params = useParams();
@@ -35,6 +91,7 @@ export default function SupervisorPage() {
   const [otherInfo, setOtherInfo] = useState('');
   const [lunchApproved, setLunchApproved] = useState(0);
   const [travelApproved, setTravelApproved] = useState(0);
+  const [showTimesheetDetails, setShowTimesheetDetails] = useState(false);
 
   const criteria = request?.assessmentTemplateSnapshot?.supervisorCriteria ?? defaultAssessmentTemplateSnapshot.supervisorCriteria;
 
@@ -67,7 +124,7 @@ export default function SupervisorPage() {
     try {
       const getRequestCallable = httpsCallable(functions, 'getSupervisorAssessmentRequest');
       const result = await getRequestCallable({ requestId, token });
-      const payload = (result.data || {}) as { request?: any };
+      const payload = (result.data || {}) as { request?: SupervisorRequestPayload };
       const requestData = payload.request;
 
       if (!requestData) {
@@ -77,12 +134,13 @@ export default function SupervisorPage() {
       }
 
       const assessmentTemplateSnapshot = sanitizeAssessmentTemplateSnapshot(
-        requestData.assessmentTemplateSnapshot,
+        requestData.assessmentTemplateSnapshot as AssessmentTemplateSnapshot | null | undefined,
       );
 
       setRequest({
         ...requestData,
         assessmentTemplateSnapshot,
+        timesheetSummaries: sanitizeSupervisorTimesheetSummaries(requestData.timesheetSummaries),
       });
       setRatings(
         Object.fromEntries(
@@ -246,6 +304,11 @@ export default function SupervisorPage() {
     );
   }
 
+  const timesheetSummaries = Array.isArray(request?.timesheetSummaries)
+    ? (request.timesheetSummaries as SupervisorTimesheetSummary[])
+    : [];
+  const hasTimesheetDetails = timesheetSummaries.length > 0;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-orange-100 py-8 px-4">
       <div className="max-w-4xl mx-auto">
@@ -269,14 +332,64 @@ export default function SupervisorPage() {
                 <p className="text-orange-100">
                   📅 Veckor: {request?.weeks.join(', ')}
                 </p>
-                <p className="text-orange-100">
-                  ⏰ Total arbetstid: {request?.totalHours} timmar
-                </p>
+                <button
+                  type="button"
+                  onClick={() => hasTimesheetDetails && setShowTimesheetDetails((current) => !current)}
+                  disabled={!hasTimesheetDetails}
+                  className={`mt-1 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-left text-orange-100 transition ${
+                    hasTimesheetDetails
+                      ? 'hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/40'
+                      : 'cursor-default'
+                  }`}
+                >
+                  <span>⏰ Total arbetstid: {request?.totalHours} timmar</span>
+                  {hasTimesheetDetails && (
+                    <span className="rounded-full bg-white/20 px-2 py-1 text-xs font-semibold text-white">
+                      {showTimesheetDetails ? 'Dölj moment' : 'Visa moment'}
+                    </span>
+                  )}
+                </button>
               </div>
               <div className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg">
                 <p className="text-sm text-orange-100">APL-period</p>
               </div>
             </div>
+
+            {hasTimesheetDetails && showTimesheetDetails && (
+              <div className="mt-5 rounded-xl bg-white/10 p-4 ring-1 ring-white/20">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold uppercase tracking-wide text-orange-50">
+                    Arbetsmoment bakom timmarna
+                  </p>
+                  <p className="text-xs text-orange-100">
+                    Klick på total arbetstid visar eller döljer detaljerna
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  {timesheetSummaries.map((summary) => (
+                    <div
+                      key={summary.timesheetId || summary.weekLabel}
+                      className="rounded-lg bg-white/10 p-4 ring-1 ring-white/10"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-semibold text-white">{summary.weekLabel || 'Valt tidkort'}</p>
+                        <p className="text-sm font-medium text-orange-50">{summary.totalHours} timmar</p>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {summary.activities.map((activity) => (
+                          <span
+                            key={`${summary.timesheetId}-${activity.name}`}
+                            className="rounded-full bg-white px-3 py-1 text-sm font-medium text-orange-700"
+                          >
+                            {activity.name}: {activity.hours} h
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleSubmit}>
