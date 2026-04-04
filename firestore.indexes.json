@@ -1,6 +1,24 @@
 {
   "indexes": [
     {
+      "collectionGroup": "assessments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "studentUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "teacherUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submittedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "aplDocuments",
       "queryScope": "COLLECTION",
       "fields": [

@@ -64,6 +64,94 @@
             && get(/databases/$(database)/documents/assignments/$(assignmentId)).data.assignedTo.hasAny([request.auth.uid]);
         }
 
+        function classExists(classId) {
+          return classId != '' &&
+            exists(/databases/$(database)/documents/classes/$(classId));
+        }
+
+        function classTeacherUid(classId) {
+          return classExists(classId)
+            ? get(/databases/$(database)/documents/classes/$(classId)).data.teacherUid
+            : '';
+        }
+
+        function userTeacherUid(userId) {
+          return exists(/databases/$(database)/documents/users/$(userId))
+            ? get(/databases/$(database)/documents/users/$(userId)).data.get('teacherUid', '')
+            : '';
+        }
+
+        function userClassId(userId) {
+          return exists(/databases/$(database)/documents/users/$(userId))
+            ? get(/databases/$(database)/documents/users/$(userId)).data.get('classId', '')
+            : '';
+        }
+
+        function userSchoolById(userId) {
+          return exists(/databases/$(database)/documents/users/$(userId))
+            ? get(/databases/$(database)/documents/users/$(userId)).data.get('school', '')
+            : '';
+        }
+
+        function canCreateOwnUserProfile(userId) {
+          return request.auth.uid == userId &&
+            request.resource.data.keys().hasOnly([
+              'name', 'displayName', 'firstName', 'lastName',
+              'email', 'role', 'school', 'approved',
+              'createdAt', 'onboardingComplete'
+            ]) &&
+            request.resource.data.get('role', '') in ['student', 'teacher'] &&
+            request.resource.data.get('approved', false) == false &&
+            request.resource.data.get('classId', '') == '' &&
+            request.resource.data.get('teacherUid', '') == '' &&
+            request.resource.data.get('teacherId', '') == '';
+        }
+
+        function hasValidSelfClassLink() {
+          return isStudent() &&
+            classExists(request.resource.data.get('classId', '')) &&
+            classTeacherUid(request.resource.data.get('classId', '')) == request.resource.data.get('teacherUid', '') &&
+            request.resource.data.get('teacherId', '') == request.resource.data.get('teacherUid', '') &&
+            (
+              !request.resource.data.diff(resource.data).affectedKeys().hasAny(['school']) ||
+              request.resource.data.get('school', '') == userSchoolById(request.resource.data.get('teacherUid', ''))
+            );
+        }
+
+        function canUpdateOwnUserProfile() {
+          return request.auth.uid == resource.id &&
+            isUserActive() &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'name', 'displayName', 'firstName', 'lastName',
+              'program', 'specialization', 'onboardingComplete',
+              'gdprConsentAccepted', 'gdprConsentVersion',
+              'gdprConsentAcceptedAt', 'gdprConsentLocale',
+              'classId', 'teacherUid', 'teacherId', 'school'
+            ]) &&
+            (
+              !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                'classId', 'teacherUid', 'teacherId', 'school'
+              ]) ||
+              hasValidSelfClassLink()
+            );
+        }
+
+        function isClassOwner(classId) {
+          return isTeacher() && classTeacherUid(classId) == request.auth.uid;
+        }
+
+        function isStudentAssignedToClass(classId, studentId) {
+          return isStudent() &&
+            request.auth.uid == studentId &&
+            userClassId(request.auth.uid) == classId &&
+            userTeacherUid(request.auth.uid) == classTeacherUid(classId);
+        }
+
+        function matchesCurrentStudentAssignment() {
+          return request.resource.data.get('teacherUid', '') == userTeacherUid(request.auth.uid) &&
+            request.resource.data.get('classId', '') == userClassId(request.auth.uid);
+        }
+
         // Schools collection - tillåt alla att läsa skolor (för registrering)
         match /schools/{schoolId} {
           allow read: if true;
@@ -78,9 +166,9 @@
           // Users can create their own profile during registration
           // Users can write their own profile (only if active)
           // Teachers and admins can write any user (including status field)
-          allow create: if request.auth.uid == userId;
+          allow create: if canCreateOwnUserProfile(userId);
           allow update: if isSignedIn() && (
-            (request.auth.uid == userId && isUserActive()) || 
+            canUpdateOwnUserProfile() || 
             isAdmin()
           );
           allow delete: if isAdmin();
@@ -102,26 +190,32 @@
         match /classes/{classId} {
           // Teachers and admins can read/write classes
           allow read: if isSignedIn();
-          allow write: if isTeacherOrAdmin();
+          allow create: if isAdmin() ||
+            (isTeacher() && request.resource.data.teacherUid == request.auth.uid);
+          allow update, delete: if isAdmin() || isClassOwner(classId);
 
           // Students subcollection
           match /students/{studentId} {
             allow read: if isSignedIn();
-            allow write: if isTeacherOrAdmin() || (isStudent() && request.auth.uid == studentId);
+            allow write: if isAdmin() ||
+              isClassOwner(classId) ||
+              isStudentAssignedToClass(classId, studentId);
           }
 
           // Student week overrides
           match /studentWeekOverrides/{studentId} {
             allow read: if isSignedIn();
-            allow write: if isTeacherOrAdmin();
+            allow write: if isAdmin() || isClassOwner(classId);
           }
         }
 
         // ClassCodes collection (för klasskoder kopplade till klasser)
         match /classCodes/{codeId} {
           allow read: if isTeacherOrAdmin();
-          allow create: if isTeacherOrAdmin();
-          allow update, delete: if isTeacherOrAdmin();
+          allow create: if isAdmin() ||
+            (isTeacher() && request.resource.data.teacherUid == request.auth.uid);
+          allow update, delete: if isAdmin() ||
+            (isTeacher() && resource.data.teacherUid == request.auth.uid);
         }
 
         // Timesheets collection
@@ -145,6 +239,7 @@
           // They cannot pre-set approved or locked to true on creation.
           allow create: if isUserActive() && hasCurrentGdprConsent() &&
             request.auth.uid == request.resource.data.studentUid &&
+            matchesCurrentStudentAssignment() &&
             request.resource.data.get('approved', false) == false &&
             request.resource.data.get('locked', false) == false;
 
@@ -157,23 +252,55 @@
               request.auth.uid == resource.data.get('studentUid', '') &&
               hasCurrentGdprConsent() &&
               resource.data.get('locked', false) != true &&
-              !request.resource.data.diff(resource.data).affectedKeys().hasAny(['approved', 'locked'])
+              !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                'approved', 'locked', 'studentUid', 'teacherUid', 'classId'
+              ])
             ) ||
             request.auth.uid == resource.data.get('teacherUid', '') ||
             isAdmin()
           );
 
           // Only teachers and admins can delete
-          allow delete: if isTeacherOrAdmin();
+          allow delete: if isAdmin() ||
+            (isTeacher() && request.auth.uid == resource.data.get('teacherUid', ''));
         }
 
         // Assessments collection
         match /assessments/{assessmentId} {
-          // Anyone authenticated can read assessments
-          allow read: if isSignedIn();
+          // Scope reads to the owning student, assigned teacher, or admin.
+          allow read: if isSignedIn() && (
+            isAdmin() ||
+            request.auth.uid == resource.data.get('studentUid', '') ||
+            request.auth.uid == resource.data.get('teacherUid', '')
+          );
 
-          // Only teachers and admins can create/update/delete assessments
-          allow write: if isTeacherOrAdmin();
+          // Students may only create their own placeholder assessment docs.
+          allow create: if isAdmin() ||
+            (
+              isTeacher() &&
+              request.resource.data.get('teacherUid', '') == request.auth.uid
+            ) ||
+            (
+              isStudent() &&
+              isUserActive() &&
+              request.auth.uid == request.resource.data.get('studentUid', '') &&
+              request.resource.data.get('teacherUid', '') == userTeacherUid(request.auth.uid) &&
+              request.resource.data.keys().hasOnly([
+                'timesheetId', 'studentUid', 'teacherUid', 'createdAt'
+              ])
+            );
+
+          allow update: if isAdmin() ||
+            (
+              isTeacher() &&
+              resource.data.get('teacherUid', '') == request.auth.uid &&
+              !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                'studentUid', 'teacherUid', 'createdAt'
+              ])
+            );
+
+          allow delete: if isAdmin() ||
+            (isTeacher() && resource.data.get('teacherUid', '') == request.auth.uid);
         }
 
         // Messages collection
@@ -240,17 +367,20 @@
         match /assessmentRequests/{requestId} {
           // Endast inloggade användare med rätt roll får läsa direkt.
           // Handledarflöde går via Cloud Function som validerar token server-side.
-          allow read: if isTeacherOrAdmin() ||
+          allow read: if isAdmin() ||
+            (isTeacher() && request.auth.uid == resource.data.get('teacherUid', '')) ||
             (isSignedIn() && request.auth.uid == resource.data.studentUid);
 
           // Elev kan skapa sin egen request med ett begränsat schema.
           allow create: if isUserActive() && hasCurrentGdprConsent() &&
             request.auth.uid == request.resource.data.studentUid &&
+            request.resource.data.get('teacherUid', '') == userTeacherUid(request.auth.uid) &&
             request.resource.data.get('status', 'pending') == 'pending' &&
             request.resource.data.keys().hasOnly([
               'studentUid', 'studentName',
               'timesheetIds', 'weeks',
               'totalHours', 'lunchCount', 'travelCount',
+              'teacherUid',
               'status', 'createdAt', 'token', 'expiresAt',
               'images',
               'linkedCompanyName', 'studentCompanyName',
@@ -260,10 +390,12 @@
 
           // Endast lärare/admin får uppdatera direkt i klient.
           // Handledarens inskick sker via Cloud Function.
-          allow update: if isTeacherOrAdmin();
+          allow update: if isAdmin() ||
+            (isTeacher() && request.auth.uid == resource.data.get('teacherUid', ''));
 
           // Only teachers and admins can delete
-          allow delete: if isTeacherOrAdmin();
+          allow delete: if isAdmin() ||
+            (isTeacher() && request.auth.uid == resource.data.get('teacherUid', ''));
         }
 
         // Companies collection (för APL-företag)
@@ -328,6 +460,32 @@
           allow update, delete: if isSignedIn() && (
             isAdmin() ||
             (isTeacher() && resource.data.teacherUid == request.auth.uid)
+          );
+        }
+
+        // Teacher-specific assessment template overrides
+        match /teacherAssessmentTemplates/{teacherUid} {
+          allow read: if isSignedIn() && (
+            isAdmin() ||
+            (isTeacher() && request.auth.uid == teacherUid) ||
+            (
+              isStudent() &&
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teacherUid == teacherUid
+            )
+          );
+
+          allow create, update: if isSignedIn() && (
+            isAdmin() ||
+            (
+              isTeacher() &&
+              request.auth.uid == teacherUid &&
+              request.resource.data.teacherUid == request.auth.uid
+            )
+          );
+
+          allow delete: if isSignedIn() && (
+            isAdmin() ||
+            (isTeacher() && request.auth.uid == teacherUid)
           );
         }
 

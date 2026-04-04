@@ -9,11 +9,17 @@
     "backfill:student-school:dry": "node backfill-student-school.js --dry-run",
     "backfill:student-school": "node backfill-student-school.js",
     "backfill:user-status:dry": "node backfill-user-status.js --dry-run",
-    "backfill:user-status": "node backfill-user-status.js"
+    "backfill:user-status": "node backfill-user-status.js",
+    "test:rules": "firebase emulators:exec --config ../firebase.rules-test.json --project demo-apl-appen --only firestore \"node --test tests/firestore.rules.test.js\""
   },
   "dependencies": {
     "express": "^5.2.1",
     "firebase-admin": "^12.0.0",
     "firebase-functions": "^4.5.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.0.0",
+    "firebase-tools": "^15.5.1"
   }
 }
