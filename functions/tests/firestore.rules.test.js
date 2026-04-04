@@ -254,6 +254,68 @@ test('teacher assessment request access is scoped by teacherUid', async () => {
   await assertFails(getDoc(docRef(teacherOneDb, 'assessmentRequests/request-2')));
 });
 
+test('student can create assessment request with timesheet summaries', async () => {
+  await clearFirestore();
+  await seedDocuments([
+    {
+      path: 'users/teacher-1',
+      data: {
+        role: 'teacher',
+        status: 'active',
+      },
+    },
+    {
+      path: 'users/student-1',
+      data: {
+        role: 'student',
+        status: 'active',
+        teacherUid: 'teacher-1',
+        gdprConsentVersion: '2026-03-25',
+      },
+    },
+  ]);
+
+  const studentDb = testEnv.authenticatedContext('student-1').firestore();
+
+  await assertSucceeds(
+    setDoc(docRef(studentDb, 'assessmentRequests/request-new'), {
+      studentUid: 'student-1',
+      studentName: 'Elev Ett',
+      teacherUid: 'teacher-1',
+      timesheetIds: ['sheet-1'],
+      weeks: ['V. 12'],
+      timesheetSummaries: [
+        {
+          timesheetId: 'sheet-1',
+          weekLabel: 'V. 12',
+          totalHours: 24,
+          activities: [
+            { name: 'Montering', hours: 16 },
+            { name: 'Kundservice', hours: 8 },
+          ],
+        },
+      ],
+      totalHours: 24,
+      lunchCount: 2,
+      travelCount: 0,
+      status: 'pending',
+      createdAt: new Date('2026-04-04T09:00:00Z'),
+      token: 'token-123',
+      expiresAt: new Date('2026-04-05T09:00:00Z'),
+      images: [],
+      linkedCompanyName: 'APL AB',
+      studentCompanyName: 'APL AB',
+      studentSelfAssessment: {
+        whatDidYouDo: 'Jag arbetade med montering och kundservice.',
+      },
+      assessmentTemplateSnapshot: {
+        selfAssessmentFields: [],
+        supervisorCriteria: [],
+      },
+    }),
+  );
+});
+
 test('teacher can only write own assessment template override document', async () => {
   await clearFirestore();
   await seedDocuments([

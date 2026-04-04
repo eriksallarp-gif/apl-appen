@@ -379,6 +379,7 @@
             request.resource.data.keys().hasOnly([
               'studentUid', 'studentName',
               'timesheetIds', 'weeks',
+              'timesheetSummaries',
               'totalHours', 'lunchCount', 'travelCount',
               'teacherUid',
               'status', 'createdAt', 'token', 'expiresAt',
