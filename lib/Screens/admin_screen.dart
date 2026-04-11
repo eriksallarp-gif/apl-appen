@@ -14,7 +14,6 @@ class _AdminScreenState extends State<AdminScreen> {
   int _selectedTabIndex = 0;
   List<Map<String, dynamic>> _allTeachers = [];
   List<Map<String, dynamic>> _allStudents = [];
-  final List<Map<String, dynamic>> _pendingTeachers = [];
   bool _loading = true;
 
   // Form controllers
@@ -29,12 +28,8 @@ class _AdminScreenState extends State<AdminScreen> {
   final _studentEmailCtrl = TextEditingController();
   final _studentPasswordCtrl = TextEditingController();
 
-  String? _selectedTeacherId;
-  String? _selectedClassId;
-  List<Map<String, dynamic>> _classes = [];
   final bool _teacherApproved = true;
   String? _errorMsg;
-  final bool _isCreating = false;
 
   @override
   void initState() {
@@ -118,15 +113,6 @@ class _AdminScreenState extends State<AdminScreen> {
         };
       }).toList();
 
-      // Hämta alla klasser
-      final classQuery = await FirebaseFirestore.instance
-          .collection('classes')
-          .get();
-
-      _classes = classQuery.docs.map((doc) {
-        return {'id': doc.id, 'name': doc.data()['name'] ?? 'Okänd klass'};
-      }).toList();
-
       if (mounted) {
         setState(() => _loading = false);
       }
@@ -138,22 +124,6 @@ class _AdminScreenState extends State<AdminScreen> {
         });
       }
     }
-  }
-
-  Future<void> _createTeacher() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Lägg till lärare via hemsidan admin-panelen'),
-      ),
-    );
-  }
-
-  Future<void> _createStudent() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Lägg till elev via hemsidan admin-panelen'),
-      ),
-    );
   }
 
   Future<void> _deleteUser(String userId, String role) async {

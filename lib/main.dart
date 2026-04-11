@@ -11,7 +11,6 @@ import 'firebase_options.dart';
 import 'Screens/tidkort_screen.dart';
 import 'Screens/start_screen.dart';
 import 'Screens/student_registration_screen.dart';
-import 'Screens/approval_and_assessment_screen.dart';
 import 'Screens/teacher_dashboard_screen.dart';
 import 'Screens/week_management_screen.dart';
 import 'Screens/statistics_screen.dart';

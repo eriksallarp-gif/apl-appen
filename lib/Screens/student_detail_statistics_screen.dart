@@ -102,7 +102,7 @@ class _StudentDetailStatisticsScreenState
                 'DEBUG: assessmentRequests for ${widget.studentUid} count=${assessments.length}',
               );
               for (var d in assessments) {
-                final dd = d.data() ?? {};
+                final dd = d.data();
                 print(
                   'ASSESS_DOC: id=${d.id}, weeks=${dd['weeks'] ?? null}, travelApproved=${dd['travelApproved'] ?? null}, lunchApproved=${dd['lunchApproved'] ?? null}, status=${dd['status'] ?? null}',
                 );
@@ -194,23 +194,10 @@ class _StudentDetailStatisticsScreenState
     int totalKilometers = 0;
     final Map<String, int> activityHours = {};
 
-    int getWeekNumber(String weekStart) {
-      try {
-        final weekStartDate = DateTime.parse(weekStart);
-        final jan4 = DateTime(weekStartDate.year, 1, 4);
-        final monday = jan4.subtract(
-          Duration(days: jan4.weekday - DateTime.monday),
-        );
-        return weekStartDate.difference(monday).inDays ~/ 7 + 1;
-      } catch (e) {
-        return 0;
-      }
-    }
-
     // Collect weeks and sums from assessmentRequests (source-of-truth)
     final Set<String> approvedWeeks = {};
     for (var doc in assessments) {
-      final data = doc.data() ?? {};
+      final data = doc.data();
       final weeks = (data['weeks'] as List?)?.cast<String>() ?? [];
       for (final w in weeks) {
         if (w.isNotEmpty) approvedWeeks.add(w);

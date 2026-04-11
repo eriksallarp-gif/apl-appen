@@ -1,145 +1,146 @@
-# Release Readiness Checklist
+# Checklista För Releasberedskap
 
-Last updated: 2026-03-29
-Owner: Team APL Appen
+Senast uppdaterad: 2026-03-29
+Ansvarig: Team APL Appen
 
-## Current status
-- [x] Internal test ongoing with 2 students via debug APK
-- [x] Multiple bugs found and fixed during test cycle
-- [ ] Release candidate build pipeline validated (Android + iOS)
-- [ ] Store listing assets complete (Google Play + App Store)
-- [ ] Final go/no-go review done
+## Aktuell status
+- [x] Intern test pågår med 2 elever via debug-APK
+- [x] Flera buggar hittade och åtgärdade under testcykeln
+- [ ] Release candidate-byggpipeline verifierad (Android + iOS)
+- [ ] Butiksmaterial färdigt (Google Play + App Store)
+- [ ] Slutlig go/no-go-granskning genomförd
 
-## Release stabilization policy (2026-03-29)
-- [x] Feature freeze: no new features before release candidate approval
-- [x] Safety rule: no refactors that can remove or alter existing core flows
-- [x] Allowed changes: only blocker/critical bug fixes, release signing, store metadata, and monitoring setup
-- [x] UI/design changes postponed unless they are strictly cosmetic and zero-risk
+## Policy för release-stabilisering (2026-03-29)
+- [x] Feature freeze: inga nya funktioner innan release candidate är godkänd
+- [x] Säkerhetsregel: inga refaktoriseringar som kan ta bort eller ändra befintliga kärnflöden
+- [x] Tillåtna ändringar: endast blockerande/kritiska buggfixar, release-signering, butiksmetadata och monitoreringssetup
+- [x] UI/designändringar skjuts upp om de inte är strikt kosmetiska och helt riskfria
 
-Decision note:
-- Priority is stable release behavior over scope growth. Existing app and web functionality must remain intact.
-- Play Console prep details: see GOOGLE_PLAY_PREP_CHECKLIST.md
+Beslutsnotering:
+- Prioritet är stabilt releasebeteende framför utökad scope. Befintlig app- och webb-funktionalitet måste förbli intakt.
+- Detaljer för Play Console-förberedelser finns i GOOGLE_PLAY_PREP_CHECKLIST.md
 
-## 1) Stability and regression gate
-- [ ] No blocker bugs in teacher/student core flows
-- [x] Login recovery flow: forgot password sends reset email without crash
-- [ ] No blocker bugs in statistics view
-- [ ] No blocker bugs in timesheet submit/approve flow
-- [ ] No blocker bugs in assessment visibility rules
-- [ ] Regression check: pending assessments are never shown as submitted
+## 1) Stabilitets- och regressionsgrind
+- [ ] Inga blockerande buggar i lärar-/elevflöden
+- [x] Återställning av inloggning: glömt lösenord skickar återställningsmail utan krasch
+- [ ] Inga blockerande buggar i statistikvyn
+- [ ] Inga blockerande buggar i flödet för att skicka/godkänna tidkort
+- [ ] Inga blockerande buggar i regler för bedömningssynlighet
+- [ ] Regressionskontroll: väntande bedömningar visas aldrig som inskickade
 
-Exit criteria:
-- 0 blocker bugs
-- 0 critical open bugs
+Exit-kriterier:
+- 0 blockerande buggar
+- 0 öppna kritiska buggar
 
-## 2) Test coverage gate
-- [x] Add/verify test: pending assessment hidden
-- [x] Add/verify test: submitted/approved assessment visible
-- [x] Add/verify test: fallback non-zero rating visible
-- [x] Run full flutter test successfully
+## 2) Grind för testtäckning
+- [x] Lägg till/verifiera test: väntande bedömning dold
+- [x] Lägg till/verifiera test: inskickad/godkänd bedömning synlig
+- [x] Lägg till/verifiera test: fallback för rating över 0 synlig
+- [x] Kör hela flutter test framgångsrikt
 
-Exit criteria:
-- All targeted tests green
+Exit-kriterier:
+- Alla riktade tester gröna
 
-## 3) Android release gate (Google Play)
-- [x] Set release versionCode/versionName
-- [x] Configure release signing setup in Gradle (key.properties wiring)
-- [x] Build signed Android App Bundle (.aab)
-- [ ] Verify app startup/login/core flow on release build
-- [ ] Upload to Internal testing track
-- [ ] Collect tester feedback and crash reports
+## 3) Android-releasegrind (Google Play)
+- [x] Sätt release versionCode/versionName
+- [x] Konfigurera release-signering i Gradle (koppling till key.properties)
+- [x] Bygg signerad Android App Bundle (.aab)
+- [ ] Verifiera appstart/inloggning/kärnflöde på release-build
+- [ ] Ladda upp till Internal testing-spåret
+- [ ] Samla in testfeedback och kraschrapporter
 
 Progress notes (2026-03-28):
-- Built release AAB: build/app/outputs/bundle/release/app-release.aab (53.5MB)
-- Built release APK: build/app/outputs/flutter-apk/app-release.apk (68.5MB)
-- Current blocker for "signed AAB": release buildType uses debug signing in android/app/build.gradle.kts.
-- Current blocker for runtime verification: no Android device/emulator connected in this environment (only Windows/Chrome/Edge detected).
+- Byggde release-AAB: build/app/outputs/bundle/release/app-release.aab (53.5MB)
+- Byggde release-APK: build/app/outputs/flutter-apk/app-release.apk (68.5MB)
+- Nuvarande blockerare för "signed AAB": release buildType använder debug-signering i android/app/build.gradle.kts.
+- Nuvarande blockerare för runtime-verifiering: ingen Android-enhet/emulator ansluten i denna miljö (endast Windows/Chrome/Edge upptäckta).
 
 Progress notes (2026-03-29):
-- Updated android/app/build.gradle.kts to support release signing via android/key.properties.
-- Release build now uses release key when key.properties exists; otherwise it falls back to debug signing.
-- Built release AAB again: build/app/outputs/bundle/release/app-release.aab (53.5MB).
-- Build environment check: android/key.properties is currently missing, so release build falls back to debug signing.
-- Sanity tests passed (3/3): test/assessment_visibility_test.dart, test/timesheet_calculation_test.dart, test/activity_template_test.dart.
-- Cleaned non-source artifacts before release work: removed android_startup_log.txt (flutter_02.png expected to be removed manually).
+- Uppdaterade android/app/build.gradle.kts för att stödja release-signering via android/key.properties.
+- Release-build använder nu release-nyckel när key.properties finns, annars faller den tillbaka till debug-signering.
+- Byggde release-AAB igen: build/app/outputs/bundle/release/app-release.aab (53.5MB).
+- Kontroll av byggmiljö: android/key.properties saknas just nu, så release-build faller tillbaka till debug-signering.
+- Sanity-tester godkända (3/3): test/assessment_visibility_test.dart, test/timesheet_calculation_test.dart, test/activity_template_test.dart.
+- Städade bort icke-källkodsfiler före releasearbete: tog bort android_startup_log.txt (flutter_02.png förväntades tas bort manuellt).
 
-Progress notes (2026-03-29, later):
-- Created local upload keystore: android/keystore/upload-keystore.jks.
-- Created local signing config: android/key.properties.
-- Built release AAB with release-signing enabled: build/app/outputs/bundle/release/app-release.aab (53.5MB).
-- Signature verification confirms CN=APL Appen certificate on AAB.
+Progress notes (2026-03-29, senare):
+- Skapade lokal upload-keystore: android/keystore/upload-keystore.jks.
+- Skapade lokal signeringskonfiguration: android/key.properties.
+- Byggde release-AAB med release-signering aktiverad: build/app/outputs/bundle/release/app-release.aab (53.5MB).
+- Signaturverifiering bekräftar CN=APL Appen-certifikat på AAB.
 
-Exit criteria:
-- Internal testing approved by team
+Exit-kriterier:
+- Internal testing godkänd av teamet
 
-## 4) iOS release gate (App Store)
-- [ ] Confirm signing/certificates/profiles
-- [ ] Build iOS release archive
-- [ ] Upload to TestFlight
-- [ ] Validate teacher/student core flows on TestFlight build
-- [ ] Resolve TestFlight feedback
+## 4) iOS-releasegrind (App Store)
+- [ ] Bekräfta signering/certifikat/profiler
+- [ ] Bygg iOS release-arkiv
+- [ ] Ladda upp till TestFlight
+- [ ] Validera lärar-/elevflöden på TestFlight-build
+- [ ] Hantera TestFlight-feedback
 
-Exit criteria:
-- TestFlight build approved by team
+Exit-kriterier:
+- TestFlight-build godkänd av teamet
 
-## 5) Store readiness gate
-- [ ] Privacy Policy URL verified
-- [ ] App description finalized
-- [ ] Screenshots finalized (phone sizes)
-- [ ] Support contact and website verified
-- [ ] Production domains verified: apl-appen.com primary, www.apl-appen.com redirect, aplappen.com redirect, www.aplappen.com redirect
-- [ ] Firebase Auth templates verified to use https://www.apl-appen.com/__/auth/action
-- [ ] Age rating/content declarations complete
-- [ ] Account deletion/data handling flow verified against policy
+## 5) Grind för butiksberedskap
+- [ ] URL till integritetspolicy verifierad
+- [ ] Appbeskrivning färdigställd
+- [ ] Skärmbilder färdigställda (telefonstorlekar)
+- [ ] Supportkontakt och webbplats verifierade
+- [ ] Produktionsdomäner verifierade: apl-appen.com primär, www.apl-appen.com redirect, aplappen.com redirect, www.aplappen.com redirect
+- [ ] Firebase Auth-mallar verifierade att använda https://www.apl-appen.com/__/auth/action
+- [ ] Åldersgräns/innehållsdeklarationer färdiga
+- [ ] Flöde för kontoborttagning/datahantering verifierat mot policy
 
-Exit criteria:
-- Both store metadata packages complete
+Exit-kriterier:
+- Båda paketen med butiksmetadata klara
 
 Progress notes (2026-04-01):
-- Firebase Auth email templates updated to use the custom action URL on www.apl-appen.com instead of the default firebaseapp.com domain.
-- Flutter/web auth configuration updated to use www.apl-appen.com as auth domain and action URL target.
-- Firebase Hosting custom domains configured so apl-appen.com is the primary site.
-- www.apl-appen.com configured as redirect to apl-appen.com.
-- aplappen.com and www.aplappen.com configured as additional redirects to the primary apl-appen.com domain; DNS propagation/verification was in progress during setup.
+- Firebase Auth-mailmallar uppdaterade för att använda custom action URL på www.apl-appen.com i stället för standarddomänen firebaseapp.com.
+- Flutter-/webbkonfiguration för auth uppdaterad för att använda www.apl-appen.com som auth-domän och action URL-mål.
+- Firebase Hosting custom domains konfigurerade så att apl-appen.com är primär webbplats.
+- www.apl-appen.com konfigurerad som redirect till apl-appen.com.
+- aplappen.com och www.aplappen.com konfigurerade som extra redirects till primärdomänen apl-appen.com; DNS-propagation/verifiering pågick under uppsättningen.
+- Lärarwebbens startsida/dashboard behöver fortfarande motsvarande bedömningsuppdateringar så att det nya konfigurerbara bedömningsflödet syns där också.
 
-## 6) Production monitoring gate
-- [ ] Crash reporting enabled and verified
-- [ ] Basic analytics events verified
-- [ ] Incident owner and rollback plan documented
-- [ ] First-week monitoring checklist prepared
+## 6) Grind för produktionsövervakning
+- [ ] Crash reporting aktiverad och verifierad
+- [ ] Grundläggande analytics events verifierade
+- [ ] Incidentansvarig och rollback-plan dokumenterade
+- [ ] Checklista för första veckans övervakning förberedd
 
-Exit criteria:
-- Team can detect and respond to production issues quickly
+Exit-kriterier:
+- Teamet kan upptäcka och hantera produktionsproblem snabbt
 
-## 7) Launch decision
-- [ ] Go/No-Go meeting completed
-- [ ] Risk list reviewed and accepted
-- [ ] Rollout strategy selected (staged rollout recommended)
+## 7) Lanseringsbeslut
+- [ ] Go/No-Go-möte genomfört
+- [ ] Risklista granskad och accepterad
+- [ ] Rollout-strategi vald (staged rollout rekommenderas)
 
-Recommended rollout:
+Rekommenderad rollout:
 1. Google Play staged rollout (10% -> 50% -> 100%)
-2. App Store release after first stable window
+2. App Store-release efter första stabila perioden
 
-## Weekly beta log
-Use this section to track progress from your two active student testers.
+## Veckologg för beta
+Använd den här sektionen för att följa upp de två aktiva elevtestarna.
 
-### Week of 2026-03-26
-- Active testers: 2 students (debug APK)
-- Bugs found: several
-- Bugs fixed: several
-- Open blockers: none confirmed in this note
-- Notes: Continue focused testing in teacher/student statistics and assessment flows. Forgot-password flow added in app login and verified (email reset link dispatch + no runtime assertion after route refactor).
+### Vecka med start 2026-03-26
+- Aktiva testare: 2 elever (debug-APK)
+- Buggar hittade: flera
+- Buggar fixade: flera
+- Öppna blockerare: inga bekräftade i denna notering
+- Anteckningar: Fortsätt fokuserad testning i lärar-/elevstatistik och bedömningsflöden. Flödet för glömt lösenord lades till i appens inloggning och verifierades (utskick av återställningslänk via mail + ingen runtime assertion efter route-refaktorering).
 
-## Bug triage template
-Copy this for each new issue found during beta.
+## Mall för buggt triagering
+Kopiera detta för varje ny issue som hittas under beta.
 
-- Title:
-- Environment (Android/iOS/Web + app version):
-- Role (teacher/student/supervisor):
-- Steps to reproduce:
-- Expected result:
-- Actual result:
-- Severity (blocker/critical/major/minor):
+- Titel:
+- Miljö (Android/iOS/Web + appversion):
+- Roll (lärare/elev/handledare):
+- Steg för att återskapa:
+- Förväntat resultat:
+- Faktiskt resultat:
+- Allvarlighetsgrad (blocker/critical/major/minor):
 - Status (open/in-progress/fixed/verified):
-- Owner:
-- Fix version:
+- Ägare:
+- Fixversion:

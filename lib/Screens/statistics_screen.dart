@@ -373,7 +373,7 @@ class _StatisticsContentState extends State<_StatisticsContent> {
                 // Debug: log assessmentRequests count and a few docs
                 print('DEBUG: assessmentRequests snapshot count=${allAssessments.length}');
                 for (var d in allAssessments.take(10)) {
-                  final dt = d.data() ?? {};
+                  final dt = d.data();
                   print('ASSESS_DOC: id=${d.id}, studentUid=${dt['studentUid'] ?? null}, weeks=${dt['weeks'] ?? null}, status=${dt['status'] ?? null}');
                 }
 
@@ -516,7 +516,6 @@ class _StatisticsContentState extends State<_StatisticsContent> {
       
       final studentUid = data['studentUid'] ?? '';
       final weekStart = data['weekStart'] ?? '';
-      final approved = data['approved'] ?? false;
       final entries = (data['entries'] as Map?)?.cast<String, dynamic>() ?? {};
 
       int docHours = 0;
@@ -783,25 +782,6 @@ class _StatisticsContentState extends State<_StatisticsContent> {
     );
   }
 
-  Widget _buildStatRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 14)),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ignore: unused_element
   Widget _buildStudentHoursChart(Map<String, int> studentHours) {
     if (studentHours.isEmpty) {
@@ -1010,10 +990,6 @@ class _StatisticsContentState extends State<_StatisticsContent> {
     return Column(
       children: sortedStudents.map((entry) {
         final studentUid = entry.key;
-        final totalHours = entry.value;
-        final studentDocs = studentTimesheets[studentUid] ?? [];
-        final timesheetCount = studentDocs.length;
-        final approvedCount = studentDocs.where((doc) => doc.data()?['approved'] == true).length;
 
         return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
           future: FirebaseFirestore.instance.collection('users').doc(studentUid).get(),

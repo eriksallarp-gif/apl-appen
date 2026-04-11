@@ -78,7 +78,6 @@ class StartScreen extends StatelessWidget {
             final weekStart = _ymd(monday);
 
             int thisWeekHours = 0;
-            int totalHours = 0;
             int approvedCount = 0;
             bool thisWeekExists = false;
             Map<String, int> dayHours = {
@@ -94,7 +93,6 @@ class StartScreen extends StatelessWidget {
               final entries =
                   (data['entries'] as Map?)?.cast<String, dynamic>() ?? {};
               final sum = _sumEntries(entries);
-              totalHours += sum;
 
               if ((data['approved'] ?? false) == true) approvedCount++;
 

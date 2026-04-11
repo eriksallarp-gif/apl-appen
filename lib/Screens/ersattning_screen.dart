@@ -82,27 +82,6 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                       }
                     }
 
-                    // Hjälpfunktion för att beräkna veckonummer från weekStart
-                    int getWeekNumber(String weekStart) {
-                      try {
-                        final parts = weekStart.split('-');
-                        if (parts.length == 3) {
-                          final year = int.parse(parts[0]);
-                          final month = int.parse(parts[1]);
-                          final day = int.parse(parts[2]);
-                          final startDate = DateTime(year, month, day);
-                          final jan4 = DateTime(startDate.year, 1, 4);
-                          final monday = jan4.subtract(
-                            Duration(days: jan4.weekday - DateTime.monday),
-                          );
-                          return startDate.difference(monday).inDays ~/ 7 + 1;
-                        }
-                      } catch (e) {
-                        return 0;
-                      }
-                      return 0;
-                    }
-
                     // Beräkna totalt antal timmar från GODKÄNDA tidkort
                     // (godkända av lärare ELLER med godkänd handledarbedömning)
                     int totalHours = 0;
@@ -110,7 +89,6 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
 
                     for (final doc in timesheets) {
                       final data = doc.data();
-                      final weekStart = (data['weekStart'] ?? '').toString();
                       final approved = (data['approved'] ?? false) as bool;
 
                       // Endast tidkort som är markerade godkända av lärare

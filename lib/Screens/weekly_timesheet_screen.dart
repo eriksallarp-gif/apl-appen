@@ -693,8 +693,6 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
             final approved = (data?['approved'] ?? false) as bool;
             final locked = (data?['locked'] ?? false) as bool;
             final effectiveReadOnly = widget.readOnly || approved || locked;
-            final hasUnsavedChanges =
-              !effectiveReadOnly && _computeHasUnsavedChanges();
 
             if (!_hydratedFromFirestore && snap.hasData) {
               _isProgrammaticControllerUpdate = true;
