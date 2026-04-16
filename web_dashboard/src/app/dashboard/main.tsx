@@ -275,15 +275,17 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-white text-slate-900">
+      {/* Dekorativa bakgrundselement */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute -top-24 right-[-10%] h-[420px] w-[420px] rounded-full bg-orange-200/35 blur-3xl" />
         <div className="absolute top-[35%] left-[-10%] h-[360px] w-[360px] rounded-full bg-orange-100/60 blur-3xl" />
       </div>
 
-      <section className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
-        <div className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        {/* Header sektion */}
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:mb-8 sm:p-6">
           <p className="text-sm font-medium text-orange-700">Dashboard</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Översikt</h1>
+          <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">Översikt</h1>
           <p className="mt-2 text-sm text-slate-600">
             {userRole === 'admin' 
               ? 'Här kan du hantera elever, lärare och skolor.' 
@@ -291,13 +293,14 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <div className="mb-10 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        {/* Statistikkort - anpassat för olika skärmstorlekar */}
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:mb-10">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div className="mb-2 flex items-center gap-3">
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
                 <GraduationCap className="h-5 w-5 text-orange-600" />
               </span>
-              <span className="text-base font-semibold text-slate-900">Elever</span>
+              <span className="text-sm font-semibold text-slate-900 sm:text-base">Elever</span>
             </div>
             <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalStudents}</div>
           </div>
@@ -306,19 +309,19 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => router.push('/dashboard/admin?section=pending')}
-              className={`rounded-2xl border p-6 text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-orange-300 ${
+              className={`rounded-2xl border p-5 text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-orange-300 sm:p-6 ${
                 hasPendingTeachers
                   ? 'border-orange-300 bg-orange-50/40 hover:border-orange-400 hover:shadow-md'
                   : 'border-slate-200 bg-white hover:border-orange-300 hover:shadow-md'
               }`}
               aria-label="Öppna väntande lärare"
             >
-              <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <div className="flex items-center gap-3">
                   <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
                     <Users className="h-5 w-5 text-orange-600" />
                   </span>
-                  <span className="text-base font-semibold text-slate-900">Lärare</span>
+                  <span className="text-sm font-semibold text-slate-900 sm:text-base">Lärare</span>
                 </div>
                 {hasPendingTeachers && (
                   <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800 ring-1 ring-orange-200">
@@ -335,24 +338,24 @@ export default function DashboardPage() {
               )}
             </button>
           ) : (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className="mb-2 flex items-center gap-3">
                 <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
                   <Users className="h-5 w-5 text-orange-600" />
                 </span>
-                <span className="text-base font-semibold text-slate-900">Bedömningar</span>
+                <span className="text-sm font-semibold text-slate-900 sm:text-base">Bedömningar</span>
               </div>
               <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalAssessments}</div>
             </div>
           )}
 
           {userRole === 'admin' && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:col-span-2 sm:p-6 lg:col-span-1">
               <div className="mb-2 flex items-center gap-3">
                 <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
                   <School className="h-5 w-5 text-orange-600" />
                 </span>
-                <span className="text-base font-semibold text-slate-900">Skolor</span>
+                <span className="text-sm font-semibold text-slate-900 sm:text-base">Skolor</span>
               </div>
               <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalSchools ?? 0}</div>
             </div>

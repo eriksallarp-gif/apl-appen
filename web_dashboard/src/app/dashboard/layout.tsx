@@ -68,8 +68,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen bg-white">
       <Header />
+      {/* Mobil horisontell meny - förbättrad scroll */}
       <div className="sticky top-16 z-30 border-b border-orange-100 bg-white/95 backdrop-blur lg:hidden">
-        <nav className="flex items-center gap-2 overflow-x-auto px-4 py-3">
+        <nav className="scrollbar-hide flex items-center gap-2 overflow-x-auto px-4 py-3">
           {menuItems.map((item) => {
             const active = item.match(pathname);
             return (
@@ -85,19 +86,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
       </div>
 
-      <aside className="fixed left-0 top-16 hidden h-[calc(100vh-4rem)] w-56 flex-col border-r border-orange-100/50 bg-gradient-to-br from-orange-50 to-white px-6 py-8 lg:flex">
-        <div className="mb-10">
+      {/* Desktop sidebar - nu med scrollbar om innehållet inte får plats */}
+      <aside className="fixed left-0 top-16 hidden h-[calc(100vh-4rem)] w-56 flex-col overflow-y-auto border-r border-orange-100/50 bg-gradient-to-br from-orange-50 to-white px-6 py-8 lg:flex">
+        <div className="mb-8 flex-shrink-0">
           <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
           <p className="text-xs text-orange-400 mt-1">{isAdmin ? 'Admin' : 'Lärare'}</p>
         </div>
-        <nav className="flex-1 space-y-4">
+        <nav className="flex-1 space-y-3 pb-6">
           {menuItems.map(item => {
             const active = item.match(pathname);
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`block rounded-lg px-3 py-2 transition ${item.bold ? 'font-semibold' : 'font-medium'} ${active ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}
+                className={`block rounded-lg px-3 py-2.5 text-sm transition ${item.bold ? 'font-semibold' : 'font-medium'} ${active ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}
               >
                 {item.label}
               </Link>
@@ -106,8 +108,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
       </aside>
 
+      {/* Huvudinnehåll - anpassat för olika skärmstorlekar */}
       <div className="mt-16 lg:pl-56">
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
           {children}
         </main>
       </div>

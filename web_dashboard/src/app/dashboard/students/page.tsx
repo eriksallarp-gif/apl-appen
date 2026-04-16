@@ -303,12 +303,6 @@ export default function StudentsPage() {
           })
         : assessmentDocs;
 
-      const teacherVisibleAssessments = filteredAssessments.filter(doc => {
-        const data = doc.data() || {};
-        const status = (data.status || '').toString().toLowerCase();
-        return status === 'submitted' || status === 'approved' || Boolean(data.averageRating);
-      });
-      
       const studentsWithStats = studentUsers.map(student => {
         const studentTimesheets = filteredTimesheets.filter(
           doc => doc.data().studentUid === student.id
@@ -330,17 +324,8 @@ export default function StudentsPage() {
           });
         });
 
-        const studentAssessmentDocs = teacherVisibleAssessments.filter(
-          doc => doc.data().studentUid === student.id
-        );
-        const uniqueWeeks = new Set<string>();
-        for (const ad of studentAssessmentDocs) {
-          const weeks = (ad.data().weeks || []) as string[];
-          for (const w of weeks) {
-            if (w) uniqueWeeks.add(w);
-          }
-        }
-        const assessmentCount = uniqueWeeks.size;
+        // Antal godkända bedömningar = antal godkända tidkort
+        const assessmentCount = approvedTimesheets.length;
 
         return {
           ...student,
@@ -579,7 +564,7 @@ export default function StudentsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="bg-white p-4 rounded-lg shadow">
           <p className="text-sm text-gray-600">
             {selectedClassId === 'ALL' ? 'Totalt antal elever' : 'Elever i vald klass'}
@@ -590,12 +575,6 @@ export default function StudentsPage() {
           <p className="text-sm text-gray-600">Total arbetstid</p>
           <p className="text-2xl font-bold text-green-600">
             {filteredStudents.reduce((sum, s) => sum + (s.totalHours ?? 0), 0)}h
-          </p>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow">
-          <p className="text-sm text-gray-600">Inskickade bedömningar</p>
-          <p className="text-2xl font-bold text-purple-600">
-            {filteredStudents.reduce((sum, s) => sum + (s.assessmentCount ?? 0), 0)}
           </p>
         </div>
       </div>
