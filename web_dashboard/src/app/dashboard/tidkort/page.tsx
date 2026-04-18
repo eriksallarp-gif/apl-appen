@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { EyeOff, FolderPlus, Plus, Save, Trash2, Wrench } from 'lucide-react';
+import { ChevronDown, ChevronUp, EyeOff, FolderPlus, Plus, Save, Trash2, Wrench } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import {
   ActivityGroup,
@@ -199,9 +199,23 @@ export default function TeacherTimesheetTemplatesPage() {
   const [groupDrafts, setGroupDrafts] = useState<Record<string, string>>({});
   const [newGroupName, setNewGroupName] = useState('');
   const [hasSavedTemplate, setHasSavedTemplate] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroupExpansion = (groupName: string) => {
+    setExpandedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupName)) {
+        next.delete(groupName);
+      } else {
+        next.add(groupName);
+      }
+      return next;
+    });
+  };
 
   const availableSpecializations = useMemo(() => {
-    return programs.find((program) => program.name === selectedProgram)?.specializations ?? [];
+    const specializations = programs.find((program) => program.name === selectedProgram)?.specializations ?? [];
+    return [...specializations].sort((a, b) => a.localeCompare(b, 'sv'));
   }, [programs, selectedProgram]);
 
   const isAdminView = userRole === 'admin';
@@ -620,7 +634,7 @@ export default function TeacherTimesheetTemplatesPage() {
             onChange={(e) => setSelectedProgram(e.target.value)}
             className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
           >
-            {programs.map((program) => (
+            {[...programs].sort((a, b) => a.name.localeCompare(b.name, 'sv')).map((program) => (
               <option key={program.name} value={program.name}>
                 {program.name}
               </option>
@@ -708,27 +722,47 @@ export default function TeacherTimesheetTemplatesPage() {
               const visibleCount = group.items.filter((item) => item.enabled).length;
               const groupHidden = visibleCount === 0;
 
+              const isExpanded = expandedGroups.has(group.group);
+
               return (
-                <article key={`base-${group.group}`} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-                  <div className="mb-5 flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-semibold text-gray-900">{group.group}</h3>
-                        <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs text-orange-700 ring-1 ring-orange-200">
-                          {isAdminView ? 'Standardgrupp' : 'Förinställd grupp'}
-                        </span>
+                <article key={`base-${group.group}`} className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                  <button
+                    onClick={() => toggleGroupExpansion(group.group)}
+                    className="w-full p-6 text-left transition hover:bg-gray-50"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        {isExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-semibold text-gray-900">{group.group}</h3>
+                            <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs text-orange-700 ring-1 ring-orange-200">
+                              {isAdminView ? 'Standardgrupp' : 'Förinställd grupp'}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-gray-600">
+                            {visibleCount} av {group.items.length} arbetsuppgifter synliga
+                          </p>
+                        </div>
                       </div>
-                      <p className="mt-1 text-sm text-gray-600">
-                        {visibleCount} av {group.items.length} arbetsuppgifter synliga
-                      </p>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleGroupVisibility(group.group);
+                        }}
+                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                      >
+                        {groupHidden ? 'Visa grupp' : 'Dölj grupp'}
+                      </button>
                     </div>
-                    <button
-                      onClick={() => toggleGroupVisibility(group.group)}
-                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-                    >
-                      {groupHidden ? 'Visa grupp' : 'Dölj grupp'}
-                    </button>
-                  </div>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="px-6 pb-6">
 
                   <div className="space-y-2">
                     {group.items.map((item) => {
@@ -775,22 +809,24 @@ export default function TeacherTimesheetTemplatesPage() {
                     })}
                   </div>
 
-                  <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                    <input
-                      type="text"
-                      value={groupDrafts[group.group] ?? ''}
-                      onChange={(e) => setGroupDrafts((current) => ({ ...current, [group.group]: e.target.value }))}
-                      placeholder="Ny arbetsuppgift i gruppen"
-                      className="flex-1 rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
-                    />
-                    <button
-                      onClick={() => addItemToGroup(group.group)}
-                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 px-4 py-3 font-medium text-orange-700 transition hover:bg-orange-50"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Lägg till uppgift
-                    </button>
-                  </div>
+                      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                        <input
+                          type="text"
+                          value={groupDrafts[group.group] ?? ''}
+                          onChange={(e) => setGroupDrafts((current) => ({ ...current, [group.group]: e.target.value }))}
+                          placeholder="Ny arbetsuppgift i gruppen"
+                          className="flex-1 rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                        />
+                        <button
+                          onClick={() => addItemToGroup(group.group)}
+                          className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 px-4 py-3 font-medium text-orange-700 transition hover:bg-orange-50"
+                        >
+                          <Plus className="h-4 w-4" />
+                          Lägg till uppgift
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </article>
               );
             })}
@@ -836,28 +872,49 @@ export default function TeacherTimesheetTemplatesPage() {
         </div>
 
         <div className="grid gap-5 lg:grid-cols-2">
-        {customGroups.map((group) => (
-          <article key={group.group} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-semibold text-gray-900">{group.group}</h3>
-                  <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700 ring-1 ring-blue-200">
-                    Egen grupp
-                  </span>
+        {customGroups.map((group) => {
+          const isExpanded = expandedGroups.has(group.group);
+
+          return (
+          <article key={group.group} className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <button
+              onClick={() => toggleGroupExpansion(group.group)}
+              className="w-full p-6 text-left transition hover:bg-gray-50"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  {isExpanded ? (
+                    <ChevronUp className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                  )}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-semibold text-gray-900">{group.group}</h3>
+                      <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700 ring-1 ring-blue-200">
+                        Egen grupp
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-600">
+                      {group.items.filter((item) => item.enabled).length} av {group.items.length} arbetsuppgifter synliga
+                    </p>
+                  </div>
                 </div>
-                <p className="mt-1 text-sm text-gray-600">
-                  {group.items.filter((item) => item.enabled).length} av {group.items.length} arbetsuppgifter synliga
-                </p>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeGroup(group.group);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Ta bort grupp
+                </button>
               </div>
-              <button
-                onClick={() => removeGroup(group.group)}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-              >
-                <Trash2 className="h-4 w-4" />
-                Ta bort grupp
-              </button>
-            </div>
+            </button>
+
+            {isExpanded && (
+              <div className="px-6 pb-6">
 
             <div className="space-y-2">
               {group.items.map((item) => (
@@ -896,24 +953,27 @@ export default function TeacherTimesheetTemplatesPage() {
               ))}
             </div>
 
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-              <input
-                type="text"
-                value={groupDrafts[group.group] ?? ''}
-                onChange={(e) => setGroupDrafts((current) => ({ ...current, [group.group]: e.target.value }))}
-                placeholder="Ny arbetsuppgift"
-                className="flex-1 rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
-              />
-              <button
-                onClick={() => addItemToGroup(group.group)}
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 px-4 py-3 font-medium text-orange-700 transition hover:bg-orange-50"
-              >
-                <Plus className="h-4 w-4" />
-                Lägg till uppgift
-              </button>
-            </div>
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="text"
+                    value={groupDrafts[group.group] ?? ''}
+                    onChange={(e) => setGroupDrafts((current) => ({ ...current, [group.group]: e.target.value }))}
+                    placeholder="Ny arbetsuppgift"
+                    className="flex-1 rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                  />
+                  <button
+                    onClick={() => addItemToGroup(group.group)}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-orange-200 px-4 py-3 font-medium text-orange-700 transition hover:bg-orange-50"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Lägg till uppgift
+                  </button>
+                </div>
+              </div>
+            )}
           </article>
-        ))}
+          );
+        })}
         </div>
       </section>
       )}

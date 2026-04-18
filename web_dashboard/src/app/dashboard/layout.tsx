@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import Header from '@/components/Header';
+import { Home, Users, Calendar, School, Clock, ClipboardCheck, ListTodo, Building2, FileText, Settings, UserCog, Layers } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -33,28 +34,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // Menystruktur: visa rätt länkar beroende på roll
   const menuItems = isAdmin
     ? [
-        { href: '/dashboard', label: 'Hem', match: (p: string) => p === '/dashboard', bold: true },
-        { href: '/dashboard/students', label: 'Elever', match: (p: string) => p.startsWith('/dashboard/students') },
-        { href: '/dashboard/schools', label: 'Skolor', match: (p: string) => p.startsWith('/dashboard/schools') },
-        { href: '/dashboard/admin', label: 'Lärare', match: (p: string) => p.startsWith('/dashboard/admin') },
-        { href: '/dashboard/programs', label: 'Program', match: (p: string) => p.startsWith('/dashboard/programs') },
-        { href: '/dashboard/tidkort', label: 'Tidkort', match: (p: string) => p.startsWith('/dashboard/tidkort') },
-        { href: '/dashboard/bedomning', label: 'Bedömning', match: (p: string) => p.startsWith('/dashboard/bedomning') },
-        { href: '/dashboard/settings', label: 'Inställningar', match: (p: string) => p === '/dashboard/settings' || p.startsWith('/dashboard/settings/') },
+        { href: '/dashboard', label: 'Hem', icon: Home, match: (p: string) => p === '/dashboard', bold: true },
+        { href: '/dashboard/students', label: 'Elever', icon: Users, match: (p: string) => p.startsWith('/dashboard/students') },
+        { href: '/dashboard/schools', label: 'Skolor', icon: School, match: (p: string) => p.startsWith('/dashboard/schools') },
+        { href: '/dashboard/admin', label: 'Lärare', icon: UserCog, match: (p: string) => p.startsWith('/dashboard/admin') },
+        { href: '/dashboard/programs', label: 'Program', icon: Layers, match: (p: string) => p.startsWith('/dashboard/programs') },
+        { href: '/dashboard/tidkort', label: 'Tidkort', icon: Clock, match: (p: string) => p.startsWith('/dashboard/tidkort') },
+        { href: '/dashboard/bedomning', label: 'Bedömning', icon: ClipboardCheck, match: (p: string) => p.startsWith('/dashboard/bedomning') },
+        { href: '/dashboard/settings', label: 'Inställningar', icon: Settings, match: (p: string) => p === '/dashboard/settings' || p.startsWith('/dashboard/settings/') },
       ]
     : [
-        { href: '/dashboard', label: 'Hem', match: (p: string) => p === '/dashboard', bold: true },
-        { href: '/dashboard/students', label: 'Elever', match: (p: string) => p.startsWith('/dashboard/students') },
+        { href: '/dashboard', label: 'Hem', icon: Home, match: (p: string) => p === '/dashboard', bold: true },
+        { href: '/dashboard/students', label: 'Elever', icon: Users, match: (p: string) => p.startsWith('/dashboard/students') },
         ...(isTeacher ? [
-          { href: '/dashboard/veckohanterare', label: 'Veckohanterare', match: (p: string) => p.startsWith('/dashboard/veckohanterare') },
-          { href: '/dashboard/klasser', label: 'Klasser', match: (p: string) => p.startsWith('/dashboard/klasser') },
-          { href: '/dashboard/tidkort', label: 'Tidkort', match: (p: string) => p.startsWith('/dashboard/tidkort') },
-          { href: '/dashboard/bedomning', label: 'Bedömning', match: (p: string) => p.startsWith('/dashboard/bedomning') },
-          { href: '/dashboard/assignments', label: 'Uppgifter', match: (p: string) => p.startsWith('/dashboard/assignments') },
+          { href: '/dashboard/veckohanterare', label: 'Veckohanterare', icon: Calendar, match: (p: string) => p.startsWith('/dashboard/veckohanterare') },
+          { href: '/dashboard/klasser', label: 'Klasser', icon: School, match: (p: string) => p.startsWith('/dashboard/klasser') },
+          { href: '/dashboard/tidkort', label: 'Tidkort', icon: Clock, match: (p: string) => p.startsWith('/dashboard/tidkort') },
+          { href: '/dashboard/bedomning', label: 'Bedömning', icon: ClipboardCheck, match: (p: string) => p.startsWith('/dashboard/bedomning') },
+          { href: '/dashboard/assignments', label: 'Uppgifter', icon: ListTodo, match: (p: string) => p.startsWith('/dashboard/assignments') },
         ] : []),
-        { href: '/dashboard/companies', label: 'Företag', match: (p: string) => p.startsWith('/dashboard/companies') },
-        { href: '/dashboard/documents', label: 'Dokument', match: (p: string) => p.startsWith('/dashboard/documents') },
-        { href: '/dashboard/settings', label: 'Inställningar', match: (p: string) => p === '/dashboard/settings' || p.startsWith('/dashboard/settings/') },
+        { href: '/dashboard/companies', label: 'Företag', icon: Building2, match: (p: string) => p.startsWith('/dashboard/companies') },
+        { href: '/dashboard/documents', label: 'Dokument', icon: FileText, match: (p: string) => p.startsWith('/dashboard/documents') },
+        { href: '/dashboard/settings', label: 'Inställningar', icon: Settings, match: (p: string) => p === '/dashboard/settings' || p.startsWith('/dashboard/settings/') },
       ];
 
   if (!userRole) {
@@ -73,12 +74,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <nav className="scrollbar-hide flex items-center gap-2 overflow-x-auto px-4 py-3">
           {menuItems.map((item) => {
             const active = item.match(pathname);
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition ${item.bold ? 'font-semibold' : 'font-medium'} ${active ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-white text-gray-600 ring-1 ring-orange-100 hover:bg-orange-50'}`}
+                className={`flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition ${item.bold ? 'font-semibold' : 'font-medium'} ${active ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-white text-gray-600 ring-1 ring-orange-100 hover:bg-orange-50'}`}
               >
+                <Icon className="h-4 w-4 flex-shrink-0" />
                 {item.label}
               </Link>
             );
@@ -92,15 +95,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
           <p className="text-xs text-orange-400 mt-1">{isAdmin ? 'Admin' : 'Lärare'}</p>
         </div>
-        <nav className="flex-1 space-y-3 pb-6">
+        <nav className="flex-1 space-y-1 pb-6">
           {menuItems.map(item => {
             const active = item.match(pathname);
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`block rounded-lg px-3 py-2.5 text-sm transition ${item.bold ? 'font-semibold' : 'font-medium'} ${active ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${item.bold ? 'font-semibold' : 'font-medium'} ${active ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}
               >
+                <Icon className="h-5 w-5 flex-shrink-0" />
                 {item.label}
               </Link>
             );

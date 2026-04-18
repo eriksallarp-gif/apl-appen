@@ -90,6 +90,19 @@ export default function AssessmentTemplatesPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<AssessmentViewMode>('both');
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+
+  const toggleItemExpansion = (key: string) => {
+    setExpandedItems((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   const isAdmin = userRole === 'admin';
   const isTeacher = userRole === 'teacher';
@@ -642,31 +655,58 @@ export default function AssessmentTemplatesPage() {
           <div className="space-y-4">
             {isAdmin && template.selfAssessmentFields.map((field, index) => {
               const hidden = teacherOverrides.hiddenSelfAssessmentFieldKeys.includes(field.key);
+              const isExpanded = expandedItems.has(field.key);
 
               return (
-                <div key={field.key} className="rounded-xl border border-gray-200 p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-gray-700">Fråga {index + 1}</p>
-                    {isAdmin ? (
-                      <button
-                        onClick={() => removeSelfAssessmentField(field.key)}
-                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-red-600 transition hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Ta bort
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => toggleHiddenSelfField(field.key)}
-                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm transition ${
-                          hidden ? 'bg-orange-100 text-orange-700' : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                      >
-                        <EyeOff className="h-4 w-4" />
-                        {hidden ? 'Dold' : 'Dölj'}
-                      </button>
-                    )}
-                  </div>
+                <div key={field.key} className="rounded-xl border border-gray-200 shadow-sm">
+                  <button
+                    onClick={() => toggleItemExpansion(field.key)}
+                    className="w-full p-4 text-left transition hover:bg-gray-50"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {isExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                        )}
+                        <div>
+                          <p className="text-sm font-semibold text-gray-700">Fråga {index + 1}</p>
+                          {!isExpanded && field.label && (
+                            <p className="text-sm text-gray-600 mt-1">{field.label}</p>
+                          )}
+                        </div>
+                      </div>
+                      {isAdmin ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeSelfAssessmentField(field.key);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-red-600 transition hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Ta bort
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleHiddenSelfField(field.key);
+                          }}
+                          className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm transition ${
+                            hidden ? 'bg-orange-100 text-orange-700' : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          <EyeOff className="h-4 w-4" />
+                          {hidden ? 'Dold' : 'Dölj'}
+                        </button>
+                      )}
+                    </div>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="px-4 pb-4">
 
                   <div className={`space-y-3 ${!isAdmin && hidden ? 'opacity-50' : ''}`}>
                     <label className="block text-sm font-medium text-gray-700">
@@ -707,46 +747,58 @@ export default function AssessmentTemplatesPage() {
                         <option value="number">Siffra</option>
                       </select>
                     </label>
-                  </div>
-                </div>
+                      </div>
+                    </div>
+                  )}\n                </div>
               );
             })}
 
             {isTeacher && orderedTeacherSelfFields.map((field, index) => {
               const hidden = teacherOverrides.hiddenSelfAssessmentFieldKeys.includes(field.key);
               const isTeacherField = field.source === 'teacher';
+              const isExpanded = expandedItems.has(field.key);
 
               return (
-                <div
-                  key={field.key}
-                  className={`rounded-xl border p-4 ${
-                    isTeacherField
-                      ? 'border-orange-200 bg-orange-50/40'
-                      : 'border-gray-200'
-                  }`}
-                >
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <p className="text-sm font-semibold text-gray-700">Fråga {index + 1}</p>
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-medium ${
-                          isTeacherField
-                            ? 'bg-orange-100 text-orange-700'
-                            : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {isTeacherField ? 'Egen' : 'Adminmall'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => moveTeacherSelfAssessmentField(field.key, 'up')}
-                        disabled={index === 0}
-                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-                      >
-                        <ChevronUp className="h-4 w-4" />
-                        Upp
-                      </button>
+                <div key={field.key} className="rounded-xl border border-gray-200 shadow-sm">
+                  <button
+                    onClick={() => toggleItemExpansion(field.key)}
+                    className="w-full p-4 text-left transition hover:bg-gray-50"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {isExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-gray-700">Fråga {index + 1}</p>
+                            {isTeacherField && (
+                              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700 ring-1 ring-blue-200">
+                                Egen
+                              </span>
+                            )}
+                            {!isTeacherField && hidden && (
+                              <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs text-orange-700">
+                                Dold
+                              </span>
+                            )}
+                          </div>
+                          {!isExpanded && field.label && (
+                            <p className="text-sm text-gray-600 mt-1">{field.label}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => moveTeacherSelfAssessmentField(field.key, 'up')}
+                          disabled={index === 0}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <ChevronUp className="h-4 w-4" />
+                          Upp
+                        </button>
                       <button
                         onClick={() => moveTeacherSelfAssessmentField(field.key, 'down')}
                         disabled={index === orderedTeacherSelfFields.length - 1}
@@ -774,10 +826,13 @@ export default function AssessmentTemplatesPage() {
                           {hidden ? 'Dold' : 'Dölj'}
                         </button>
                       )}
+                      </div>
                     </div>
-                  </div>
+                  </button>
 
-                  <div className={`space-y-3 ${!isTeacherField && hidden ? 'opacity-50' : ''}`}>
+                  {isExpanded && (
+                    <div className="px-4 pb-4">
+                      <div className={`space-y-3 ${!isTeacherField && hidden ? 'opacity-50' : ''}`}>
                     <label className="block text-sm font-medium text-gray-700">
                       Rubrik
                       <input
@@ -827,7 +882,9 @@ export default function AssessmentTemplatesPage() {
                         <option value="number">Siffra</option>
                       </select>
                     </label>
-                  </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -863,42 +920,70 @@ export default function AssessmentTemplatesPage() {
           <div className="space-y-4">
             {isAdmin && template.supervisorCriteria.map((criterion, index) => {
               const hidden = teacherOverrides.hiddenSupervisorCriteriaKeys.includes(criterion.key);
+              const isExpanded = expandedItems.has(criterion.key);
 
               return (
-                <div key={criterion.key} className="rounded-xl border border-gray-200 p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-gray-700">Kriterium {index + 1}</p>
-                    {isAdmin ? (
-                      <button
-                        onClick={() => removeSupervisorCriterion(criterion.key)}
-                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-red-600 transition hover:bg-red-50"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Ta bort
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => toggleHiddenCriterion(criterion.key)}
-                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm transition ${
-                          hidden ? 'bg-orange-100 text-orange-700' : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                      >
-                        <EyeOff className="h-4 w-4" />
-                        {hidden ? 'Dolt' : 'Dölj'}
-                      </button>
-                    )}
-                  </div>
+                <div key={criterion.key} className="rounded-xl border border-gray-200 shadow-sm">
+                  <button
+                    onClick={() => toggleItemExpansion(criterion.key)}
+                    className="w-full p-4 text-left transition hover:bg-gray-50"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {isExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                        )}
+                        <div>
+                          <p className="text-sm font-semibold text-gray-700">Kriterium {index + 1}</p>
+                          {!isExpanded && criterion.label && (
+                            <p className="text-sm text-gray-600 mt-1">{criterion.label}</p>
+                          )}
+                        </div>
+                      </div>
+                      {isAdmin ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeSupervisorCriterion(criterion.key);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-red-600 transition hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Ta bort
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleHiddenCriterion(criterion.key);
+                          }}
+                          className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm transition ${
+                            hidden ? 'bg-orange-100 text-orange-700' : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          <EyeOff className="h-4 w-4" />
+                          {hidden ? 'Dolt' : 'Dölj'}
+                        </button>
+                      )}
+                    </div>
+                  </button>
 
-                  <label className={`block text-sm font-medium text-gray-700 ${!isAdmin && hidden ? 'opacity-50' : ''}`}>
-                    Rubrik
-                    <input
-                      type="text"
-                      value={criterion.label}
-                      onChange={(e) => handleCriterionChange(criterion.key, { label: e.target.value })}
-                      disabled={!isAdmin}
-                      className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
-                    />
-                  </label>
+                  {isExpanded && (
+                    <div className="px-4 pb-4">
+                      <label className={`block text-sm font-medium text-gray-700 ${!isAdmin && hidden ? 'opacity-50' : ''}`}>
+                        Rubrik
+                        <input
+                          type="text"
+                          value={criterion.label}
+                          onChange={(e) => handleCriterionChange(criterion.key, { label: e.target.value })}
+                          disabled={!isAdmin}
+                          className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -906,30 +991,41 @@ export default function AssessmentTemplatesPage() {
             {isTeacher && orderedTeacherCriteria.map((criterion, index) => {
               const hidden = teacherOverrides.hiddenSupervisorCriteriaKeys.includes(criterion.key);
               const isTeacherCriterion = criterion.source === 'teacher';
+              const isExpanded = expandedItems.has(criterion.key);
 
               return (
-                <div
-                  key={criterion.key}
-                  className={`rounded-xl border p-4 ${
-                    isTeacherCriterion
-                      ? 'border-orange-200 bg-orange-50/40'
-                      : 'border-gray-200'
-                  }`}
-                >
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <p className="text-sm font-semibold text-gray-700">Kriterium {index + 1}</p>
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-medium ${
-                          isTeacherCriterion
-                            ? 'bg-orange-100 text-orange-700'
-                            : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {isTeacherCriterion ? 'Eget' : 'Adminmall'}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
+                <div key={criterion.key} className="rounded-xl border border-gray-200 shadow-sm">
+                  <button
+                    onClick={() => toggleItemExpansion(criterion.key)}
+                    className="w-full p-4 text-left transition hover:bg-gray-50"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {isExpanded ? (
+                          <ChevronUp className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                        ) : (
+                          <ChevronDown className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                        )}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-gray-700">Kriterium {index + 1}</p>
+                            {isTeacherCriterion && (
+                              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700 ring-1 ring-blue-200">
+                                Egen
+                              </span>
+                            )}
+                            {!isTeacherCriterion && hidden && (
+                              <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs text-orange-700">
+                                Dolt
+                              </span>
+                            )}
+                          </div>
+                          {!isExpanded && criterion.label && (
+                            <p className="text-sm text-gray-600 mt-1">{criterion.label}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => moveTeacherCriterion(criterion.key, 'up')}
                         disabled={index === 0}
@@ -965,23 +1061,28 @@ export default function AssessmentTemplatesPage() {
                           {hidden ? 'Dolt' : 'Dölj'}
                         </button>
                       )}
+                      </div>
                     </div>
-                  </div>
+                  </button>
 
-                  <label className={`block text-sm font-medium text-gray-700 ${!isTeacherCriterion && hidden ? 'opacity-50' : ''}`}>
-                    Rubrik
-                    <input
-                      type="text"
-                      value={criterion.label}
-                      onChange={(e) =>
-                        isTeacherCriterion
-                          ? handleTeacherCriterionChange(criterion.key, { label: e.target.value })
-                          : handleCriterionChange(criterion.key, { label: e.target.value })
-                      }
-                      disabled={!isTeacherCriterion}
-                      className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
-                    />
-                  </label>
+                  {isExpanded && (
+                    <div className="px-4 pb-4">
+                      <label className={`block text-sm font-medium text-gray-700 ${!isTeacherCriterion && hidden ? 'opacity-50' : ''}`}>
+                        Rubrik
+                        <input
+                          type="text"
+                          value={criterion.label}
+                          onChange={(e) =>
+                            isTeacherCriterion
+                              ? handleTeacherCriterionChange(criterion.key, { label: e.target.value })
+                              : handleCriterionChange(criterion.key, { label: e.target.value })
+                          }
+                          disabled={!isTeacherCriterion}
+                          className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
               );
             })}
