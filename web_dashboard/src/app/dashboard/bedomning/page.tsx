@@ -749,7 +749,8 @@ export default function AssessmentTemplatesPage() {
                     </label>
                       </div>
                     </div>
-                  )}\n                </div>
+                  )}
+                </div>
               );
             })}
 
