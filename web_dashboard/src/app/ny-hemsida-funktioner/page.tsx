@@ -1,0 +1,283 @@
+'use client';
+
+/* eslint-disable @next/next/no-img-element */
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+
+export default function NyHemsidaFunktionerPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        router.push('/dashboard');
+      }
+    });
+    return () => unsub();
+  }, [router]);
+
+  return (
+    <>
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+        .material-symbols-outlined {
+          font-family: 'Material Symbols Outlined';
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        body {
+          font-family: 'Inter', sans-serif;
+        }
+      `}</style>
+
+      <main className="bg-[#f7f9fb] pt-20 text-[#191c1e]">
+        <nav className="fixed top-0 z-50 w-full bg-white/80 shadow-xl shadow-slate-900/5 backdrop-blur-xl">
+          <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-8">
+            <a href="/ny-hemsida-test" className="flex items-center gap-3" aria-label="Till startsidan">
+              <img
+                src="https://lh3.googleusercontent.com/aida/ADBb0uhE7u61HkfDy3ZM79duWMs3rVcoP42aFJI56z9U0fKoNAkMo6U9z3w4ReABBGlKlAzHyUQf2AjK3IJ3xIlkrJ0zpePuKPVVpG9oyalsDE0yjzTa06nYAJACLoAF3Ks-xN1K3k0gI5EzxvRCs7k34wYxOW3HeBqL3wn9ZN-os3mRgb6C3vR-JKTZ1ukd-MCN9PFdOBVCbdLF-cGOyF9WhtTpo6nexEAB8WDW5GrwVydBcPNwpGW3eiGpFk4oJrgwY69DtSH1r0wNag"
+                alt="APL-appen Logo"
+                className="h-12 w-auto object-contain"
+              />
+              <div className="text-2xl font-black tracking-tighter text-slate-900">APL-appen</div>
+            </a>
+
+            <div className="hidden items-center gap-8 md:flex">
+              <a className="inline-flex h-10 items-center border-b-2 border-[#f97316] text-base font-semibold text-[#f97316]" href="#top">
+                Funktioner
+              </a>
+              <button
+                onClick={() => router.push('/ny-hemsida-kontakt')}
+                className="inline-flex h-10 items-center border-b-2 border-transparent text-base font-medium text-slate-600 transition-colors hover:text-[#f97316]"
+                type="button"
+              >
+                Kontakt
+              </button>
+              <button
+                onClick={() => router.push('/ny-hemsida-faq')}
+                className="inline-flex h-10 items-center border-b-2 border-transparent text-base font-medium text-slate-600 transition-colors hover:text-[#f97316]"
+                type="button"
+              >
+                FAQ
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.push('/login')}
+                className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-5 text-base font-semibold text-slate-700 transition-all duration-200 hover:border-[#f97316] hover:text-[#f97316]"
+                type="button"
+              >
+                Logga in
+              </button>
+              <button
+                onClick={() => router.push('/register')}
+                className="inline-flex h-11 items-center rounded-lg bg-[#f97316] px-6 text-base font-semibold text-white transition-all duration-200 hover:bg-orange-600"
+                type="button"
+              >
+                Kom igång
+              </button>
+            </div>
+          </div>
+        </nav>
+
+        <section id="top" className="relative overflow-hidden pb-24 pt-20">
+          <div className="mx-auto grid max-w-7xl items-center gap-16 px-6 md:grid-cols-2">
+            <div>
+              <h1 className="mb-8 text-[3.5rem] font-extrabold leading-[1.1] tracking-tight text-[#191c1e]">
+                Ett digitalt <span className="text-[#f97316]">hjälpmedel</span> för APL.
+              </h1>
+              <p className="mb-12 max-w-lg text-lg leading-relaxed text-[#584237]">
+                Byggt för att minska administration och göra APL tydligare för alla inblandade. En digital plattform
+                som knyter samman skola och arbetsliv.
+              </p>
+            </div>
+
+            <div className="relative flex items-center justify-center">
+              <img
+                alt="APL-appen screenshot"
+                className="w-full max-w-[680px] object-contain"
+                src="/funktionsbild3.png"
+              />
+
+              <div className="absolute left-1/2 top-1/2 -z-10 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#f97316]/5 blur-3xl" />
+            </div>
+          </div>
+        </section>
+
+        <section className="pb-24">
+          <RoleSection
+            title="För Elev"
+            intro="Allt du behöver under din APL, direkt i fickan. Få full koll på dina timmar och bedömningar utan pappersarbete."
+            imageAlt="Elev vid byggarbetsplats med mobil"
+            imageSrc="https://lh3.googleusercontent.com/aida-public/AB6AXuBye4crR1AwKXFWGRJ3MPw9nVur_GNPq9JQLbhJ9oBEUhbo5PDgGKkKsNr7MlZHdY_V_uA8S5w1plJRgYfjk3eFKGsgsEBBsCV8Pdj56F4Lcm-mUcdZgmOnH321B2c1YQoZd7OCGTOxmC0BvdB14CnwBkMwOaqTTFWESt4qRa1kSupmXlF7HfFEFwX2VVM3KtdGtt5S8sVIwhuK4cEbMyoVZR3Dx8tTpM5Ua6BgmXdfqKStYXrBRUP4dSe6pG3jmW3ph2kJD3AdlmQ"
+            icon="person"
+            iconBg="bg-[#ffdbca]"
+            iconColor="text-[#341100]"
+            points={[
+              {
+                icon: 'check_circle',
+                heading: 'Registrera timmar',
+                text: 'Logga dina timmar med ett enkelt knapptryck direkt på plats. Dina timmar kopplas till de arbetsmoment läraren valt.',
+              },
+              {
+                icon: 'dashboard',
+                heading: 'Total översikt',
+                text: 'Följ enkelt din statistik över arbetsmoment, bedömning och ersättning direkt i appen.',
+              },
+            ]}
+          />
+
+          <div className="bg-[#f2f4f6] py-8">
+            <RoleSection
+              reverse
+              title="För Handledare"
+              intro="För handledare gör APL-appen det smidigt att signera elevers tidkort, ersättning och bedömning - utan extra konton och krångel."
+              imageAlt="Handledare diskuterar med mobil"
+              imageSrc="https://lh3.googleusercontent.com/aida-public/AB6AXuD717gaUESfw9JfHS1xl2P-mwo3_G3mEosdYzrRRAumkIOfmORiMDNXKEM33peyWe7skDlxKFBDQrMYFXccewn47ft4lgDWpChxu2If--xljLRBckuAs8yu86V_aT2uTk5AlkOxKuA56MApbpr48GslxJq817XOIU46aujDhrG5AuzOmYEGekqJ0xJE3-lcZTkelMoPZ_-W9Bg0s3jPFzzPH6MifBAXMYTad3Xa5RCvZ5Nh2EBVZc2Z_68XaA5jShEg3692usU0Njg"
+              icon="assignment_ind"
+              iconBg="bg-[#d3e4fe]"
+              iconColor="text-[#0b1c30]"
+              points={[
+                {
+                  icon: 'edit_document',
+                  heading: 'Digital signering',
+                  text: 'Signera via länk eller QR-kod.',
+                },
+                {
+                  icon: 'chat_bubble',
+                  heading: 'Direkt feedback',
+                  text: 'Lämna omdömen och kommentarer kopplade till elevernas tidkort som direkt delas med läraren.',
+                },
+              ]}
+            />
+          </div>
+
+          <RoleSection
+            title="För Lärare"
+            intro="Slipp jagandet efter papper. Få realtidsdata på alla dina elever och deras APL-platser."
+            imageAlt="Dashboard med elevdata"
+            imageSrc="https://lh3.googleusercontent.com/aida-public/AB6AXuDnabbtp5Vd4INgzcMNAPRVH9dBocJTqqVWi3vEETSFOt90Ik9hmDMTdN9TOOci83en8ZPXHEA42ry9ZE8V8Pl7IE0Ek4vgHVSa-ZC2VSALRTa4wr7l7GQj2afj2mZI2Xr8tYxLxd5dYPYLpnZ34Dt2ZOJ_BDaDYTm_QA9vNEUOhwywZNgrt6TAHe5PmMBB4uXyUNu8a-AWFahDKlZ3uAZ_7XiaPDoZwi-Tl4-n4JnzvK1BlhYaadQHbXOJOQOyyDo6wZqEcvg71Qo"
+            icon="school"
+            iconBg="bg-[#dae2fd]"
+            iconColor="text-[#131b2e]"
+            points={[
+              {
+                icon: 'insights',
+                heading: 'Statistik och analys',
+                text: 'Tydlig statistik över elevernas APL.',
+              },
+              {
+                icon: 'summarize',
+                heading: 'Automatiska rapporter',
+                text: 'Exportera kompletta underlag för betygssättning och myndighetsrapportering.',
+              },
+            ]}
+          />
+        </section>
+
+        <section className="mx-auto mb-24 max-w-7xl px-6">
+          <div className="rounded-xl bg-[#f97316] p-16 text-center text-white">
+            <h3 className="mb-6 text-4xl font-bold">Redo att modernisera er APL?</h3>
+            <p className="mx-auto mb-10 max-w-2xl text-lg opacity-90">
+              Testa gratis och upptäck fördelarna med APL-appen.
+            </p>
+            <div className="flex flex-col justify-center gap-4 sm:flex-row">
+              <button
+                className="rounded-lg bg-white px-8 py-4 font-bold text-[#f97316] transition-colors hover:bg-[#f7f9fb]"
+                onClick={() => router.push('/register')}
+                type="button"
+              >
+                Skapa konto
+              </button>
+              <button
+                className="rounded-lg border-2 border-white/30 px-8 py-4 font-bold text-white transition-colors hover:bg-white/10"
+                onClick={() => router.push('/ny-hemsida-kontakt')}
+                type="button"
+              >
+                Kontakta oss
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <footer className="w-full border-t border-slate-200 bg-slate-50 py-12 text-sm leading-relaxed">
+          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 px-8 md:flex-row">
+            <div className="text-lg font-bold text-slate-900">APL-appen</div>
+            <div className="flex gap-8">
+              <a className="text-slate-500 transition-colors hover:text-[#f97316] hover:underline" href="/ny-hemsida-faq">
+                Integritetspolicy
+              </a>
+              <a className="text-slate-500 transition-colors hover:text-[#f97316] hover:underline" href="/ny-hemsida-faq">
+                Användarvillkor
+              </a>
+              <a className="text-slate-500 transition-colors hover:text-[#f97316] hover:underline" href="/ny-hemsida-kontakt">
+                Kontakt
+              </a>
+            </div>
+            <p className="text-slate-500">© 2024 APL-appen. Alla rättigheter förbehållna.</p>
+          </div>
+        </footer>
+      </main>
+    </>
+  );
+}
+
+function RoleSection({
+  title,
+  intro,
+  imageAlt,
+  imageSrc,
+  icon,
+  iconBg,
+  iconColor,
+  points,
+  reverse,
+}: {
+  title: string;
+  intro: string;
+  imageAlt: string;
+  imageSrc: string;
+  icon: string;
+  iconBg: string;
+  iconColor: string;
+  points: Array<{ icon: string; heading: string; text: string }>;
+  reverse?: boolean;
+}) {
+  return (
+    <div className="mx-auto max-w-7xl px-6 py-8">
+      <div className={['flex flex-col items-center gap-8 md:flex-row', reverse ? 'md:flex-row-reverse' : ''].join(' ')}>
+        <div className="flex-1">
+          <div className="rounded-lg bg-white p-10 shadow-sm">
+            <div className={['mb-8 flex h-12 w-12 items-center justify-center rounded-lg', iconBg].join(' ')}>
+              <span className={['material-symbols-outlined text-2xl', iconColor].join(' ')}>{icon}</span>
+            </div>
+            <h2 className="mb-4 text-3xl font-bold tracking-tight text-[#191c1e]">{title}</h2>
+            <p className="mb-8 text-[#584237]">{intro}</p>
+            <div className="space-y-4">
+              {points.map((point) => (
+                <div key={point.heading} className="flex gap-4">
+                  <span className="material-symbols-outlined text-[#f97316]">{point.icon}</span>
+                  <div>
+                    <p className="font-bold">{point.heading}</p>
+                    <p className="text-sm text-[#584237]">{point.text}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="flex-1">
+          <div className="overflow-hidden rounded-lg bg-[#e6e8ea]">
+            <img alt={imageAlt} className="h-full w-full object-cover" src={imageSrc} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

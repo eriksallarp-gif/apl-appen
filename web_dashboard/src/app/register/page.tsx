@@ -11,6 +11,10 @@ export default function RegisterPage() {
         <div className="absolute bottom-[-100px] left-[-12%] h-[340px] w-[340px] rounded-full bg-orange-100/70 blur-3xl" />
       </div>
 
+      <Link href="/" className="inline-flex text-base font-bold tracking-tight text-slate-900 hover:text-orange-700">
+        APL-appen
+      </Link>
+
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
         <section className="flex w-full max-w-lg flex-col lg:min-h-[calc(100vh-5rem)]">
           <Link href="/" className="inline-flex text-sm font-medium text-orange-700 hover:text-orange-800">

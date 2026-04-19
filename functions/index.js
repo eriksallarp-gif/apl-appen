@@ -1,9 +1,19 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const nodemailer = require('nodemailer');
 
 admin.initializeApp();
 
 const db = admin.firestore();
+
+// Gmail SMTP transporter for sending notification emails
+const gmailTransporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: functions.config().gmail?.email || 'support@aplappen.com',
+    pass: functions.config().gmail?.password || ''
+  }
+});
 
 async function getUserRole(uid) {
   const snap = await db.collection('users').doc(uid).get();
@@ -753,4 +763,59 @@ exports.processScheduledDeletions = functions.pubsub
     }
 
     return null;
+  });
+
+/**
+ * Send notification email when a new teacher registers and needs approval.
+ * Triggers when a new user document is created in Firestore.
+ */
+exports.onNewTeacherCreated = functions.firestore
+  .document('users/{userId}')
+  .onCreate(async (snap, context) => {
+    const userData = snap.data();
+    const userId = context.params.userId;
+    
+    // Only send email for new teachers waiting for approval
+    if (userData.role !== 'teacher' || userData.approved === true) {
+      return null;
+    }
+
+    const mailOptions = {
+      from: '"APL-appen" <support@aplappen.com>',
+      to: 'support@aplappen.com',
+      subject: `Ny lärare väntar på godkännande: ${userData.name}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #ff7a00;">Ny lärare har registrerat sig</h2>
+          <p>En ny lärare har skapat ett konto och väntar på godkännande.</p>
+          
+          <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Namn:</strong> ${userData.name}</p>
+            <p><strong>E-post:</strong> ${userData.email}</p>
+            <p><strong>Skola:</strong> ${userData.school}</p>
+            <p><strong>Registrerad:</strong> ${new Date().toLocaleString('sv-SE')}</p>
+          </div>
+          
+          <p><strong>Nästa steg:</strong></p>
+          <ol>
+            <li>Logga in på admin-panelen på <a href="https://www.apl-appen.com/dashboard/admin" style="color: #ff7a00;">www.apl-appen.com/dashboard/admin</a></li>
+            <li>Verifiera lärarens uppgifter</li>
+            <li>Godkänn läraren för att ge åtkomst till systemet</li>
+          </ol>
+          
+          <p style="color: #666; font-size: 12px; margin-top: 30px;">
+            Detta är ett automatiskt meddelande från APL-appen.
+          </p>
+        </div>
+      `
+    };
+
+    try {
+      await gmailTransporter.sendMail(mailOptions);
+      console.log(`Notification email sent for new teacher: ${userData.email}`);
+      return null;
+    } catch (error) {
+      console.error('Error sending notification email:', error);
+      return null;
+    }
   });

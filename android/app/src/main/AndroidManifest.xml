@@ -1,17 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Permissions för internet (Firebase) -->
-    <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    
-    <!-- Permissions för kamera och bildgalleri -->
-    <uses-permission android:name="android.permission.CAMERA"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
-    
-    <uses-feature android:name="android.hardware.camera" android:required="false"/>
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
-    
     <application
         android:label="apl_appen"
         android:name="${applicationName}"
@@ -62,28 +49,6 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
-        </intent>
-        <!-- För att kunna använda kamera-appar -->
-        <intent>
-            <action android:name="android.media.action.IMAGE_CAPTURE"/>
-        </intent>
-        <!-- För att välja bilder från galleri -->
-        <intent>
-            <action android:name="android.intent.action.GET_CONTENT"/>
-        </intent>
-        <!-- För att öppna webbadresser och dokument i webbläsare -->
-        <intent>
-            <action android:name="android.intent.action.VIEW"/>
-            <data android:scheme="https"/>
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.VIEW"/>
-            <data android:scheme="http"/>
-        </intent>
-        <!-- För att öppna PDF och andra dokument -->
-        <intent>
-            <action android:name="android.intent.action.VIEW"/>
-            <data android:mimeType="application/pdf"/>
         </intent>
     </queries>
 </manifest>

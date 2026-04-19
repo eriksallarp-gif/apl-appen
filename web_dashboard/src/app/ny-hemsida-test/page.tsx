@@ -48,7 +48,7 @@ export default function HomeDesignTestPage() {
       <main className="bg-[#f7f9fb] text-[#191c1e] selection:bg-[#f97316]/30" style={{ fontFamily: 'Inter, sans-serif' }}>
         <nav className="fixed top-0 z-50 w-full bg-white/80 shadow-sm shadow-slate-200/20 backdrop-blur-lg">
           <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-8">
-            <a href="/" className="flex items-center gap-3" aria-label="Till startsidan">
+            <a href="/ny-hemsida-test" className="flex items-center gap-3" aria-label="Till startsidan">
               <img
                 src="https://lh3.googleusercontent.com/aida/ADBb0uhE7u61HkfDy3ZM79duWMs3rVcoP42aFJI56z9U0fKoNAkMo6U9z3w4ReABBGlKlAzHyUQf2AjK3IJ3xIlkrJ0zpePuKPVVpG9oyalsDE0yjzTa06nYAJACLoAF3Ks-xN1K3k0gI5EzxvRCs7k34wYxOW3HeBqL3wn9ZN-os3mRgb6C3vR-JKTZ1ukd-MCN9PFdOBVCbdLF-cGOyF9WhtTpo6nexEAB8WDW5GrwVydBcPNwpGW3eiGpFk4oJrgwY69DtSH1r0wNag"
                 alt="APL-appen Logo"
@@ -58,13 +58,13 @@ export default function HomeDesignTestPage() {
             </a>
 
             <div className="hidden items-center gap-8 md:flex">
-              <a className="inline-flex h-10 items-center border-b-2 border-transparent text-base font-medium text-slate-600 transition-colors hover:text-[#f97316]" href="/funktioner">
+              <a className="inline-flex h-10 items-center border-b-2 border-transparent text-base font-medium text-slate-600 transition-colors hover:text-[#f97316]" href="/ny-hemsida-funktioner">
                 Funktioner
               </a>
-              <a className="inline-flex h-10 items-center border-b-2 border-transparent text-base font-medium text-slate-600 transition-colors hover:text-[#f97316]" href="/kontakt">
+              <a className="inline-flex h-10 items-center border-b-2 border-transparent text-base font-medium text-slate-600 transition-colors hover:text-[#f97316]" href="/ny-hemsida-kontakt">
                 Kontakt
               </a>
-              <a className="inline-flex h-10 items-center border-b-2 border-transparent text-base font-medium text-slate-600 transition-colors hover:text-[#f97316]" href="/faq">
+              <a className="inline-flex h-10 items-center border-b-2 border-transparent text-base font-medium text-slate-600 transition-colors hover:text-[#f97316]" href="/ny-hemsida-faq">
                 FAQ
               </a>
             </div>

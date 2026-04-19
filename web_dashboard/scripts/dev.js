@@ -2,7 +2,7 @@ const { rmSync } = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 
-const projectRoot = process.cwd();
+const projectRoot = path.resolve(__dirname, '..');
 const nextOutputDirectory = path.join(projectRoot, '.next');
 
 try {
@@ -16,6 +16,10 @@ const child = spawn(process.execPath, [nextCli, 'dev', '-p', '3001'], {
   cwd: projectRoot,
   stdio: 'inherit',
   shell: false,
+  env: {
+    ...process.env,
+    NEXT_DISABLE_WEBPACK_CACHE: '1',
+  },
 });
 
 function shutdown(code) {
