@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -99,10 +100,14 @@ export default function NyHemsidaFunktionerPage() {
             </div>
 
             <div className="relative flex items-center justify-center">
-              <img
+              <Image
                 alt="APL-appen screenshot"
-                className="w-full max-w-[680px] object-contain"
+                className="h-auto w-full max-w-[680px] object-contain"
                 src="/funktionsbild3.png"
+                width={768}
+                height={768}
+                priority
+                sizes="(max-width: 768px) 100vw, 680px"
               />
 
               <div className="absolute left-1/2 top-1/2 -z-10 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#f97316]/5 blur-3xl" />
