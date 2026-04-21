@@ -113,11 +113,11 @@ export default function HomeDesignTestPage() {
 
               <div className="relative">
                 <div className="absolute -right-20 -top-20 h-[500px] w-[500px] rounded-full bg-[#f97316]/10 blur-3xl" />
-                <div className="editorial-shadow relative mx-auto max-w-[320px] overflow-hidden rounded-[3rem] border-[8px] border-slate-900 shadow-2xl">
+                <div className="relative mx-auto max-w-[410px] rounded-[2.5rem] bg-[#f7f9fb] p-2">
                   <img
-                    src="/Bildstartsida.png"
+                    src="/Bildstartsida1.png"
                     alt="APL-appen mobilgranssnitt"
-                    className="w-full object-cover"
+                    className="w-full rounded-[2rem] object-cover mix-blend-multiply"
                   />
                 </div>
 

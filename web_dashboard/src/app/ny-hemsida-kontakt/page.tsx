@@ -32,7 +32,7 @@ export default function NyHemsidaKontaktPage() {
           <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-8">
             <a href="/ny-hemsida-test" className="flex items-center gap-3" aria-label="Till startsidan">
               <img
-                src="https://lh3.googleusercontent.com/aida/ADBb0uhE7u61HkfDy3ZM79duWMs3rVcoP42aFJI56z9U0fKoNAkMo6U9z3w4ReABBGlKlAzHyUQf2AjK3IJ3xIlkrJ0zpePuKPVVpG9oyalsDE0yjzTa06nYAJACLoAF3Ks-xN1K3k0gI5EzxvRCs7k34wYxOW3HeBqL3wn9ZN-os3mRgb6C3vR-JKTZ1ukd-MCN9PFdOBVCbdLF-cGOyF9WhtTpo6nexEAB8WDW5GrwVydBcPNwpGW3eiGpFk4oJrgwY69DtSH1r0wNag"
+                src="/logo.png"
                 alt="APL-appen Logo"
                 className="h-12 w-auto object-contain"
               />
