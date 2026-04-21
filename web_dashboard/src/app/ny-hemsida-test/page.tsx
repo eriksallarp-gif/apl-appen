@@ -50,7 +50,7 @@ export default function HomeDesignTestPage() {
           <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:h-20 sm:px-6 lg:px-8">
             <a href="/ny-hemsida-test" className="flex items-center gap-2 sm:gap-3" aria-label="Till startsidan">
               <img
-                src="https://lh3.googleusercontent.com/aida/ADBb0uhE7u61HkfDy3ZM79duWMs3rVcoP42aFJI56z9U0fKoNAkMo6U9z3w4ReABBGlKlAzHyUQf2AjK3IJ3xIlkrJ0zpePuKPVVpG9oyalsDE0yjzTa06nYAJACLoAF3Ks-xN1K3k0gI5EzxvRCs7k34wYxOW3HeBqL3wn9ZN-os3mRgb6C3vR-JKTZ1ukd-MCN9PFdOBVCbdLF-cGOyF9WhtTpo6nexEAB8WDW5GrwVydBcPNwpGW3eiGpFk4oJrgwY69DtSH1r0wNag"
+                src="/logo1.png"
                 alt="APL-appen Logo"
                 className="h-9 w-auto object-contain sm:h-12"
               />
@@ -112,11 +112,11 @@ export default function HomeDesignTestPage() {
 
               <div className="relative mt-4 sm:mt-6 lg:mt-0">
                 <div className="absolute -right-10 -top-10 h-[260px] w-[260px] rounded-full bg-[#f97316]/10 blur-3xl sm:-right-16 sm:-top-16 sm:h-[360px] sm:w-[360px] lg:-right-20 lg:-top-20 lg:h-[500px] lg:w-[500px]" />
-                <div className="editorial-shadow relative mx-auto w-full max-w-[260px] overflow-hidden rounded-[2.5rem] border-[7px] border-slate-900 shadow-2xl sm:max-w-[320px] sm:rounded-[3rem] sm:border-[8px]">
+                <div className="editorial-shadow relative mx-auto w-full max-w-[280px] overflow-hidden rounded-[2rem] bg-white p-2 shadow-2xl sm:max-w-[360px] sm:rounded-[2.5rem] sm:p-3">
                   <img
-                    src="https://lh3.googleusercontent.com/aida/ADBb0uio-xof-TtEpjt20MpDkjkgNfkhwRqcU23abAVqMNkPXpmkMWw75lYRkWaYKMP5NI13dMUK9jTouYLYtJ2rZQhbrNaUj3CylqRYVV-rue1VMmJC8El5SaZ9tuHHD05cIdSa0Y3nuOU0Ys48fFypdrp69ospGbxMi7EGNXNNbgu7G4QwunysRXauQ44Up84FR0in7oSDe9mDjZeTW7X8SQOqIf1S30gR2atYuAcsu8oyjsylK4eD7asjHicsJgEbhHVFoSObuB3E4Q"
+                    src="/funktionsbild3.png"
                     alt="APL-appen mobilgranssnitt"
-                    className="w-full object-cover"
+                    className="w-full rounded-[1.25rem] object-contain sm:rounded-[1.75rem]"
                   />
                 </div>
 
