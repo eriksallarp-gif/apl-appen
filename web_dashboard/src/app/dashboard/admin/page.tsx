@@ -58,6 +58,26 @@ interface UserSummary {
   teacherUid?: string;
   specialization?: string;
   status?: string;
+  assignedPrograms?: string[];
+}
+
+function normalizeProgramList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const item of value) {
+    const name = String(item ?? '').trim();
+    if (!name) continue;
+
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(name);
+  }
+
+  return normalized;
 }
 
 export default function AdminPage() {
@@ -77,6 +97,10 @@ export default function AdminPage() {
   const [allTeachers, setAllTeachers] = useState<UserSummary[]>([]);
   const [allStudents, setAllStudents] = useState<UserSummary[]>([]);
   const [classes, setClasses] = useState<Array<{ id: string; name: string; teacherUid?: string }>>([]);
+  const [programOptions, setProgramOptions] = useState<string[]>([]);
+  const [teacherProgramsById, setTeacherProgramsById] = useState<Record<string, string[]>>({});
+  const [savingTeacherProgramsId, setSavingTeacherProgramsId] = useState<string | null>(null);
+  const [openProgramDropdownByTeacher, setOpenProgramDropdownByTeacher] = useState<Record<string, boolean>>({});
   const [activeSection, setActiveSection] = useState<'pending' | 'approved' | 'schools' | 'students'>('pending');
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -168,6 +192,7 @@ export default function AdminPage() {
     try {
       const usersSnapshot = await getDocs(collection(db, 'users'));
       const classesSnapshot = await getDocs(collection(db, 'classes'));
+      const catalogDoc = await getDoc(doc(db, 'appSettings', 'programCatalog'));
       const users = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
 
       const teachers = users.filter((u: any) => u.role === 'teacher');
@@ -193,6 +218,18 @@ export default function AdminPage() {
           teacherUid: doc.data().teacherUid || '',
         }))
       );
+
+      const programsFromCatalog = catalogDoc.exists()
+        ? normalizeProgramList((catalogDoc.data() as any)?.programs?.map((entry: any) => entry?.name))
+        : [];
+      setProgramOptions(programsFromCatalog.sort((a, b) => a.localeCompare(b, 'sv-SE')));
+
+      const nextTeacherProgramsById: Record<string, string[]> = {};
+      for (const teacher of approved) {
+        nextTeacherProgramsById[teacher.id] = normalizeProgramList(teacher.assignedPrograms);
+      }
+      setTeacherProgramsById(nextTeacherProgramsById);
+
       setSchools(
         Array.from(schoolCounts.entries())
           .map(([name, teacherCount]) => ({ name, teacherCount }))
@@ -213,6 +250,7 @@ export default function AdminPage() {
         role: teacher.role || 'teacher',
         school: teacher.school || 'Ingen skola angiven',
         status: teacher.status || 'active',
+        assignedPrograms: normalizeProgramList(teacher.assignedPrograms),
       })));
       
       // Update stats
@@ -225,6 +263,44 @@ export default function AdminPage() {
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
+    }
+  };
+
+  const handleTeacherProgramToggle = (teacherId: string, programName: string) => {
+    setTeacherProgramsById((current) => {
+      const selected = current[teacherId] ?? [];
+      const exists = selected.some((entry) => entry.toLowerCase() === programName.toLowerCase());
+
+      const nextSelected = exists
+        ? selected.filter((entry) => entry.toLowerCase() !== programName.toLowerCase())
+        : [...selected, programName];
+
+      return {
+        ...current,
+        [teacherId]: nextSelected,
+      };
+    });
+  };
+
+  const toggleTeacherProgramDropdown = (teacherId: string) => {
+    setOpenProgramDropdownByTeacher((current) => ({
+      ...current,
+      [teacherId]: !current[teacherId],
+    }));
+  };
+
+  const handleSaveTeacherPrograms = async (teacherId: string) => {
+    try {
+      setSavingTeacherProgramsId(teacherId);
+      const assignedPrograms = normalizeProgramList(teacherProgramsById[teacherId] ?? []);
+      await updateDoc(doc(db, 'users', teacherId), { assignedPrograms });
+      await fetchAdminData();
+      alert('Programkoppling sparad.');
+    } catch (saveError: any) {
+      console.error('Error saving teacher programs:', saveError);
+      alert(saveError?.message || 'Kunde inte spara programkoppling.');
+    } finally {
+      setSavingTeacherProgramsId(null);
     }
   };
 
@@ -496,6 +572,56 @@ export default function AdminPage() {
                         <p className={`mt-1 text-xs ${teacher.status === 'frozen' ? 'text-red-600' : 'text-green-600'}`}>
                           Status: {teacher.status === 'frozen' ? 'Fryst' : 'Aktiv'}
                         </p>
+                      )}
+                      <p className="mt-1 text-xs text-slate-500">
+                        Program:{' '}
+                        {(teacherProgramsById[teacher.id] ?? []).length > 0
+                          ? (teacherProgramsById[teacher.id] ?? []).join(', ')
+                          : 'Alla program'}
+                      </p>
+                      {programOptions.length > 0 && (
+                        <div className="mt-2 rounded-lg border border-slate-200 p-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleTeacherProgramDropdown(teacher.id)}
+                            className="flex w-full items-center justify-between text-left text-xs font-semibold text-slate-700"
+                            aria-expanded={openProgramDropdownByTeacher[teacher.id] ? 'true' : 'false'}
+                          >
+                            <span>Koppla program</span>
+                            <span>{openProgramDropdownByTeacher[teacher.id] ? '▲' : '▼'}</span>
+                          </button>
+
+                          {openProgramDropdownByTeacher[teacher.id] && (
+                            <div className="mt-2">
+                              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                                {programOptions.map((programName) => {
+                                  const checked = (teacherProgramsById[teacher.id] ?? []).some(
+                                    (entry) => entry.toLowerCase() === programName.toLowerCase(),
+                                  );
+
+                                  return (
+                                    <label key={`${teacher.id}-${programName}`} className="flex items-center gap-2 text-xs text-slate-700">
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => handleTeacherProgramToggle(teacher.id, programName)}
+                                      />
+                                      <span>{programName}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveTeacherPrograms(teacher.id)}
+                                disabled={savingTeacherProgramsId === teacher.id}
+                                className="mt-2 rounded-md border border-orange-300 px-2 py-1 text-xs font-medium text-orange-700 transition hover:bg-orange-50 disabled:opacity-60"
+                              >
+                                {savingTeacherProgramsId === teacher.id ? 'Sparar...' : 'Spara program'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                     <div className="flex gap-2">

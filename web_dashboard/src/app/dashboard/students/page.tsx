@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -22,6 +22,42 @@ type Student = {
   totalHours?: number;
   assessmentCount?: number;
 };
+
+type ProgramCatalogEntry = {
+  name: string;
+  specializations: string[];
+};
+
+function normalizeStringList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (!text) continue;
+
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(text);
+  }
+
+  return normalized;
+}
+
+function parseProgramCatalog(rawPrograms: unknown): ProgramCatalogEntry[] {
+  if (!Array.isArray(rawPrograms)) return [];
+
+  return rawPrograms
+    .filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object')
+    .map((entry) => ({
+      name: String(entry.name ?? '').trim(),
+      specializations: normalizeStringList(entry.specializations),
+    }))
+    .filter((entry) => entry.name.length > 0);
+}
 
 export default function StudentsPage() {
     // --- Klasshantering för lärare ---
@@ -143,6 +179,8 @@ export default function StudentsPage() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
   const [savingSpecialization, setSavingSpecialization] = useState(false);
+  const [catalogPrograms, setCatalogPrograms] = useState<ProgramCatalogEntry[]>([]);
+  const [teacherAssignedPrograms, setTeacherAssignedPrograms] = useState<string[]>([]);
   const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
   const [statusChangingStudent, setStatusChangingStudent] = useState<{ student: Student; newStatus: string } | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
@@ -163,15 +201,43 @@ export default function StudentsPage() {
       }
     }, [userRole, classes.length]);
 
-  const specializationOptions = [
-    'Träarbetare',
-    'Murare',
-    'Målare',
-    'Plåtslagare',
-    'Elektriker',
-    'VVS',
-    'Anläggare',
-  ];
+  const fallbackSpecializationOptions = useMemo(
+    () => ['Träarbetare', 'Murare', 'Målare', 'Plåtslagare', 'Elektriker', 'VVS', 'Anläggare'],
+    [],
+  );
+
+  const specializationOptions = useMemo(() => {
+    const allCatalogSpecializations = normalizeStringList(
+      catalogPrograms.flatMap((program) => program.specializations),
+    );
+
+    const sourceSpecializations =
+      allCatalogSpecializations.length > 0 ? allCatalogSpecializations : fallbackSpecializationOptions;
+
+    if (userRole !== 'teacher' || teacherAssignedPrograms.length === 0) {
+      return selectedSpecialization && !sourceSpecializations.includes(selectedSpecialization)
+        ? [selectedSpecialization, ...sourceSpecializations]
+        : sourceSpecializations;
+    }
+
+    const allowedProgramNames = new Set(teacherAssignedPrograms.map((name) => name.toLowerCase()));
+    const filteredSpecializations = normalizeStringList(
+      catalogPrograms
+        .filter((program) => allowedProgramNames.has(program.name.toLowerCase()))
+        .flatMap((program) => program.specializations),
+    );
+
+    const resolved = filteredSpecializations.length > 0 ? filteredSpecializations : sourceSpecializations;
+    return selectedSpecialization && !resolved.includes(selectedSpecialization)
+      ? [selectedSpecialization, ...resolved]
+      : resolved;
+  }, [
+    catalogPrograms,
+    fallbackSpecializationOptions,
+    selectedSpecialization,
+    teacherAssignedPrograms,
+    userRole,
+  ]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -182,6 +248,17 @@ export default function StudentsPage() {
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       const role = userDoc.data()?.role || null;
       setUserRole(role);
+
+      const assignedPrograms = role === 'teacher'
+        ? normalizeStringList(userDoc.data()?.assignedPrograms)
+        : [];
+      setTeacherAssignedPrograms(assignedPrograms);
+
+      const catalogDoc = await getDoc(doc(db, 'appSettings', 'programCatalog'));
+      setCatalogPrograms(
+        catalogDoc.exists() ? parseProgramCatalog(catalogDoc.data()?.programs) : [],
+      );
+
       await fetchClasses(user.uid, role);
       await fetchStudents(user.uid, role);
       setLoading(false);

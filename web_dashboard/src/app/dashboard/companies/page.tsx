@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -28,6 +28,7 @@ interface Company {
   teacherUid: string;
   classId?: string;
   studentId?: string;
+  studentIds?: string[];
   createdAt?: any;
 }
 
@@ -40,6 +41,28 @@ interface StudentData {
   id: string;
   name: string;
   email?: string;
+  classId?: string;
+  className?: string;
+}
+
+function normalizeStudentIds(singleStudentId?: string | null, multipleStudentIds?: unknown): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  const pushValue = (value: unknown) => {
+    const id = String(value ?? '').trim();
+    if (!id) return;
+    if (seen.has(id)) return;
+    seen.add(id);
+    result.push(id);
+  };
+
+  pushValue(singleStudentId);
+  if (Array.isArray(multipleStudentIds)) {
+    multipleStudentIds.forEach((value) => pushValue(value));
+  }
+
+  return result;
 }
 
 export default function CompaniesPage() {
@@ -58,8 +81,9 @@ export default function CompaniesPage() {
     phone: '',
     email: '',
     classId: '',
-    studentId: '',
+    studentIds: [] as string[],
   });
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const router = useRouter();
   const pathname = usePathname();
 
@@ -103,6 +127,7 @@ export default function CompaniesPage() {
         id: doc.id,
         name: doc.data().name || 'Okänd klass',
       }));
+      const classNameById = new Map(classesData.map((entry) => [entry.id, entry.name]));
       setClasses(classesData);
 
       const usersSnapshot = await getDocs(collection(db, 'users'));
@@ -117,10 +142,13 @@ export default function CompaniesPage() {
         : studentDocs;
       const studentsData = scopedStudents.map(doc => {
         const data = doc.data();
+        const classId = (data.classId || '').toString();
         return {
           id: doc.id,
           name: data.displayName || data.email || 'Okänd elev',
           email: data.email || '',
+          classId,
+          className: classNameById.get(classId) || 'Ingen klass',
         } as StudentData;
       });
       setStudents(studentsData);
@@ -151,6 +179,7 @@ export default function CompaniesPage() {
     }
 
     try {
+      const normalizedStudentIds = normalizeStudentIds(undefined, formData.studentIds);
       if (editingCompany) {
         // Update existing company
         await updateDoc(doc(db, 'companies', editingCompany.id), {
@@ -160,7 +189,8 @@ export default function CompaniesPage() {
           phone: formData.phone,
           email: formData.email,
           classId: formData.classId,
-          studentId: formData.studentId || null,
+          studentId: normalizedStudentIds[0] || null,
+          studentIds: normalizedStudentIds,
         });
       } else {
         // Add new company
@@ -172,7 +202,8 @@ export default function CompaniesPage() {
           email: formData.email,
           teacherUid: user.uid,
           classId: formData.classId,
-          studentId: formData.studentId || null,
+          studentId: normalizedStudentIds[0] || null,
+          studentIds: normalizedStudentIds,
           createdAt: Timestamp.now(),
         });
       }
@@ -185,8 +216,9 @@ export default function CompaniesPage() {
         phone: '',
         email: '',
         classId: '',
-        studentId: '',
+        studentIds: [],
       });
+      setStudentSearchTerm('');
       setShowAddModal(false);
       setEditingCompany(null);
       await fetchData(user.uid, userRole || undefined);
@@ -197,6 +229,7 @@ export default function CompaniesPage() {
   };
 
   const handleEdit = (company: Company) => {
+    const normalizedStudentIds = normalizeStudentIds(company.studentId, company.studentIds);
     setEditingCompany(company);
     setFormData({
       name: company.name,
@@ -205,8 +238,9 @@ export default function CompaniesPage() {
       phone: company.phone || '',
       email: company.email || '',
       classId: company.classId || '',
-      studentId: company.studentId || '',
+      studentIds: normalizedStudentIds,
     });
+    setStudentSearchTerm('');
     setShowAddModal(true);
   };
 
@@ -234,9 +268,49 @@ export default function CompaniesPage() {
       phone: '',
       email: '',
       classId: '',
-      studentId: '',
+      studentIds: [],
+    });
+    setStudentSearchTerm('');
+  };
+
+  const toggleStudentSelection = (studentId: string) => {
+    setFormData((current) => {
+      const isSelected = current.studentIds.includes(studentId);
+      return {
+        ...current,
+        studentIds: isSelected
+          ? current.studentIds.filter((id) => id !== studentId)
+          : [...current.studentIds, studentId],
+      };
     });
   };
+
+  const filteredStudents = students.filter((student) => {
+    if (!studentSearchTerm.trim()) return true;
+    const search = studentSearchTerm.toLowerCase();
+    return (
+      student.name.toLowerCase().includes(search) ||
+      (student.email || '').toLowerCase().includes(search)
+    );
+  });
+
+  const groupedFilteredStudents = useMemo(() => {
+    const grouped = new Map<string, StudentData[]>();
+
+    for (const student of filteredStudents) {
+      const className = student.className || 'Ingen klass';
+      const current = grouped.get(className) || [];
+      current.push(student);
+      grouped.set(className, current);
+    }
+
+    return Array.from(grouped.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], 'sv-SE'))
+      .map(([className, studentsInClass]) => ({
+        className,
+        students: [...studentsInClass].sort((a, b) => a.name.localeCompare(b.name, 'sv-SE')),
+      }));
+  }, [filteredStudents]);
 
   if (loading) {
     return (
@@ -300,7 +374,10 @@ export default function CompaniesPage() {
           <div className="divide-y divide-gray-200">
             {companies.map((company) => {
               const companyClass = classes.find(c => c.id === company.classId);
-              const linkedStudent = students.find(s => s.id === company.studentId);
+              const companyStudentIds = normalizeStudentIds(company.studentId, company.studentIds);
+              const linkedStudents = companyStudentIds
+                .map((studentId) => students.find((student) => student.id === studentId))
+                .filter((student): student is StudentData => !!student);
               return (
                 <div key={company.id} className="p-6 hover:bg-gray-50 transition">
                   <div className="flex justify-between items-start">
@@ -341,11 +418,15 @@ export default function CompaniesPage() {
                           </span>
                         </div>
                       )}
-                      {linkedStudent && (
+                      {linkedStudents.length > 0 && (
                         <div className="mt-2">
-                          <span className="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
-                            Elev: {linkedStudent.name}
-                          </span>
+                          <div className="flex flex-wrap gap-2">
+                            {linkedStudents.map((student) => (
+                              <span key={student.id} className="inline-block bg-green-100 text-green-800 text-xs px-2 py-1 rounded">
+                                Elev: {student.name}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -468,20 +549,48 @@ export default function CompaniesPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Koppla till elev (valfritt)
                 </label>
-                <select
-                  value={formData.studentId}
-                  onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
+                <input
+                  type="text"
+                  value={studentSearchTerm}
+                  onChange={(e) => setStudentSearchTerm(e.target.value)}
+                  placeholder="Sök elev (namn eller e-post)..."
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                >
-                  <option value="">Ingen elev kopplad</option>
-                  {students.map((student) => (
-                    <option key={student.id} value={student.id}>
-                      {student.name}{student.email ? ` (${student.email})` : ''}
-                    </option>
-                  ))}
-                </select>
+                />
+                <div className="mt-2 max-h-52 overflow-y-auto rounded-lg border border-gray-200 bg-white p-2 space-y-1">
+                  {groupedFilteredStudents.length === 0 ? (
+                    <p className="px-2 py-1 text-sm text-gray-500">Inga elever matchar sökningen</p>
+                  ) : (
+                    groupedFilteredStudents.map((group) => (
+                      <div key={group.className} className="mb-2 last:mb-0">
+                        <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          {group.className}
+                        </p>
+                        <div className="space-y-1">
+                          {group.students.map((student) => {
+                            const checked = formData.studentIds.includes(student.id);
+                            return (
+                              <label key={student.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm text-gray-700 hover:bg-gray-50">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleStudentSelection(student.id)}
+                                />
+                                <span>{student.name}{student.email ? ` (${student.email})` : ''}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {formData.studentIds.length > 0 && (
+                  <p className="mt-2 text-xs text-gray-600">
+                    {formData.studentIds.length} elev{formData.studentIds.length > 1 ? 'er' : ''} kopplad{formData.studentIds.length > 1 ? 'e' : ''}
+                  </p>
+                )}
                 <p className="text-xs text-gray-500 mt-1">
-                  Välj en elev om företaget ska visas som kontaktinformation i appen
+                  Du kan koppla en eller flera elever till samma företag
                 </p>
               </div>
               <div className="flex gap-3 pt-4">

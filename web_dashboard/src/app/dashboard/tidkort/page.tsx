@@ -89,6 +89,24 @@ function parsePrograms(rawPrograms: unknown): ProgramEntry[] {
   return sanitized.length > 0 ? sanitized : sanitizePrograms(DEFAULT_PROGRAMS);
 }
 
+function normalizeAssignedPrograms(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const item of value) {
+    const name = String(item ?? '').trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(name);
+  }
+
+  return normalized;
+}
+
 function buildTemplateId(teacherUid: string, program?: string, specialization?: string) {
   return `${teacherUid}__${encodeURIComponent((program ?? '').trim())}__${encodeURIComponent(
     (specialization ?? '').trim(),
@@ -200,6 +218,7 @@ export default function TeacherTimesheetTemplatesPage() {
   const [newGroupName, setNewGroupName] = useState('');
   const [hasSavedTemplate, setHasSavedTemplate] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [teacherAssignedPrograms, setTeacherAssignedPrograms] = useState<string[]>([]);
 
   const toggleGroupExpansion = (groupName: string) => {
     setExpandedGroups((current) => {
@@ -259,6 +278,11 @@ export default function TeacherTimesheetTemplatesPage() {
       const role = String(userDoc.data().role ?? '');
       setUserRole(role || null);
 
+      const assignedPrograms = role === 'teacher'
+        ? normalizeAssignedPrograms((userDoc.data() as Record<string, unknown>).assignedPrograms)
+        : [];
+      setTeacherAssignedPrograms(assignedPrograms);
+
       if (role !== 'teacher' && role !== 'admin') {
         router.push('/dashboard');
         return;
@@ -269,10 +293,20 @@ export default function TeacherTimesheetTemplatesPage() {
         ? parsePrograms(catalogDoc.data().programs)
         : sanitizePrograms(DEFAULT_PROGRAMS);
 
-      setPrograms(loadedPrograms);
-      const firstProgram = loadedPrograms[0]?.name ?? '';
+      const visiblePrograms = role === 'teacher' && assignedPrograms.length > 0
+        ? loadedPrograms.filter((program) =>
+            assignedPrograms.some(
+              (assignedProgram) => assignedProgram.toLowerCase() === program.name.toLowerCase(),
+            ),
+          )
+        : loadedPrograms;
+
+      const effectivePrograms = visiblePrograms.length > 0 ? visiblePrograms : loadedPrograms;
+
+      setPrograms(effectivePrograms);
+      const firstProgram = effectivePrograms[0]?.name ?? '';
       setSelectedProgram(firstProgram);
-      setSelectedSpecialization(loadedPrograms[0]?.specializations[0] ?? '');
+      setSelectedSpecialization(effectivePrograms[0]?.specializations[0] ?? '');
       setLoading(false);
     });
 
@@ -623,6 +657,12 @@ export default function TeacherTimesheetTemplatesPage() {
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
+        </div>
+      )}
+
+      {userRole === 'teacher' && teacherAssignedPrograms.length > 0 && (
+        <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700">
+          Du är kopplad till följande program: {teacherAssignedPrograms.join(', ')}
         </div>
       )}
 
