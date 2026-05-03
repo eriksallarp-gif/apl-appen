@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -10,6 +10,7 @@ import { auth } from '@/lib/firebase';
 
 export default function NyHemsidaFunktionerPage() {
   const router = useRouter();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (currentUser) => {
@@ -36,16 +37,16 @@ export default function NyHemsidaFunktionerPage() {
         }
       `}</style>
 
-      <main className="bg-[#f7f9fb] pt-20 text-[#191c1e]">
+      <main className="bg-[#f7f9fb] pt-16 md:pt-20 text-[#191c1e]">
         <nav className="fixed top-0 z-50 w-full bg-white/80 shadow-xl shadow-slate-900/5 backdrop-blur-xl">
-          <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-8">
+          <div className="mx-auto flex h-16 md:h-20 max-w-7xl items-center justify-between px-4 md:px-8">
             <a href="/" className="flex items-center gap-3" aria-label="Till startsidan">
               <img
                 src="/logo.png"
                 alt="APL-appen Logo"
                 className="h-12 w-auto object-contain"
               />
-              <div className="text-2xl font-black tracking-tighter text-slate-900">APL-appen</div>
+              <div className="hidden md:block text-2xl font-black tracking-tighter text-slate-900">APL-appen</div>
             </a>
 
             <div className="hidden items-center gap-8 md:flex">
@@ -68,23 +69,59 @@ export default function NyHemsidaFunktionerPage() {
               </button>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center">
+              <div className="hidden items-center gap-3 md:flex">
+                <button
+                  onClick={() => router.push('/login')}
+                  className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-5 text-base font-semibold text-slate-700 transition-all duration-200 hover:border-[#f97316] hover:text-[#f97316]"
+                  type="button"
+                >
+                  Logga in
+                </button>
+                <button
+                  onClick={() => router.push('/register')}
+                  className="inline-flex h-11 items-center rounded-lg bg-[#f97316] px-6 text-base font-semibold text-white transition-all duration-200 hover:bg-orange-600"
+                  type="button"
+                >
+                  Kom igång
+                </button>
+              </div>
               <button
-                onClick={() => router.push('/login')}
-                className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-5 text-base font-semibold text-slate-700 transition-all duration-200 hover:border-[#f97316] hover:text-[#f97316]"
-                type="button"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 md:hidden"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                aria-label="Öppna meny"
               >
-                Logga in
-              </button>
-              <button
-                onClick={() => router.push('/register')}
-                className="inline-flex h-11 items-center rounded-lg bg-[#f97316] px-6 text-base font-semibold text-white transition-all duration-200 hover:bg-orange-600"
-                type="button"
-              >
-                Kom igång
+                <span className="material-symbols-outlined text-3xl">
+                  {mobileMenuOpen ? 'close' : 'menu'}
+                </span>
               </button>
             </div>
           </div>
+          {mobileMenuOpen && (
+            <div className="border-t border-slate-100 bg-white md:hidden">
+              <div className="flex flex-col space-y-1 p-4">
+                <a className="flex h-12 items-center px-4 text-base font-medium text-[#f97316] font-semibold rounded-lg bg-orange-50" href="#top" onClick={() => setMobileMenuOpen(false)}>Funktioner</a>
+                <a className="flex h-12 items-center px-4 text-base font-medium text-slate-700 hover:bg-slate-50 hover:text-[#f97316] rounded-lg" href="/kontakt" onClick={() => setMobileMenuOpen(false)}>Kontakt</a>
+                <a className="flex h-12 items-center px-4 text-base font-medium text-slate-700 hover:bg-slate-50 hover:text-[#f97316] rounded-lg" href="/faq" onClick={() => setMobileMenuOpen(false)}>FAQ</a>
+                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100 mt-2">
+                  <button
+                    onClick={() => { setMobileMenuOpen(false); router.push('/login'); }}
+                    className="flex h-12 items-center justify-center rounded-xl border border-slate-200 text-base font-semibold text-slate-700"
+                    type="button"
+                  >
+                    Logga in
+                  </button>
+                  <button
+                    onClick={() => { setMobileMenuOpen(false); router.push('/register'); }}
+                    className="flex h-12 items-center justify-center rounded-xl bg-[#f97316] text-base font-semibold text-white"
+                    type="button"
+                  >
+                    Kom igång
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </nav>
 
         <section id="top" className="relative overflow-hidden pb-24 pt-20">
@@ -102,7 +139,7 @@ export default function NyHemsidaFunktionerPage() {
             <div className="relative flex items-center justify-center">
               <Image
                 alt="APL-appen screenshot"
-                className="h-auto w-full max-w-[680px] object-contain"
+                className="h-auto w-full max-w-[680px] rounded-lg object-contain"
                 src="/funktionsbild3.png"
                 width={768}
                 height={768}
@@ -256,9 +293,9 @@ function RoleSection({
 }) {
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
-      <div className={['flex flex-col items-center gap-8 md:flex-row', reverse ? 'md:flex-row-reverse' : ''].join(' ')}>
-        <div className="flex-1">
-          <div className="rounded-lg bg-white p-10 shadow-sm">
+      <div className={['flex flex-col gap-8 md:flex-row md:items-stretch', reverse ? 'md:flex-row-reverse' : ''].join(' ')}>
+        <div className="md:basis-[48%]">
+          <div className="h-full rounded-lg bg-white p-10 shadow-sm">
             <div className={['mb-8 flex h-12 w-12 items-center justify-center rounded-lg', iconBg].join(' ')}>
               <span className={['material-symbols-outlined text-2xl', iconColor].join(' ')}>{icon}</span>
             </div>
@@ -277,9 +314,9 @@ function RoleSection({
             </div>
           </div>
         </div>
-        <div className="flex-1">
-          <div className="overflow-hidden rounded-lg bg-[#e6e8ea]">
-            <img alt={imageAlt} className="h-full w-full object-cover" src={imageSrc} />
+        <div className="md:basis-[52%]">
+          <div className="h-full min-h-[360px] overflow-hidden rounded-lg bg-[#e6e8ea] md:min-h-[420px]">
+            <img alt={imageAlt} className="block h-full w-full object-cover" src={imageSrc} />
           </div>
         </div>
       </div>
