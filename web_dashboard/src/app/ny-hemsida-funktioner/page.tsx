@@ -139,7 +139,7 @@ export default function NyHemsidaFunktionerPage() {
             <div className="relative flex items-center justify-center">
               <Image
                 alt="APL-appen screenshot"
-                className="h-auto w-full max-w-[680px] object-contain"
+                className="h-auto w-full max-w-[680px] rounded-lg object-contain"
                 src="/funktionsbild3.png"
                 width={768}
                 height={768}
@@ -157,7 +157,7 @@ export default function NyHemsidaFunktionerPage() {
             title="För Elev"
             intro="Allt du behöver under din APL, direkt i fickan. Få full koll på dina timmar och bedömningar utan pappersarbete."
             imageAlt="Elev vid byggarbetsplats med mobil"
-            imageSrc="https://lh3.googleusercontent.com/aida-public/AB6AXuBye4crR1AwKXFWGRJ3MPw9nVur_GNPq9JQLbhJ9oBEUhbo5PDgGKkKsNr7MlZHdY_V_uA8S5w1plJRgYfjk3eFKGsgsEBBsCV8Pdj56F4Lcm-mUcdZgmOnH321B2c1YQoZd7OCGTOxmC0BvdB14CnwBkMwOaqTTFWESt4qRa1kSupmXlF7HfFEFwX2VVM3KtdGtt5S8sVIwhuK4cEbMyoVZR3Dx8tTpM5Ua6BgmXdfqKStYXrBRUP4dSe6pG3jmW3ph2kJD3AdlmQ"
+            imageSrc="/funktionsbild5.png"
             icon="person"
             iconBg="bg-[#ffdbca]"
             iconColor="text-[#341100]"
@@ -181,7 +181,7 @@ export default function NyHemsidaFunktionerPage() {
               title="För Handledare"
               intro="För handledare gör APL-appen det smidigt att signera elevers tidkort, ersättning och bedömning - utan extra konton och krångel."
               imageAlt="Handledare diskuterar med mobil"
-              imageSrc="https://lh3.googleusercontent.com/aida-public/AB6AXuD717gaUESfw9JfHS1xl2P-mwo3_G3mEosdYzrRRAumkIOfmORiMDNXKEM33peyWe7skDlxKFBDQrMYFXccewn47ft4lgDWpChxu2If--xljLRBckuAs8yu86V_aT2uTk5AlkOxKuA56MApbpr48GslxJq817XOIU46aujDhrG5AuzOmYEGekqJ0xJE3-lcZTkelMoPZ_-W9Bg0s3jPFzzPH6MifBAXMYTad3Xa5RCvZ5Nh2EBVZc2Z_68XaA5jShEg3692usU0Njg"
+              imageSrc="/funktionsbild4.png"
               icon="assignment_ind"
               iconBg="bg-[#d3e4fe]"
               iconColor="text-[#0b1c30]"
@@ -203,8 +203,8 @@ export default function NyHemsidaFunktionerPage() {
           <RoleSection
             title="För Lärare"
             intro="Slipp jagandet efter papper. Få realtidsdata på alla dina elever och deras APL-platser."
-            imageAlt="Dashboard med elevdata"
-            imageSrc="https://lh3.googleusercontent.com/aida-public/AB6AXuDnabbtp5Vd4INgzcMNAPRVH9dBocJTqqVWi3vEETSFOt90Ik9hmDMTdN9TOOci83en8ZPXHEA42ry9ZE8V8Pl7IE0Ek4vgHVSa-ZC2VSALRTa4wr7l7GQj2afj2mZI2Xr8tYxLxd5dYPYLpnZ34Dt2ZOJ_BDaDYTm_QA9vNEUOhwywZNgrt6TAHe5PmMBB4uXyUNu8a-AWFahDKlZ3uAZ_7XiaPDoZwi-Tl4-n4JnzvK1BlhYaadQHbXOJOQOyyDo6wZqEcvg71Qo"
+            imageAlt="Lärare som arbetar i APL-systemet"
+            imageSrc="/funktionsbild 6.png"
             icon="school"
             iconBg="bg-[#dae2fd]"
             iconColor="text-[#131b2e]"
@@ -293,9 +293,9 @@ function RoleSection({
 }) {
   return (
     <div className="mx-auto max-w-7xl px-6 py-8">
-      <div className={['flex flex-col items-center gap-8 md:flex-row', reverse ? 'md:flex-row-reverse' : ''].join(' ')}>
-        <div className="flex-1">
-          <div className="rounded-lg bg-white p-10 shadow-sm">
+      <div className={['flex flex-col gap-8 md:flex-row md:items-stretch', reverse ? 'md:flex-row-reverse' : ''].join(' ')}>
+        <div className="md:basis-[48%]">
+          <div className="h-full rounded-lg bg-white p-10 shadow-sm">
             <div className={['mb-8 flex h-12 w-12 items-center justify-center rounded-lg', iconBg].join(' ')}>
               <span className={['material-symbols-outlined text-2xl', iconColor].join(' ')}>{icon}</span>
             </div>
@@ -314,9 +314,9 @@ function RoleSection({
             </div>
           </div>
         </div>
-        <div className="flex-1">
-          <div className="overflow-hidden rounded-lg bg-[#e6e8ea]">
-            <img alt={imageAlt} className="h-full w-full object-cover" src={imageSrc} />
+        <div className="md:basis-[52%]">
+          <div className="h-full min-h-[360px] overflow-hidden rounded-lg bg-[#e6e8ea] md:min-h-[420px]">
+            <img alt={imageAlt} className="block h-full w-full object-cover" src={imageSrc} />
           </div>
         </div>
       </div>
