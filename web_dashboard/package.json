@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "date-fns": "^3.3.0",
+    "exceljs": "^4.4.0",
     "firebase": "^10.8.0",
+    "firebase-admin": "^13.10.0",
     "lucide-react": "^0.576.0",
     "next": "^14.1.0",
     "react": "^18.2.0",

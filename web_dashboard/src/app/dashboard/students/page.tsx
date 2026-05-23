@@ -8,6 +8,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { db, auth, functions } from '../../../lib/firebase';
 import WeekAccessManager from './WeekAccessManager';
+import { exportStudentsToExcelInBrowser } from './clientExcelExport';
 
 type Student = {
   id: string;
@@ -27,6 +28,8 @@ type ProgramCatalogEntry = {
   name: string;
   specializations: string[];
 };
+
+type ExportScope = 'single' | 'multiple' | 'class' | 'all';
 
 function normalizeStringList(values: unknown): string[] {
   if (!Array.isArray(values)) return [];
@@ -57,6 +60,19 @@ function parseProgramCatalog(rawPrograms: unknown): ProgramCatalogEntry[] {
       specializations: normalizeStringList(entry.specializations),
     }))
     .filter((entry) => entry.name.length > 0);
+}
+
+function parseExportFilename(contentDisposition: string | null): string {
+  if (!contentDisposition) {
+    return `apl_elevexport_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  }
+
+  const match = contentDisposition.match(/filename="?([^";]+)"?/i);
+  if (!match || !match[1]) {
+    return `apl_elevexport_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  }
+
+  return match[1];
 }
 
 export default function StudentsPage() {
@@ -191,6 +207,13 @@ export default function StudentsPage() {
   const [selectedClassId, setSelectedClassId] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [exportScope, setExportScope] = useState<ExportScope>('all');
+  const [exportStudentId, setExportStudentId] = useState('');
+  const [exportStudentIds, setExportStudentIds] = useState<string[]>([]);
+  const [exportClassId, setExportClassId] = useState('');
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportInfo, setExportInfo] = useState<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -503,6 +526,136 @@ export default function StudentsPage() {
       );
     });
 
+  useEffect(() => {
+    if (selectedClassId !== 'ALL') {
+      setExportClassId(selectedClassId);
+    }
+  }, [selectedClassId]);
+
+  useEffect(() => {
+    if (!exportClassId && classes.length > 0) {
+      setExportClassId(classes[0].id);
+    }
+  }, [classes, exportClassId]);
+
+  const handleExportStudents = async () => {
+    try {
+      setExportError(null);
+      setExportInfo(null);
+
+      const activeUser = auth.currentUser;
+      if (!activeUser) {
+        setExportError('Du maste vara inloggad for att exportera.');
+        return;
+      }
+
+      const payload: {
+        scope: ExportScope;
+        studentIds?: string[];
+        classId?: string;
+      } = {
+        scope: exportScope,
+      };
+
+      if (exportScope === 'single') {
+        if (!exportStudentId) {
+          setExportError('Valj en elev innan export.');
+          return;
+        }
+        payload.studentIds = [exportStudentId];
+      }
+
+      if (exportScope === 'multiple') {
+        if (exportStudentIds.length === 0) {
+          setExportError('Valj minst en elev innan export.');
+          return;
+        }
+        payload.studentIds = exportStudentIds;
+      }
+
+      if (exportScope === 'class') {
+        if (!exportClassId) {
+          setExportError('Valj en klass innan export.');
+          return;
+        }
+        payload.classId = exportClassId;
+      }
+
+      setIsExporting(true);
+      const token = await activeUser.getIdToken();
+
+      const response = await fetch('/api/exports/students', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null);
+        const errorMessage =
+          errorBody && typeof errorBody.error === 'string'
+            ? errorBody.error
+            : 'Export misslyckades. Forsok igen.';
+
+        const shouldUseBrowserFallback =
+          errorMessage.toLowerCase().includes('firebase admin') ||
+          errorMessage.toLowerCase().includes('default credentials') ||
+          errorMessage.toLowerCase().includes('application default credentials') ||
+          errorMessage.toLowerCase().includes('fIREBASE_PROJECT_ID'.toLowerCase());
+
+        if (shouldUseBrowserFallback) {
+          if (userRole !== 'teacher' && userRole !== 'admin') {
+            throw new Error('Endast larare eller admin kan exportera elevdata.');
+          }
+
+          await exportStudentsToExcelInBrowser({
+            db,
+            role: userRole,
+            currentUserUid: activeUser.uid,
+            scope: exportScope,
+            selectedStudentId: exportStudentId,
+            selectedStudentIds: exportStudentIds,
+            selectedClassId: exportClassId,
+            students: students.map((student) => ({
+              id: student.id,
+              name: student.name,
+              email: student.email,
+              classId: student.classId,
+              className: student.className,
+              specialization: student.specialization,
+              status: student.status,
+            })),
+          });
+
+          setExportInfo('Export klar via lokal fallback (browser) eftersom servercredentials saknas lokalt.');
+          return;
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      const blob = await response.blob();
+      const filename = parseExportFilename(response.headers.get('content-disposition'));
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = downloadUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      setExportInfo('Export klar via server-export.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Export misslyckades.';
+      setExportError(message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
@@ -561,6 +714,110 @@ export default function StudentsPage() {
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="mb-8 rounded-lg border border-orange-100 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-gray-900">Exportera elevdata (.xlsx)</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Exporten skapar en sammanfattningsflik och en egen flik per elev inklusive statistik och diagram.
+        </p>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Urval</label>
+            <select
+              value={exportScope}
+              onChange={(event) => setExportScope(event.target.value as ExportScope)}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+            >
+              <option value="single">En specifik elev</option>
+              <option value="multiple">Flera elever</option>
+              <option value="class">En hel klass</option>
+              <option value="all">Alla elever</option>
+            </select>
+          </div>
+
+          {exportScope === 'single' && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Elev</label>
+              <select
+                value={exportStudentId}
+                onChange={(event) => setExportStudentId(event.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+              >
+                <option value="">Välj elev</option>
+                {filteredStudents.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {student.name} ({student.className || 'Ingen klass'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {exportScope === 'multiple' && (
+            <div className="lg:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-gray-700">Elever (flera)</label>
+              <select
+                multiple
+                value={exportStudentIds}
+                onChange={(event) => {
+                  const selectedIds = Array.from(event.target.selectedOptions).map((option) => option.value);
+                  setExportStudentIds(selectedIds);
+                }}
+                className="h-36 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+              >
+                {filteredStudents.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {student.name} ({student.className || 'Ingen klass'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {exportScope === 'class' && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">Klass</label>
+              <select
+                value={exportClassId}
+                onChange={(event) => setExportClassId(event.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+              >
+                <option value="">Välj klass</option>
+                {classes.map((classItem) => (
+                  <option key={classItem.id} value={classItem.id}>
+                    {classItem.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {exportError && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {exportError}
+          </div>
+        )}
+
+        {exportInfo && (
+          <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+            {exportInfo}
+          </div>
+        )}
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={handleExportStudents}
+            disabled={isExporting}
+            className="rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+          >
+            {isExporting ? 'Genererar export...' : 'Exportera till Excel'}
+          </button>
+          {isExporting && <span className="text-sm text-gray-500">Detta kan ta en stund vid stora datamangder.</span>}
+        </div>
       </div>
 
       {/* Admin: Lägg till elev formulär */}

@@ -112,6 +112,14 @@ Progress notes (2026-04-01):
 Exit-kriterier:
 - Teamet kan upptäcka och hantera produktionsproblem snabbt
 
+## 6.1) Webbsäkerhet för export (lärare/admin)
+- [ ] Klientfallback för Excel-export är avstängd i produktion (endast server-side export tillåten)
+- [ ] Firebase Admin credentials verifierade i produktionsmiljön för export-endpointen
+- [ ] Export-endpoint loggar vem som exporterar (uid + tidsstämpel) för spårbarhet
+
+Notis:
+- Browser-fallbacken för Excel-export används enbart för lokal testning utan admin credentials och ska inte vara aktiv i produktion.
+
 ## 7) Lanseringsbeslut
 - [ ] Go/No-Go-möte genomfört
 - [ ] Risklista granskad och accepterad
