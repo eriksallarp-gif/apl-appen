@@ -8,7 +8,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { db, auth, functions } from '../../../lib/firebase';
 import WeekAccessManager from './WeekAccessManager';
-import { exportStudentsToExcelInBrowser } from './clientExcelExport';
+import { buildExportDatasetInBrowser } from './clientExportDataset';
+import { downloadClassPdf, downloadStudentPdf } from '@/shared/pdf-report';
 
 type Student = {
   id: string;
@@ -60,19 +61,6 @@ function parseProgramCatalog(rawPrograms: unknown): ProgramCatalogEntry[] {
       specializations: normalizeStringList(entry.specializations),
     }))
     .filter((entry) => entry.name.length > 0);
-}
-
-function parseExportFilename(contentDisposition: string | null): string {
-  if (!contentDisposition) {
-    return `apl_elevexport_${new Date().toISOString().slice(0, 10)}.xlsx`;
-  }
-
-  const match = contentDisposition.match(/filename="?([^";]+)"?/i);
-  if (!match || !match[1]) {
-    return `apl_elevexport_${new Date().toISOString().slice(0, 10)}.xlsx`;
-  }
-
-  return match[1];
 }
 
 export default function StudentsPage() {
@@ -211,7 +199,7 @@ export default function StudentsPage() {
   const [exportStudentId, setExportStudentId] = useState('');
   const [exportStudentIds, setExportStudentIds] = useState<string[]>([]);
   const [exportClassId, setExportClassId] = useState('');
-  const [isExporting, setIsExporting] = useState(false);
+  const [isPdfExporting, setIsPdfExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportInfo, setExportInfo] = useState<string | null>(null);
   const router = useRouter();
@@ -538,7 +526,28 @@ export default function StudentsPage() {
     }
   }, [classes, exportClassId]);
 
-  const handleExportStudents = async () => {
+  const isTeacherOrAdmin = userRole === 'teacher' || userRole === 'admin';
+
+  const createBrowserExportOptions = (currentUserUid: string) => ({
+    db,
+    role: userRole as 'teacher' | 'admin',
+    currentUserUid,
+    scope: exportScope,
+    selectedStudentId: exportStudentId,
+    selectedStudentIds: exportStudentIds,
+    selectedClassId: exportClassId,
+    students: students.map((student) => ({
+      id: student.id,
+      name: student.name,
+      email: student.email,
+      classId: student.classId,
+      className: student.className,
+      specialization: student.specialization,
+      status: student.status,
+    })),
+  });
+
+  const handleExportPdf = async () => {
     try {
       setExportError(null);
       setExportInfo(null);
@@ -549,110 +558,49 @@ export default function StudentsPage() {
         return;
       }
 
-      const payload: {
-        scope: ExportScope;
-        studentIds?: string[];
-        classId?: string;
-      } = {
-        scope: exportScope,
-      };
+      if (!isTeacherOrAdmin) {
+        setExportError('Endast larare eller admin kan exportera elevdata.');
+        return;
+      }
+
+      if (exportScope === 'single' && !exportStudentId) {
+        setExportError('Valj en elev innan export.');
+        return;
+      }
+
+      if (exportScope === 'multiple' && exportStudentIds.length === 0) {
+        setExportError('Valj minst en elev innan export.');
+        return;
+      }
+
+      if (exportScope === 'class' && !exportClassId) {
+        setExportError('Valj en klass innan export.');
+        return;
+      }
+
+      setIsPdfExporting(true);
+
+      const dataset = await buildExportDatasetInBrowser(createBrowserExportOptions(activeUser.uid));
 
       if (exportScope === 'single') {
-        if (!exportStudentId) {
-          setExportError('Valj en elev innan export.');
-          return;
+        const student = dataset.students[0];
+        if (!student) {
+          throw new Error('Kunde inte hitta elev for PDF-export.');
         }
-        payload.studentIds = [exportStudentId];
+        await downloadStudentPdf(student, dataset.generatedAt);
+      } else if (exportScope === 'class') {
+        const selectedClassName = classes.find((classItem) => classItem.id === exportClassId)?.name;
+        await downloadClassPdf(dataset, selectedClassName);
+      } else {
+        await downloadClassPdf(dataset);
       }
 
-      if (exportScope === 'multiple') {
-        if (exportStudentIds.length === 0) {
-          setExportError('Valj minst en elev innan export.');
-          return;
-        }
-        payload.studentIds = exportStudentIds;
-      }
-
-      if (exportScope === 'class') {
-        if (!exportClassId) {
-          setExportError('Valj en klass innan export.');
-          return;
-        }
-        payload.classId = exportClassId;
-      }
-
-      setIsExporting(true);
-      const token = await activeUser.getIdToken();
-
-      const response = await fetch('/api/exports/students', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => null);
-        const errorMessage =
-          errorBody && typeof errorBody.error === 'string'
-            ? errorBody.error
-            : 'Export misslyckades. Forsok igen.';
-
-        const shouldUseBrowserFallback =
-          errorMessage.toLowerCase().includes('firebase admin') ||
-          errorMessage.toLowerCase().includes('default credentials') ||
-          errorMessage.toLowerCase().includes('application default credentials') ||
-          errorMessage.toLowerCase().includes('fIREBASE_PROJECT_ID'.toLowerCase());
-
-        if (shouldUseBrowserFallback) {
-          if (userRole !== 'teacher' && userRole !== 'admin') {
-            throw new Error('Endast larare eller admin kan exportera elevdata.');
-          }
-
-          await exportStudentsToExcelInBrowser({
-            db,
-            role: userRole,
-            currentUserUid: activeUser.uid,
-            scope: exportScope,
-            selectedStudentId: exportStudentId,
-            selectedStudentIds: exportStudentIds,
-            selectedClassId: exportClassId,
-            students: students.map((student) => ({
-              id: student.id,
-              name: student.name,
-              email: student.email,
-              classId: student.classId,
-              className: student.className,
-              specialization: student.specialization,
-              status: student.status,
-            })),
-          });
-
-          setExportInfo('Export klar via lokal fallback (browser) eftersom servercredentials saknas lokalt.');
-          return;
-        }
-
-        throw new Error(errorMessage);
-      }
-
-      const blob = await response.blob();
-      const filename = parseExportFilename(response.headers.get('content-disposition'));
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = downloadUrl;
-      anchor.download = filename;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-      setExportInfo('Export klar via server-export.');
+      setExportInfo('PDF-export klar.');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Export misslyckades.';
+      const message = error instanceof Error ? error.message : 'PDF-export misslyckades.';
       setExportError(message);
     } finally {
-      setIsExporting(false);
+      setIsPdfExporting(false);
     }
   };
 
@@ -717,9 +665,9 @@ export default function StudentsPage() {
       </div>
 
       <div className="mb-8 rounded-lg border border-orange-100 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Exportera elevdata (.xlsx)</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Exportera elevdata (PDF)</h2>
         <p className="mt-1 text-sm text-gray-600">
-          Exporten skapar en sammanfattningsflik och en egen flik per elev inklusive statistik och diagram.
+          Exporten skapar PDF-rapporter med sammanstallning, aktiviteter, statistik och diagram.
         </p>
 
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -807,16 +755,15 @@ export default function StudentsPage() {
           </div>
         )}
 
-        <div className="mt-4 flex items-center gap-3">
+        <div className="mt-4 flex flex-col items-start gap-3">
           <button
-            onClick={handleExportStudents}
-            disabled={isExporting}
-            className="rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={handleExportPdf}
+            disabled={isPdfExporting}
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
             type="button"
           >
-            {isExporting ? 'Genererar export...' : 'Exportera till Excel'}
+            {isPdfExporting ? 'Genererar PDF...' : 'Exportera till PDF'}
           </button>
-          {isExporting && <span className="text-sm text-gray-500">Detta kan ta en stund vid stora datamangder.</span>}
         </div>
       </div>
 

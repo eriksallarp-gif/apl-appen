@@ -6,15 +6,13 @@ import {
   type Firestore,
   type QueryConstraint,
 } from 'firebase/firestore';
-import { buildExcelReportWorkbook } from '@/shared/excel-report/workbook';
-import { fetchPieChartBase64 } from '@/shared/excel-report/chart';
 import type {
-  ExcelExportAssessment,
-  ExcelExportCompensation,
-  ExcelExportDataset,
-  ExcelExportEntry,
-  ExcelExportStudent,
-} from '@/shared/excel-report/types';
+  PdfAssessment,
+  PdfCompensation,
+  PdfDataset,
+  PdfEntry,
+  PdfStudent,
+} from '@/shared/pdf-report/types';
 
 export type ExportScope = 'single' | 'multiple' | 'class' | 'all';
 
@@ -39,6 +37,8 @@ type ClientExportOptions = {
   students: ExportStudentInput[];
 };
 
+export type { ClientExportOptions };
+
 function parseDate(value: unknown): Date | null {
   if (!value) return null;
   if (value instanceof Date) return value;
@@ -46,6 +46,135 @@ function parseDate(value: unknown): Date | null {
     return (value as { toDate: () => Date }).toDate();
   }
   return null;
+}
+
+function normalizeWeekValue(value: unknown): string {
+  if (value === null || value === undefined) return '';
+
+  const dateValue = parseDate(value);
+  if (dateValue) {
+    return dateValue.toISOString().slice(0, 10);
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `W${Math.trunc(value)}`;
+  }
+
+  const text = String(value).trim();
+  if (!text) return '';
+  return text;
+}
+
+function resolveWeekStart(candidates: unknown[], fallbackDate?: Date | null): string {
+  for (const candidate of candidates) {
+    const normalized = normalizeWeekValue(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  if (fallbackDate) {
+    return fallbackDate.toISOString().slice(0, 10);
+  }
+
+  return '';
+}
+
+function extractWeekFromTimesheetId(timesheetId: string): string {
+  const id = String(timesheetId || '').trim();
+  if (!id) return '';
+
+  const isoDateAtEnd = id.match(/_(\d{4}-\d{2}-\d{2})$/);
+  if (isoDateAtEnd?.[1]) {
+    return isoDateAtEnd[1];
+  }
+
+  const isoWeekAtEnd = id.match(/_(\d{4}-W\d{1,2})$/i);
+  if (isoWeekAtEnd?.[1]) {
+    return isoWeekAtEnd[1].toUpperCase();
+  }
+
+  return '';
+}
+
+function resolveAssessmentWeekStart(data: Record<string, unknown>, assessmentData: Record<string, unknown>, submittedAt: Date | null): string {
+  const timesheetSummaries = Array.isArray(data.timesheetSummaries)
+    ? data.timesheetSummaries
+    : Array.isArray(assessmentData.timesheetSummaries)
+      ? assessmentData.timesheetSummaries
+      : [];
+
+  const weekFromSummaries = timesheetSummaries
+    .map((item) => (item && typeof item === 'object' ? normalizeWeekValue((item as Record<string, unknown>).weekLabel) : ''))
+    .find(Boolean);
+
+  const weeks = Array.isArray(data.weeks)
+    ? data.weeks
+    : Array.isArray(assessmentData.weeks)
+      ? assessmentData.weeks
+      : [];
+
+  const weekFromWeeksArray = weeks
+    .map((item) => normalizeWeekValue(item))
+    .find(Boolean);
+
+  const timesheetIds = Array.isArray(data.timesheetIds)
+    ? data.timesheetIds
+    : Array.isArray(assessmentData.timesheetIds)
+      ? assessmentData.timesheetIds
+      : [];
+
+  const weekFromTimesheetIds = timesheetIds
+    .map((item) => extractWeekFromTimesheetId(String(item || '')))
+    .find(Boolean);
+
+  return resolveWeekStart(
+    [
+      weekFromSummaries,
+      weekFromWeeksArray,
+      weekFromTimesheetIds,
+      data.weekStart,
+      data.week,
+      data.weekLabel,
+      data.weekNumber,
+      assessmentData.weekStart,
+      assessmentData.week,
+      assessmentData.weekLabel,
+      assessmentData.weekNumber,
+    ],
+    submittedAt,
+  );
+}
+
+function textFromCandidate(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const nested = [
+      record.name,
+      record.displayName,
+      record.company,
+      record.companyName,
+      record.supervisorName,
+      record.supervisorCompany,
+    ];
+
+    for (const candidate of nested) {
+      const text = textFromCandidate(candidate);
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
+function resolveText(candidates: unknown[], fallback = '-'): string {
+  for (const candidate of candidates) {
+    const text = textFromCandidate(candidate);
+    if (text) return text;
+  }
+  return fallback;
 }
 
 function selectStudents(options: ClientExportOptions): ExportStudentInput[] {
@@ -69,7 +198,7 @@ function selectStudents(options: ClientExportOptions): ExportStudentInput[] {
   return options.students;
 }
 
-function maxDate(entries: ExcelExportEntry[]): Date | null {
+function maxDate(entries: PdfEntry[]): Date | null {
   const dates = entries
     .map((entry) => entry.registeredAt)
     .filter((value): value is Date => value instanceof Date)
@@ -83,7 +212,7 @@ async function loadStudentRecord(options: {
   student: ExportStudentInput;
   role: 'teacher' | 'admin';
   currentUserUid: string;
-}): Promise<ExcelExportStudent> {
+}): Promise<PdfStudent> {
   const { db, student, role, currentUserUid } = options;
 
   const timesheetConstraints: QueryConstraint[] = [where('studentUid', '==', student.id)];
@@ -100,9 +229,9 @@ async function loadStudentRecord(options: {
 
   const assessmentSnapshot = await getDocs(query(collection(db, 'assessmentRequests'), ...assessmentConstraints));
 
-  const entries: ExcelExportEntry[] = [];
-  const assessments: ExcelExportAssessment[] = [];
-  const compensations: ExcelExportCompensation[] = [];
+  const entries: PdfEntry[] = [];
+  const assessments: PdfAssessment[] = [];
+  const compensations: PdfCompensation[] = [];
   let approvedTimesheets = 0;
 
   const isDayLike = (value: string): boolean => {
@@ -146,6 +275,10 @@ async function loadStudentRecord(options: {
     }
 
     const fallbackDate = parseDate(data.submittedAt) || parseDate(data.updatedAt) || parseDate(data.createdAt);
+    const entryWeekStart = resolveWeekStart(
+      [data.weekStart, data.week, data.weekLabel, data.weekNumber],
+      fallbackDate,
+    );
     const rawEntries = (data.entries || {}) as Record<string, unknown>;
     const rawComments = (data.comments || {}) as Record<string, unknown>;
 
@@ -164,7 +297,7 @@ async function loadStudentRecord(options: {
         const hours = Number(hoursRaw || 0);
         entries.push({
           registeredAt: fallbackDate,
-          weekStart: String(data.weekStart || ''),
+          weekStart: entryWeekStart,
           dayLabel,
           source: 'Tidkort',
           activity: activityName,
@@ -179,15 +312,53 @@ async function loadStudentRecord(options: {
   for (const assessmentDoc of assessmentSnapshot.docs) {
     const data = assessmentDoc.data() || {};
     const assessmentData = (data.assessmentData || {}) as Record<string, unknown>;
+    const submittedAt =
+      parseDate(data.submittedAt) ||
+      parseDate(data.updatedAt) ||
+      parseDate(data.createdAt) ||
+      parseDate(assessmentData.submittedAt) ||
+      parseDate(assessmentData.updatedAt) ||
+      parseDate(assessmentData.createdAt);
+    const weekStart = resolveAssessmentWeekStart(data, assessmentData, submittedAt);
     const lunchApproved = Number(data.lunchApproved ?? data.lunchCount ?? assessmentData.lunchApproved ?? 0) || 0;
     const travelApproved = Number(data.travelApproved ?? data.travelCount ?? assessmentData.travelApproved ?? 0) || 0;
 
     assessments.push({
       id: assessmentDoc.id,
-      submittedAt: parseDate(data.submittedAt),
-      weekStart: String(data.weekStart || ''),
-      assessorName: String(data.supervisorName || '-'),
-      assessorCompany: String(data.supervisorCompany || '-'),
+      submittedAt,
+      weekStart,
+      assessorName: resolveText([
+        data.supervisorName,
+        data.assessorName,
+        data.teacherName,
+        assessmentData.supervisorName,
+        assessmentData.assessorName,
+        assessmentData.teacherName,
+      ]),
+      assessorCompany: resolveText([
+        data.supervisorCompany,
+        data.companyName,
+        data.company,
+        data.workplace,
+        data.workplaceName,
+        data.supervisor,
+        data.assessor,
+        assessmentData.supervisorCompany,
+        assessmentData.companyName,
+        assessmentData.company,
+        assessmentData.workplace,
+        assessmentData.workplaceName,
+        assessmentData.supervisor,
+        assessmentData.assessor,
+      ]),
+      assessorPhone: resolveText([
+        data.supervisorPhone,
+        data.assessorPhone,
+        data.phone,
+        assessmentData.supervisorPhone,
+        assessmentData.assessorPhone,
+        assessmentData.phone,
+      ]),
       rating: String(data.averageRating || '-'),
       status: String(data.status || ''),
       comment: String(data.comment || assessmentData.comment || '-'),
@@ -197,7 +368,7 @@ async function loadStudentRecord(options: {
 
     compensations.push({
       id: `assessment_${assessmentDoc.id}`,
-      weekStart: String(data.weekStart || ''),
+      weekStart,
       lunches: lunchApproved,
       kilometers: travelApproved,
       source: 'Bedomning',
@@ -208,9 +379,10 @@ async function loadStudentRecord(options: {
   const compensationSnapshot = await getDocs(query(collection(db, 'compensation'), where('studentUid', '==', student.id)));
   for (const compensationDoc of compensationSnapshot.docs) {
     const data = compensationDoc.data() || {};
+    const fallbackCompDate = parseDate(data.submittedAt) || parseDate(data.updatedAt) || parseDate(data.createdAt);
     compensations.push({
       id: compensationDoc.id,
-      weekStart: String(data.weekStart || ''),
+      weekStart: resolveWeekStart([data.weekStart, data.week, data.weekLabel, data.weekNumber], fallbackCompDate),
       lunches: Number(data.lunchCount ?? data.lunchApproved ?? 0) || 0,
       kilometers: Number(data.travelCount ?? data.travelApproved ?? 0) || 0,
       source: 'Compensation',
@@ -252,53 +424,13 @@ async function loadStudentRecord(options: {
   };
 }
 
-function triggerDownload(arrayBuffer: ArrayBuffer, fileName: string) {
-  const blob = new Blob([arrayBuffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-
-  const url = window.URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.URL.revokeObjectURL(url);
-}
-
-async function loadLogoBase64(): Promise<string | null> {
-  const candidates = ['/apl_logo_512_padded.png', '/logo.png'];
-
-  for (const candidate of candidates) {
-    try {
-      const response = await fetch(candidate, { cache: 'force-cache' });
-      if (!response.ok) {
-        continue;
-      }
-
-      const buffer = await response.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      let binary = '';
-      for (let index = 0; index < bytes.length; index += 1) {
-        binary += String.fromCharCode(bytes[index]);
-      }
-      return btoa(binary);
-    } catch {
-      // Try next candidate.
-    }
-  }
-
-  return null;
-}
-
-export async function exportStudentsToExcelInBrowser(options: ClientExportOptions): Promise<void> {
+export async function buildExportDatasetInBrowser(options: ClientExportOptions): Promise<PdfDataset> {
   const selectedStudents = selectStudents(options);
   if (selectedStudents.length === 0) {
     throw new Error('Inga elever matchade valt exporturval.');
   }
 
-  const records: ExcelExportStudent[] = [];
+  const records: PdfStudent[] = [];
   for (const student of selectedStudents) {
     const record = await loadStudentRecord({
       db: options.db,
@@ -311,20 +443,8 @@ export async function exportStudentsToExcelInBrowser(options: ClientExportOption
 
   records.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
 
-  const dataset: ExcelExportDataset = {
+  return {
     generatedAt: new Date(),
     students: records,
   };
-
-  const logoBase64 = await loadLogoBase64();
-
-  const workbook = await buildExcelReportWorkbook({
-    dataset,
-    logoBase64,
-    fetchPieChartBase64,
-    reportTitle: 'APL-appen | Elevstatistik Export',
-  });
-
-  const bytes = await workbook.xlsx.writeBuffer();
-  triggerDownload(bytes as ArrayBuffer, `apl_elevexport_${dataset.generatedAt.toISOString().slice(0, 10)}.xlsx`);
 }

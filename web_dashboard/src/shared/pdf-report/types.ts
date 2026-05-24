@@ -1,22 +1,23 @@
-export type ExcelEntrySource = 'Tidkort' | 'Bedömning';
+export type PdfEntrySource = 'Tidkort' | 'Bedomning';
 
-export type ExcelExportEntry = {
+export type PdfEntry = {
   registeredAt: Date | null;
   weekStart: string;
   dayLabel: string;
-  source: ExcelEntrySource;
+  source: PdfEntrySource;
   activity: string;
   hours: number;
   approved: boolean;
   comment: string;
 };
 
-export type ExcelExportAssessment = {
+export type PdfAssessment = {
   id: string;
   submittedAt: Date | null;
   weekStart: string;
   assessorName: string;
   assessorCompany: string;
+  assessorPhone: string;
   rating: string;
   status: string;
   comment: string;
@@ -24,7 +25,7 @@ export type ExcelExportAssessment = {
   travelApproved: number;
 };
 
-export type ExcelExportCompensation = {
+export type PdfCompensation = {
   id: string;
   weekStart: string;
   lunches: number;
@@ -33,7 +34,7 @@ export type ExcelExportCompensation = {
   comment: string;
 };
 
-export type ExcelExportStudent = {
+export type PdfStudent = {
   id: string;
   name: string;
   email: string;
@@ -50,18 +51,12 @@ export type ExcelExportStudent = {
   approvedKilometers: number;
   firstRegisteredAt?: Date | null;
   lastRegisteredAt: Date | null;
-  entries: ExcelExportEntry[];
-  assessments: ExcelExportAssessment[];
-  compensations: ExcelExportCompensation[];
+  entries: PdfEntry[];
+  assessments: PdfAssessment[];
+  compensations: PdfCompensation[];
 };
 
-export type ExcelExportDataset = {
+export type PdfDataset = {
   generatedAt: Date;
-  students: ExcelExportStudent[];
-};
-
-export type PieChartSeries = {
-  title: string;
-  labels: string[];
-  values: number[];
+  students: PdfStudent[];
 };

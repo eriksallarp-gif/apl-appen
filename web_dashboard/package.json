@@ -10,8 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.5.1",
+    "buffer": "^6.0.3",
     "date-fns": "^3.3.0",
-    "exceljs": "^4.4.0",
     "firebase": "^10.8.0",
     "firebase-admin": "^13.10.0",
     "lucide-react": "^0.576.0",
