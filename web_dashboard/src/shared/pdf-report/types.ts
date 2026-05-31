@@ -11,6 +11,25 @@ export type PdfEntry = {
   comment: string;
 };
 
+export type PdfAssessmentCriterion = {
+  key: string;
+  label: string;
+  rating: number | null;
+  comment: string;
+};
+
+export type PdfAssessmentSelfField = {
+  key: string;
+  label: string;
+  value: string;
+};
+
+export type PdfAssessmentImage = {
+  url: string;
+  fileName: string;
+  uploadedAt: Date | null;
+};
+
 export type PdfAssessment = {
   id: string;
   submittedAt: Date | null;
@@ -23,6 +42,11 @@ export type PdfAssessment = {
   comment: string;
   lunchApproved: number;
   travelApproved: number;
+  criteria: PdfAssessmentCriterion[];
+  studentSelfAssessment: PdfAssessmentSelfField[];
+  imageComments: string[];
+  images: PdfAssessmentImage[];
+  supervisorOtherInfo: string;
 };
 
 export type PdfCompensation = {
@@ -32,6 +56,15 @@ export type PdfCompensation = {
   kilometers: number;
   source: 'Bedomning' | 'Compensation';
   comment: string;
+};
+
+export type PdfApprovedAssignment = {
+  id: string;
+  title: string;
+  approvedAt: Date | null;
+  submittedAt: Date | null;
+  teacherComment: string;
+  mediaUrls: string[];
 };
 
 export type PdfStudent = {
@@ -49,11 +82,13 @@ export type PdfStudent = {
   assessmentCount: number;
   approvedLunches: number;
   approvedKilometers: number;
+  approvedAssignmentsCount: number;
   firstRegisteredAt?: Date | null;
   lastRegisteredAt: Date | null;
   entries: PdfEntry[];
   assessments: PdfAssessment[];
   compensations: PdfCompensation[];
+  approvedAssignments: PdfApprovedAssignment[];
 };
 
 export type PdfDataset = {

@@ -9,7 +9,7 @@ import { httpsCallable } from 'firebase/functions';
 import { db, auth, functions } from '../../../lib/firebase';
 import WeekAccessManager from './WeekAccessManager';
 import { buildExportDatasetInBrowser } from './clientExportDataset';
-import { downloadClassPdf, downloadStudentPdf } from '@/shared/pdf-report';
+import { downloadClassPdf, downloadStudentPdf, downloadStudentPdfFull } from '@/shared/pdf-report';
 
 type Student = {
   id: string;
@@ -30,7 +30,7 @@ type ProgramCatalogEntry = {
   specializations: string[];
 };
 
-type ExportScope = 'single' | 'multiple' | 'class' | 'all';
+type ExportScope = 'single' | 'class';
 
 function normalizeStringList(values: unknown): string[] {
   if (!Array.isArray(values)) return [];
@@ -195,11 +195,11 @@ export default function StudentsPage() {
   const [selectedClassId, setSelectedClassId] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-  const [exportScope, setExportScope] = useState<ExportScope>('all');
+  const [exportScope, setExportScope] = useState<ExportScope>('single');
   const [exportStudentId, setExportStudentId] = useState('');
-  const [exportStudentIds, setExportStudentIds] = useState<string[]>([]);
   const [exportClassId, setExportClassId] = useState('');
   const [isPdfExporting, setIsPdfExporting] = useState(false);
+  const [isPdfExportingFull, setIsPdfExportingFull] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportInfo, setExportInfo] = useState<string | null>(null);
   const router = useRouter();
@@ -534,7 +534,7 @@ export default function StudentsPage() {
     currentUserUid,
     scope: exportScope,
     selectedStudentId: exportStudentId,
-    selectedStudentIds: exportStudentIds,
+    selectedStudentIds: [],
     selectedClassId: exportClassId,
     students: students.map((student) => ({
       id: student.id,
@@ -554,27 +554,22 @@ export default function StudentsPage() {
 
       const activeUser = auth.currentUser;
       if (!activeUser) {
-        setExportError('Du maste vara inloggad for att exportera.');
+        setExportError('Du måste vara inloggad för att exportera.');
         return;
       }
 
       if (!isTeacherOrAdmin) {
-        setExportError('Endast larare eller admin kan exportera elevdata.');
+        setExportError('Endast lärare eller admin kan exportera elevdata.');
         return;
       }
 
       if (exportScope === 'single' && !exportStudentId) {
-        setExportError('Valj en elev innan export.');
-        return;
-      }
-
-      if (exportScope === 'multiple' && exportStudentIds.length === 0) {
-        setExportError('Valj minst en elev innan export.');
+        setExportError('Välj en elev innan export.');
         return;
       }
 
       if (exportScope === 'class' && !exportClassId) {
-        setExportError('Valj en klass innan export.');
+        setExportError('Välj en klass innan export.');
         return;
       }
 
@@ -585,14 +580,12 @@ export default function StudentsPage() {
       if (exportScope === 'single') {
         const student = dataset.students[0];
         if (!student) {
-          throw new Error('Kunde inte hitta elev for PDF-export.');
+          throw new Error('Kunde inte hitta elev för PDF-export.');
         }
         await downloadStudentPdf(student, dataset.generatedAt);
-      } else if (exportScope === 'class') {
+      } else {
         const selectedClassName = classes.find((classItem) => classItem.id === exportClassId)?.name;
         await downloadClassPdf(dataset, selectedClassName);
-      } else {
-        await downloadClassPdf(dataset);
       }
 
       setExportInfo('PDF-export klar.');
@@ -601,6 +594,45 @@ export default function StudentsPage() {
       setExportError(message);
     } finally {
       setIsPdfExporting(false);
+    }
+  };
+
+  const handleExportPdfFull = async () => {
+    try {
+      setExportError(null);
+      setExportInfo(null);
+
+      const activeUser = auth.currentUser;
+      if (!activeUser) {
+        setExportError('Du måste vara inloggad för att exportera.');
+        return;
+      }
+
+      if (!isTeacherOrAdmin) {
+        setExportError('Endast lärare eller admin kan exportera elevdata.');
+        return;
+      }
+
+      if (exportScope !== 'single' || !exportStudentId) {
+        setExportError('Fullständig PDF fungerar för en specifik elev. Välj urval: En specifik elev.');
+        return;
+      }
+
+      setIsPdfExportingFull(true);
+
+      const dataset = await buildExportDatasetInBrowser(createBrowserExportOptions(activeUser.uid));
+      const student = dataset.students[0];
+      if (!student) {
+        throw new Error('Kunde inte hitta elev för fullständig PDF-export.');
+      }
+
+      await downloadStudentPdfFull(student, dataset.generatedAt);
+      setExportInfo('Fullständig PDF-export klar.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Fullständig PDF-export misslyckades.';
+      setExportError(message);
+    } finally {
+      setIsPdfExportingFull(false);
     }
   };
 
@@ -667,7 +699,7 @@ export default function StudentsPage() {
       <div className="mb-8 rounded-lg border border-orange-100 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900">Exportera elevdata (PDF)</h2>
         <p className="mt-1 text-sm text-gray-600">
-          Exporten skapar PDF-rapporter med sammanstallning, aktiviteter, statistik och diagram.
+          Exporten skapar PDF-rapporter med sammanställning, aktiviteter, statistik och diagram.
         </p>
 
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -679,9 +711,7 @@ export default function StudentsPage() {
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
             >
               <option value="single">En specifik elev</option>
-              <option value="multiple">Flera elever</option>
               <option value="class">En hel klass</option>
-              <option value="all">Alla elever</option>
             </select>
           </div>
 
@@ -694,27 +724,6 @@ export default function StudentsPage() {
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
               >
                 <option value="">Välj elev</option>
-                {filteredStudents.map((student) => (
-                  <option key={student.id} value={student.id}>
-                    {student.name} ({student.className || 'Ingen klass'})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {exportScope === 'multiple' && (
-            <div className="lg:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-gray-700">Elever (flera)</label>
-              <select
-                multiple
-                value={exportStudentIds}
-                onChange={(event) => {
-                  const selectedIds = Array.from(event.target.selectedOptions).map((option) => option.value);
-                  setExportStudentIds(selectedIds);
-                }}
-                className="h-36 w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
-              >
                 {filteredStudents.map((student) => (
                   <option key={student.id} value={student.id}>
                     {student.name} ({student.className || 'Ingen klass'})
@@ -755,7 +764,7 @@ export default function StudentsPage() {
           </div>
         )}
 
-        <div className="mt-4 flex flex-col items-start gap-3">
+        <div className="mt-4 flex flex-col items-start gap-3 md:flex-row">
           <button
             onClick={handleExportPdf}
             disabled={isPdfExporting}
@@ -763,6 +772,14 @@ export default function StudentsPage() {
             type="button"
           >
             {isPdfExporting ? 'Genererar PDF...' : 'Exportera till PDF'}
+          </button>
+          <button
+            onClick={handleExportPdfFull}
+            disabled={isPdfExportingFull || exportScope !== 'single' || !exportStudentId}
+            className="rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 font-semibold text-orange-800 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
+            type="button"
+          >
+            {isPdfExportingFull ? 'Genererar fullständig PDF...' : 'Exportera till PDF - Fullständig'}
           </button>
         </div>
       </div>

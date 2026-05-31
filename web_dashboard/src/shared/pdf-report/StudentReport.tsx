@@ -125,6 +125,43 @@ function formatOneDecimal(value: number): string {
   return new Intl.NumberFormat('sv-SE', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(value);
 }
 
+function chunkArray<T>(items: T[], size: number): T[][] {
+  if (size <= 0) return [items];
+
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function toPdfImageSrc(url: string): string {
+  const source = String(url || '').trim();
+  if (!source) return '';
+
+  if (typeof window === 'undefined') {
+    return source;
+  }
+
+  if (source.startsWith('http://') || source.startsWith('https://')) {
+    return `${window.location.origin}/api/pdf-image?src=${encodeURIComponent(source)}`;
+  }
+
+  return source;
+}
+
+function isImageLikeUrl(url: string): boolean {
+  const source = String(url || '').trim().toLowerCase();
+  if (!source) return false;
+
+  const extMatch = source.match(/\.([a-z0-9]+)(\?|$)/i);
+  if (extMatch?.[1]) {
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif'].includes(extMatch[1].toLowerCase());
+  }
+
+  return source.includes('image') || source.includes('firebasestorage');
+}
+
 const CHART_COLORS = ['#D97706', '#F97316', '#FB923C', '#FDBA74', '#F59E0B', '#FBBF24', '#FED7AA', '#EA580C'];
 
 type ActivityDistributionItem = {
@@ -297,6 +334,43 @@ const s = StyleSheet.create({
     fill: '#0F172A',
     textAnchor: 'middle',
     dominantBaseline: 'middle',
+  },
+  fullReportBadge: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#C2410C',
+    backgroundColor: '#FFF7ED',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  fullReportBadgeText: {
+    color: '#9A3412',
+    fontSize: 8,
+    fontFamily: 'Helvetica-Bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  assessmentImageGridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  assessmentImageCard: {
+    width: '49%',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 6,
+    padding: 6,
+    backgroundColor: '#FFFFFF',
+  },
+  assessmentImage: {
+    width: '100%',
+    height: 160,
+    objectFit: 'contain',
+    borderRadius: 4,
+    backgroundColor: '#F8FAFC',
   },
 });
 
@@ -473,6 +547,96 @@ function AssessmentsTable({ student }: { student: PdfStudent }) {
   );
 }
 
+function FullAssessmentDetailsTable({ student }: { student: PdfStudent }) {
+  return (
+    <View>
+      <Text style={shared.sectionTitle}>Bedömningsunderlag (fullständig)</Text>
+      <View style={shared.table}>
+        <View style={[shared.tableHeaderRow, s.tableHeaderRow]}>
+          <Text style={[shared.tableHeaderCell, { width: '16%' }]}>Vecka</Text>
+          <Text style={[shared.tableHeaderCell, { width: '18%' }]}>Typ</Text>
+          <Text style={[shared.tableHeaderCell, { width: '22%' }]}>Rubrik</Text>
+          <Text style={[shared.tableHeaderCell, { flex: 1 }]}>Innehåll</Text>
+        </View>
+
+        {student.assessments.length === 0 ? (
+          <Text style={shared.emptyState}>Ingen bedömningsdata registrerad.</Text>
+        ) : (
+          student.assessments.flatMap((assessment, assessmentIndex) => {
+            const rows: Array<{ type: string; title: string; value: string }> = [];
+
+            rows.push({
+              type: 'Översikt',
+              title: `${assessment.assessorCompany || '-'} / ${assessment.assessorName || '-'}`,
+              value: assessment.comment || '-',
+            });
+
+            if (assessment.supervisorOtherInfo) {
+              rows.push({
+                type: 'Övrigt',
+                title: 'Handledarens övriga info',
+                value: assessment.supervisorOtherInfo,
+              });
+            }
+
+            if (assessment.imageComments.length > 0) {
+              assessment.imageComments.forEach((imageComment, imageIndex) => {
+                rows.push({
+                  type: 'Bildkommentar',
+                  title: `Bild ${imageIndex + 1}`,
+                  value: imageComment,
+                });
+              });
+            }
+
+            if (assessment.criteria.length > 0) {
+              assessment.criteria.forEach((criterion) => {
+                rows.push({
+                  type: 'Kriterium',
+                  title: `${criterion.label} (${criterion.rating ?? '-'} / 5)`,
+                  value: criterion.comment || '-',
+                });
+              });
+            }
+
+            if (assessment.studentSelfAssessment.length > 0) {
+              assessment.studentSelfAssessment.forEach((field) => {
+                rows.push({
+                  type: 'Elevsvar',
+                  title: field.label,
+                  value: field.value || '-',
+                });
+              });
+            }
+
+            if (rows.length === 0) {
+              rows.push({
+                type: 'Översikt',
+                title: 'Inget detaljerat underlag sparat',
+                value: '-',
+              });
+            }
+
+            return rows.map((row, rowIndex) => {
+              const key = `${assessment.id}_${row.type}_${row.title}_${rowIndex}`;
+              const isEven = (assessmentIndex + rowIndex) % 2 === 0;
+
+              return (
+                <View key={key} style={[shared.tableRow, isEven ? shared.tableRowAlt : shared.tableRowEven]}>
+                  <Text style={[shared.tableCell, { width: '16%' }]}>{formatWeekLabel(assessment.weekStart, assessment.submittedAt)}</Text>
+                  <Text style={[shared.tableCell, { width: '18%' }]}>{row.type}</Text>
+                  <Text style={[shared.tableCell, { width: '22%' }]}>{row.title}</Text>
+                  <Text style={[shared.tableCellMuted, { flex: 1 }]}>{row.value}</Text>
+                </View>
+              );
+            });
+          })
+        )}
+      </View>
+    </View>
+  );
+}
+
 // ─── Compensation table ──────────────────────────────────────────────────────
 
 function CompensationTable({ student }: { student: PdfStudent }) {
@@ -525,6 +689,122 @@ function CompensationTable({ student }: { student: PdfStudent }) {
   );
 }
 
+function ApprovedAssignmentsTable({ student }: { student: PdfStudent }) {
+  return (
+    <View>
+      <Text style={shared.sectionTitle}>Godkända uppgifter</Text>
+      <View style={shared.table}>
+        <View style={[shared.tableHeaderRow, s.tableHeaderRow]}>
+          <Text style={[shared.tableHeaderCell, { width: '36%' }]}>Uppgift</Text>
+          <Text style={[shared.tableHeaderCell, { width: '16%' }]}>Godkänd</Text>
+          <Text style={[shared.tableHeaderCell, { width: '16%' }]}>Inlämnad</Text>
+          <Text style={[shared.tableHeaderCell, { flex: 1 }]}>Lärarkommentar</Text>
+        </View>
+
+        {student.approvedAssignments.length === 0 ? (
+          <Text style={shared.emptyState}>Inga godkända uppgifter registrerade.</Text>
+        ) : (
+          student.approvedAssignments.map((assignment, index) => (
+            <View key={assignment.id} style={[shared.tableRow, index % 2 === 0 ? shared.tableRowAlt : shared.tableRowEven]}>
+              <Text style={[shared.tableCell, { width: '36%' }]}>{assignment.title || '-'}</Text>
+              <Text style={[shared.tableCell, { width: '16%' }]}>{formatDate(assignment.approvedAt)}</Text>
+              <Text style={[shared.tableCell, { width: '16%' }]}>{formatDate(assignment.submittedAt)}</Text>
+              <Text style={[shared.tableCellMuted, { flex: 1 }]}>{assignment.teacherComment || '-'}</Text>
+            </View>
+          ))
+        )}
+      </View>
+    </View>
+  );
+}
+
+function AssessmentImagesSection({ student }: { student: PdfStudent }) {
+  const assessmentsWithImages = student.assessments.filter((assessment) => assessment.images.length > 0);
+
+  return (
+    <View>
+      <Text style={shared.sectionTitle}>Bifogade bilder per bedömning</Text>
+      {assessmentsWithImages.length === 0 ? (
+        <Text style={shared.emptyState}>Inga bifogade bilder registrerade för godkända bedömningar.</Text>
+      ) : (
+        assessmentsWithImages.map((assessment) => (
+          <View key={assessment.id} style={{ marginBottom: 10 }}>
+            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>
+              {formatWeekLabel(assessment.weekStart, assessment.submittedAt)} · {assessment.assessorCompany || '-'} · {assessment.assessorName || '-'}
+            </Text>
+
+            {chunkArray(assessment.images, 2).map((imageRow, rowIndex) => (
+              <View key={`${assessment.id}_row_${rowIndex}`} style={s.assessmentImageGridRow} wrap={false}>
+                {imageRow.map((image, imageIndexInRow) => {
+                  const imageIndex = rowIndex * 2 + imageIndexInRow;
+                  return (
+                    <View key={`${assessment.id}_img_${imageIndex}`} style={s.assessmentImageCard}>
+                      <Text style={{ fontSize: 9, marginBottom: 3 }}>
+                        Bild {imageIndex + 1}: {image.fileName || 'Okänt filnamn'}
+                      </Text>
+                      <Image src={{ uri: toPdfImageSrc(image.url) }} style={s.assessmentImage} />
+                      <Text style={{ fontSize: 8, color: '#64748B', marginTop: 2 }}>
+                        Kommentar: {assessment.imageComments[imageIndex] || '-'}
+                      </Text>
+                    </View>
+                  );
+                })}
+                {imageRow.length === 1 && <View style={s.assessmentImageCard} />}
+              </View>
+            ))}
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
+function AssignmentImagesSection({ student }: { student: PdfStudent }) {
+  const assignmentsWithImages = student.approvedAssignments
+    .map((assignment) => ({
+      ...assignment,
+      imageUrls: assignment.mediaUrls.filter(isImageLikeUrl),
+    }))
+    .filter((assignment) => assignment.imageUrls.length > 0);
+
+  return (
+    <View>
+      <Text style={shared.sectionTitle}>Bifogade bilder per uppgift</Text>
+      {assignmentsWithImages.length === 0 ? (
+        <Text style={shared.emptyState}>Inga bifogade uppgiftsbilder registrerade.</Text>
+      ) : (
+        assignmentsWithImages.map((assignment) => (
+          <View key={assignment.id} style={{ marginBottom: 10 }}>
+            <Text style={{ fontSize: 10, fontFamily: 'Helvetica-Bold', marginBottom: 4 }}>
+              {assignment.title || 'Uppgift'}
+            </Text>
+
+            {chunkArray(assignment.imageUrls, 2).map((imageRow, rowIndex) => (
+              <View key={`${assignment.id}_row_${rowIndex}`} style={s.assessmentImageGridRow} wrap={false}>
+                {imageRow.map((url, imageIndexInRow) => {
+                  const imageIndex = rowIndex * 2 + imageIndexInRow;
+                  return (
+                    <View key={`${assignment.id}_img_${imageIndex}`} style={s.assessmentImageCard}>
+                      <Text style={{ fontSize: 9, marginBottom: 3 }}>Bild {imageIndex + 1}</Text>
+                      <Image src={{ uri: toPdfImageSrc(url) }} style={s.assessmentImage} />
+                      {assignment.teacherComment ? (
+                        <Text style={{ fontSize: 8, color: '#64748B', marginTop: 2 }}>
+                          Kommentar: {assignment.teacherComment}
+                        </Text>
+                      ) : null}
+                    </View>
+                  );
+                })}
+                {imageRow.length === 1 && <View style={s.assessmentImageCard} />}
+              </View>
+            ))}
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
 // ─── Footer ──────────────────────────────────────────────────────────────────
 
 function PageFooter({ generatedAt }: { generatedAt: Date }) {
@@ -542,9 +822,10 @@ function PageFooter({ generatedAt }: { generatedAt: Date }) {
 export type StudentReportProps = {
   student: PdfStudent;
   generatedAt: Date;
+  includeFullAssessment?: boolean;
 };
 
-export function StudentReport({ student, generatedAt }: StudentReportProps) {
+export function StudentReport({ student, generatedAt, includeFullAssessment = false }: StudentReportProps) {
   return (
     <Document title={`APL-rapport – ${student.name}`} author="APL-appen">
       <Page size="A4" style={shared.page}>
@@ -559,6 +840,11 @@ export function StudentReport({ student, generatedAt }: StudentReportProps) {
             <Text style={[shared.reportSubtitle, { marginTop: 2 }]}>
               E-post: {student.email || '-'} · Status: {translateStatus(student.status)}
             </Text>
+            {includeFullAssessment && (
+              <View style={s.fullReportBadge}>
+                <Text style={s.fullReportBadgeText}>Fullständig rapport</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -567,6 +853,7 @@ export function StudentReport({ student, generatedAt }: StudentReportProps) {
           <StatCard label="Totala timmar" value={student.totalHours.toFixed(1)} color="#9A3412" bg="#FFF7ED" />
           <StatCard label="Godkända tidkort" value={`${student.approvedTimesheets}/${student.timesheetCount}`} color="#C2410C" bg="#FFEDD5" />
           <StatCard label="Bedömningar" value={student.assessmentCount} color="#EA580C" bg="#FFF7ED" />
+          <StatCard label="Godkända uppgifter" value={student.approvedAssignmentsCount} color="#7C3AED" bg="#F5F3FF" />
           <StatCard label="Arbetsmoment" value={new Set(student.entries.map((e) => e.activity)).size} color="#D97706" bg="#FFEDD5" />
           <StatCard label="Luncher" value={student.approvedLunches} color="#B45309" bg="#FFF7ED" />
           <StatCard label="Kilometer" value={student.approvedKilometers} color="#C2410C" bg="#FFEDD5" />
@@ -576,7 +863,11 @@ export function StudentReport({ student, generatedAt }: StudentReportProps) {
         <ActivityTable student={student} />
         <ActivityDistributionChart student={student} />
         <AssessmentsTable student={student} />
+        {includeFullAssessment && <FullAssessmentDetailsTable student={student} />}
         <CompensationTable student={student} />
+        <ApprovedAssignmentsTable student={student} />
+        {includeFullAssessment && <AssessmentImagesSection student={student} />}
+        {includeFullAssessment && <AssignmentImagesSection student={student} />}
 
         <PageFooter generatedAt={generatedAt} />
       </Page>

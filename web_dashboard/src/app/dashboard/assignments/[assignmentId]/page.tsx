@@ -34,9 +34,14 @@ type Submission = {
   textAnswer?: string;
   mediaUrls?: string[];
   submittedAt?: Timestamp;
-  status?: 'submitted' | 'reviewed';
+  status?: 'submitted' | 'reviewed' | 'approved';
   teacherComment?: string | null;
 };
+
+function isApprovedSubmission(status?: string): boolean {
+  const normalized = (status ?? '').toLowerCase();
+  return normalized === 'approved' || normalized === 'reviewed';
+}
 
 type StudentMeta = {
   id: string;
@@ -59,7 +64,7 @@ export default function AssignmentDetailPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [studentMap, setStudentMap] = useState<Record<string, StudentMeta>>({});
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
-  const [savingReviewFor, setSavingReviewFor] = useState<string | null>(null);
+  const [savingApprovalFor, setSavingApprovalFor] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -131,14 +136,16 @@ export default function AssignmentDetailPage() {
     [submissions],
   );
 
-  const saveReview = async (submission: Submission) => {
+  const saveApproval = async (submission: Submission) => {
     if (!assignmentId) return;
-    setSavingReviewFor(submission.id);
+    setSavingApprovalFor(submission.id);
 
     try {
       await updateDoc(doc(db, 'assignments', assignmentId, 'submissions', submission.id), {
-        status: 'reviewed',
+        status: 'approved',
         teacherComment: (commentDrafts[submission.id] ?? '').trim() || null,
+        approvedAt: Timestamp.now(),
+        approvedBy: auth.currentUser?.uid ?? '',
         reviewedAt: Timestamp.now(),
         reviewedBy: auth.currentUser?.uid ?? '',
         updatedAt: Timestamp.now(),
@@ -148,8 +155,10 @@ export default function AssignmentDetailPage() {
         doc(db, 'assignments', assignmentId, 'assignees', submission.studentId),
         {
           studentId: submission.studentId,
-          status: 'reviewed',
+          status: 'approved',
           teacherComment: (commentDrafts[submission.id] ?? '').trim() || null,
+          approvedAt: Timestamp.now(),
+          approvedBy: auth.currentUser?.uid ?? '',
           reviewedAt: Timestamp.now(),
           reviewedBy: auth.currentUser?.uid ?? '',
         },
@@ -161,17 +170,17 @@ export default function AssignmentDetailPage() {
           item.id === submission.id
             ? {
                 ...item,
-                status: 'reviewed',
+                status: 'approved',
                 teacherComment: (commentDrafts[submission.id] ?? '').trim() || null,
               }
             : item,
         ),
       );
     } catch (reviewError) {
-      console.error('Save review error:', reviewError);
-      alert('Kunde inte spara review. Försök igen.');
+      console.error('Save approval error:', reviewError);
+      alert('Kunde inte spara godkännande. Försök igen.');
     } finally {
-      setSavingReviewFor(null);
+      setSavingApprovalFor(null);
     }
   };
 
@@ -220,13 +229,13 @@ export default function AssignmentDetailPage() {
                 <span
                   className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                     submission
-                      ? submission.status === 'reviewed'
+                      ? isApprovedSubmission(submission.status)
                         ? 'bg-blue-100 text-blue-700'
                         : 'bg-green-100 text-green-700'
                       : 'bg-amber-100 text-amber-700'
                   }`}
                 >
-                  {submission ? (submission.status === 'reviewed' ? 'Granskad' : 'Inlämnad') : 'Ej inlämnad'}
+                  {submission ? (isApprovedSubmission(submission.status) ? 'Godkänd' : 'Inlämnad') : 'Ej inlämnad'}
                 </span>
               </div>
             );
@@ -250,10 +259,10 @@ export default function AssignmentDetailPage() {
                   </div>
                   <span
                     className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                      submission.status === 'reviewed' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                        isApprovedSubmission(submission.status) ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
                     }`}
                   >
-                    {submission.status === 'reviewed' ? 'Granskad' : 'Inlämnad'}
+                      {isApprovedSubmission(submission.status) ? 'Godkänd' : 'Inlämnad'}
                   </span>
                 </div>
 
@@ -291,11 +300,11 @@ export default function AssignmentDetailPage() {
                   />
                   <button
                     type="button"
-                    onClick={() => saveReview(submission)}
-                    disabled={savingReviewFor === submission.id}
+                    onClick={() => saveApproval(submission)}
+                    disabled={savingApprovalFor === submission.id}
                     className="inline-flex rounded-lg bg-orange-600 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-700 disabled:opacity-60"
                   >
-                    {savingReviewFor === submission.id ? 'Sparar...' : 'Markera som granskad'}
+                    {savingApprovalFor === submission.id ? 'Sparar...' : 'Markera som godkänd'}
                   </button>
                 </div>
               </div>

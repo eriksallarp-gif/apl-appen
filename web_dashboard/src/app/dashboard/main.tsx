@@ -6,10 +6,12 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { usePathname } from 'next/navigation';
-import { GraduationCap, School, Users } from 'lucide-react';
+import { Briefcase, GraduationCap, School, Users } from 'lucide-react';
 
 interface Stats {
   totalStudents: number;
+  totalClasses: number;
+  totalSpecializations: number;
   totalTeachers: number;
   pendingTeachers: number;
   totalTimesheets: number;
@@ -32,6 +34,7 @@ interface StudentSummary {
   name: string;
   classId?: string;
   className?: string;
+  specialization?: string;
 }
 
 interface RawData {
@@ -49,6 +52,8 @@ export default function DashboardPage() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats>({
     totalStudents: 0,
+    totalClasses: 0,
+    totalSpecializations: 0,
     totalTeachers: 0,
     pendingTeachers: 0,
     totalTimesheets: 0,
@@ -125,11 +130,13 @@ export default function DashboardPage() {
         const data = doc.data();
         const classId = (data.classId || '').toString();
         const className = classesData.find(c => c.id === classId)?.name || 'Ingen klass';
+        const specialization = (data.specialization || '').toString().trim();
         return {
           id: doc.id,
           name: data.displayName || data.email || 'Okänd',
           classId,
           className,
+          specialization,
         };
       });
       setStudents(studentSummaries);
@@ -184,12 +191,15 @@ export default function DashboardPage() {
       // Update stats
       setStats(prev => ({
         ...prev,
+        totalClasses: classesData.length,
         totalSchools: schoolsCount,
         totalTeachers: allTeachers.length,
         pendingTeachers,
       }));
       const tempStats = {
         totalStudents: studentSummaries.length,
+        totalClasses: classesData.length,
+        totalSpecializations: 0,
         totalTeachers: allTeachers.length,
         pendingTeachers,
         totalTimesheets: timesheets.length,
@@ -238,11 +248,24 @@ export default function DashboardPage() {
     const assessments = raw.assessments.filter(a => studentIds.has(a.studentUid));
     const pendingAssessments = assessments.filter(a => !isAssessmentCompleted(a));
     const submittedAssessments = assessments.filter(isAssessmentCompleted);
+    const uniqueSpecializations = new Set(
+      activeStudents
+        .map(student => (student.specialization || '').trim())
+        .filter(Boolean),
+    );
+
+    const classesInScope = new Set(
+      activeStudents
+        .map((student) => (student.classId || '').trim())
+        .filter(Boolean),
+    ).size;
 
     setFilteredStudents(activeStudents);
       setStats(prev => ({
         ...prev,
         totalStudents: activeStudents.length,
+        totalClasses: classesInScope,
+        totalSpecializations: uniqueSpecializations.size,
         totalTimesheets: timesheets.length,
         pendingTimesheets: pending.length,
         approvedTimesheets: approved.length,
@@ -341,11 +364,23 @@ export default function DashboardPage() {
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className="mb-2 flex items-center gap-3">
                 <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
-                  <Users className="h-5 w-5 text-orange-600" />
+                  <School className="h-5 w-5 text-orange-600" />
                 </span>
-                <span className="text-sm font-semibold text-slate-900 sm:text-base">Bedömningar</span>
+                <span className="text-sm font-semibold text-slate-900 sm:text-base">Klasser</span>
               </div>
-              <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalAssessments}</div>
+              <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalClasses}</div>
+            </div>
+          )}
+
+          {userRole === 'teacher' && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:col-span-2 lg:col-span-1 sm:p-6">
+              <div className="mb-2 flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                  <Briefcase className="h-5 w-5 text-orange-600" />
+                </span>
+                <span className="text-sm font-semibold text-slate-900 sm:text-base">Yrkesutgångar</span>
+              </div>
+              <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalSpecializations}</div>
             </div>
           )}
 

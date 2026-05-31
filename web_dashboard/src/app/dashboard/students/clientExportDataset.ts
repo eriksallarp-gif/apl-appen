@@ -1,5 +1,8 @@
 import {
+  doc,
+  getDoc,
   collection,
+  collectionGroup,
   getDocs,
   query,
   where,
@@ -8,6 +11,10 @@ import {
 } from 'firebase/firestore';
 import type {
   PdfAssessment,
+  PdfAssessmentCriterion,
+  PdfAssessmentImage,
+  PdfAssessmentSelfField,
+  PdfApprovedAssignment,
   PdfCompensation,
   PdfDataset,
   PdfEntry,
@@ -177,6 +184,117 @@ function resolveText(candidates: unknown[], fallback = '-'): string {
   return fallback;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object') {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function normalizeAssessmentCriteria(assessmentData: Record<string, unknown>): PdfAssessmentCriterion[] {
+  return Object.entries(assessmentData)
+    .map(([key, value]) => {
+      const row = asRecord(value);
+      const hasCriteriaShape = 'label' in row || 'rating' in row || 'comment' in row;
+      if (!hasCriteriaShape) {
+        return null;
+      }
+
+      const ratingRaw = Number(row.rating);
+
+      return {
+        key,
+        label: resolveText([row.label], key),
+        rating: Number.isFinite(ratingRaw) ? ratingRaw : null,
+        comment: resolveText([row.comment], ''),
+      };
+    })
+    .filter((row): row is PdfAssessmentCriterion => Boolean(row));
+}
+
+function normalizeStudentSelfAssessment(
+  studentSelfAssessmentRaw: unknown,
+  assessmentTemplateSnapshot: Record<string, unknown>,
+): PdfAssessmentSelfField[] {
+  const studentSelfAssessment = asRecord(studentSelfAssessmentRaw);
+  const templateFields = Array.isArray(assessmentTemplateSnapshot.selfAssessmentFields)
+    ? assessmentTemplateSnapshot.selfAssessmentFields
+    : [];
+
+  return Object.entries(studentSelfAssessment).map(([key, value]) => {
+    const templateField = templateFields.find((field) => {
+      const row = asRecord(field);
+      return String(row.key || '').trim() === key;
+    });
+
+    const templateLabel = templateField ? asRecord(templateField).label : undefined;
+    return {
+      key,
+      label: resolveText([templateLabel], key),
+      value: String(value ?? '').trim(),
+    };
+  });
+}
+
+function normalizeImageComments(raw: unknown): string[] {
+  const comments = asRecord(raw);
+
+  return Object.entries(comments)
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([, value]) => String(value ?? '').trim())
+    .filter(Boolean);
+}
+
+function normalizeAssessmentImages(raw: unknown): PdfAssessmentImage[] {
+  const sourceArray = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object'
+      ? Object.values(raw as Record<string, unknown>)
+      : [];
+
+  return sourceArray
+    .map((imageRaw): PdfAssessmentImage | null => {
+      if (typeof imageRaw === 'string') {
+        const url = imageRaw.trim();
+        if (!url) return null;
+        return {
+          url,
+          fileName: '',
+          uploadedAt: null,
+        };
+      }
+
+      if (!imageRaw || typeof imageRaw !== 'object') {
+        return null;
+      }
+
+      const image = imageRaw as Record<string, unknown>;
+      const url = String(
+        image.url || image.downloadUrl || image.downloadURL || image.uri || image.src || '',
+      ).trim();
+      if (!url) {
+        return null;
+      }
+
+      return {
+        url,
+        fileName: String(image.fileName || image.name || '').trim(),
+        uploadedAt: parseDate(image.uploadedAt || image.createdAt),
+      };
+    })
+    .filter((image): image is PdfAssessmentImage => Boolean(image));
+}
+
+function isApprovedAssessment(data: Record<string, unknown>): boolean {
+  const status = String(data.status || '').trim().toLowerCase();
+  if (['submitted', 'approved', 'godkand', 'godkänd'].includes(status)) {
+    return true;
+  }
+
+  const submittedAt = parseDate(data.submittedAt);
+  return Boolean(submittedAt && status !== 'pending' && status !== 'rejected');
+}
+
 function selectStudents(options: ClientExportOptions): ExportStudentInput[] {
   const byId = new Map(options.students.map((student) => [student.id, student]));
 
@@ -232,6 +350,7 @@ async function loadStudentRecord(options: {
   const entries: PdfEntry[] = [];
   const assessments: PdfAssessment[] = [];
   const compensations: PdfCompensation[] = [];
+  const approvedAssignments: PdfApprovedAssignment[] = [];
   let approvedTimesheets = 0;
 
   const isDayLike = (value: string): boolean => {
@@ -270,9 +389,10 @@ async function loadStudentRecord(options: {
   for (const timesheetDoc of timesheetSnapshot.docs) {
     const data = timesheetDoc.data() || {};
     const approved = Boolean(data.approved);
-    if (approved) {
-      approvedTimesheets += 1;
+    if (!approved) {
+      continue;
     }
+    approvedTimesheets += 1;
 
     const fallbackDate = parseDate(data.submittedAt) || parseDate(data.updatedAt) || parseDate(data.createdAt);
     const entryWeekStart = resolveWeekStart(
@@ -311,7 +431,12 @@ async function loadStudentRecord(options: {
 
   for (const assessmentDoc of assessmentSnapshot.docs) {
     const data = assessmentDoc.data() || {};
+    if (!isApprovedAssessment(data)) {
+      continue;
+    }
+
     const assessmentData = (data.assessmentData || {}) as Record<string, unknown>;
+    const assessmentTemplateSnapshot = asRecord(data.assessmentTemplateSnapshot);
     const submittedAt =
       parseDate(data.submittedAt) ||
       parseDate(data.updatedAt) ||
@@ -322,6 +447,10 @@ async function loadStudentRecord(options: {
     const weekStart = resolveAssessmentWeekStart(data, assessmentData, submittedAt);
     const lunchApproved = Number(data.lunchApproved ?? data.lunchCount ?? assessmentData.lunchApproved ?? 0) || 0;
     const travelApproved = Number(data.travelApproved ?? data.travelCount ?? assessmentData.travelApproved ?? 0) || 0;
+    const criteria = normalizeAssessmentCriteria(assessmentData);
+    const studentSelfAssessment = normalizeStudentSelfAssessment(data.studentSelfAssessment, assessmentTemplateSnapshot);
+    const imageComments = normalizeImageComments(data.imageComments);
+    const images = normalizeAssessmentImages(data.images ?? assessmentData.images);
 
     assessments.push({
       id: assessmentDoc.id,
@@ -364,6 +493,11 @@ async function loadStudentRecord(options: {
       comment: String(data.comment || assessmentData.comment || '-'),
       lunchApproved,
       travelApproved,
+      criteria,
+      studentSelfAssessment,
+      imageComments,
+      images,
+      supervisorOtherInfo: String(data.supervisorOtherInfo || ''),
     });
 
     compensations.push({
@@ -390,6 +524,94 @@ async function loadStudentRecord(options: {
     });
   }
 
+  const assignmentConstraints: QueryConstraint[] = [];
+  if (role === 'teacher') {
+    assignmentConstraints.push(where('createdBy', '==', currentUserUid));
+  }
+
+  const assignmentSnapshot = await getDocs(
+    query(collection(db, 'assignments'), ...assignmentConstraints),
+  );
+
+  for (const assignmentDoc of assignmentSnapshot.docs) {
+    const assignmentData = assignmentDoc.data() || {};
+    const assignedTo = Array.isArray(assignmentData.assignedTo)
+      ? assignmentData.assignedTo.map((value) => String(value || '').trim())
+      : [];
+
+    if (!assignedTo.includes(student.id)) {
+      continue;
+    }
+
+    let submissionData: Record<string, unknown> | null = null;
+
+    // Primary pattern: one submission doc per student with doc id = student uid.
+    const submissionDoc = await getDoc(doc(db, 'assignments', assignmentDoc.id, 'submissions', student.id));
+    if (submissionDoc.exists()) {
+      submissionData = submissionDoc.data() || {};
+    }
+
+    // Fallback pattern: submission docs with generated id and explicit studentId field.
+    if (!submissionData) {
+      const submissionByStudentSnapshot = await getDocs(
+        query(
+          collection(db, 'assignments', assignmentDoc.id, 'submissions'),
+          where('studentId', '==', student.id),
+        ),
+      );
+
+      const approvedSubmissionRows = submissionByStudentSnapshot.docs
+        .map((row) => row.data() || {})
+        .filter((row) => {
+          const normalizedStatus = String(row.status || '').trim().toLowerCase();
+          return ['approved', 'reviewed', 'godkand', 'godkänd'].includes(normalizedStatus);
+        })
+        .sort((a, b) => {
+          const aTime = parseDate(a.approvedAt)?.getTime() || parseDate(a.reviewedAt)?.getTime() || 0;
+          const bTime = parseDate(b.approvedAt)?.getTime() || parseDate(b.reviewedAt)?.getTime() || 0;
+          return bTime - aTime;
+        });
+
+      if (approvedSubmissionRows.length > 0) {
+        submissionData = approvedSubmissionRows[0] as Record<string, unknown>;
+      }
+    }
+
+    // Fallback pattern: status mirrored in assignees subcollection.
+    if (!submissionData) {
+      const assigneeDoc = await getDoc(doc(db, 'assignments', assignmentDoc.id, 'assignees', student.id));
+      if (assigneeDoc.exists()) {
+        submissionData = assigneeDoc.data() || {};
+      }
+    }
+
+    if (!submissionData) {
+      continue;
+    }
+
+    const submissionStatus = String(submissionData.status || '').trim().toLowerCase();
+    const isAssignmentApproved = ['approved', 'reviewed', 'godkand', 'godkänd'].includes(submissionStatus);
+
+    if (!isAssignmentApproved) {
+      continue;
+    }
+
+    approvedAssignments.push({
+      id: assignmentDoc.id,
+      title: String(assignmentData.title || 'Uppgift'),
+      approvedAt: parseDate(submissionData.approvedAt) || parseDate(submissionData.reviewedAt),
+      submittedAt: parseDate(submissionData.submittedAt),
+      teacherComment: String(submissionData.teacherComment || ''),
+      mediaUrls: Array.isArray(submissionData.mediaUrls)
+        ? submissionData.mediaUrls
+            .map((url) => String(url || '').trim())
+            .filter(Boolean)
+        : [],
+    });
+  }
+
+  approvedAssignments.sort((a, b) => (b.approvedAt?.getTime() || 0) - (a.approvedAt?.getTime() || 0));
+
   entries.sort((a, b) => (b.registeredAt?.getTime() || 0) - (a.registeredAt?.getTime() || 0));
   assessments.sort((a, b) => (b.submittedAt?.getTime() || 0) - (a.submittedAt?.getTime() || 0));
 
@@ -412,15 +634,17 @@ async function loadStudentRecord(options: {
     supervisorName,
     totalHours,
     approvedTimesheets,
-    timesheetCount: timesheetSnapshot.size,
-    assessmentCount: assessmentSnapshot.size,
+    timesheetCount: approvedTimesheets,
+    assessmentCount: assessments.length,
     approvedLunches,
     approvedKilometers,
+    approvedAssignmentsCount: approvedAssignments.length,
     firstRegisteredAt: null,
     lastRegisteredAt: maxDate(entries),
     entries,
     assessments,
     compensations,
+    approvedAssignments,
   };
 }
 

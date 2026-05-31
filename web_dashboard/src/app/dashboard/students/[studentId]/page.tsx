@@ -58,11 +58,11 @@ interface Compensation {
   weekStart?: string;
 }
 
-interface ReviewedAssignment {
+interface ApprovedAssignment {
   id: string;
   title: string;
   teacherComment?: string | null;
-  reviewedAt?: any;
+  approvedAt?: any;
   submittedAt?: any;
   textAnswer?: string | null;
   mediaUrls?: string[];
@@ -148,6 +148,11 @@ function isAssessmentApprovedForDisplay(assessment: Assessment): boolean {
   );
 }
 
+function isAssignmentApprovedStatus(status: unknown): boolean {
+  const normalized = String(status || '').trim().toLowerCase();
+  return normalized === 'approved' || normalized === 'reviewed' || normalized === 'godkand' || normalized === 'godkänd';
+}
+
 export default function StudentDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -157,7 +162,7 @@ export default function StudentDetailPage() {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [timesheets, setTimesheets] = useState<Timesheet[]>([]);
   const [compensations, setCompensations] = useState<Compensation[]>([]);
-  const [reviewedAssignments, setReviewedAssignments] = useState<ReviewedAssignment[]>([]);
+  const [approvedAssignments, setApprovedAssignments] = useState<ApprovedAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedView, setSelectedView] = useState<'hours' | 'timesheets' | 'assessments' | 'compensations' | 'assignments' | null>(null);
   const [expandedTimesheetId, setExpandedTimesheetId] = useState<string | null>(null);
@@ -380,7 +385,7 @@ export default function StudentDetailPage() {
           query(collection(db, 'assignments'), where('createdBy', '==', currentTeacherUid))
         );
 
-        const reviewedItems: ReviewedAssignment[] = [];
+        const approvedItems: ApprovedAssignment[] = [];
         for (const assignmentDoc of assignmentsSnapshot.docs) {
           const assignmentData = assignmentDoc.data();
           const assignedTo = ((assignmentData.assignedTo ?? []) as string[]);
@@ -394,29 +399,29 @@ export default function StudentDetailPage() {
           }
 
           const submissionData = submissionSnap.data();
-          if ((submissionData.status ?? '') !== 'reviewed') {
+          if (!isAssignmentApprovedStatus(submissionData.status)) {
             continue;
           }
 
-          reviewedItems.push({
+          approvedItems.push({
             id: assignmentDoc.id,
             title: (assignmentData.title ?? 'Uppgift').toString(),
             teacherComment: (submissionData.teacherComment ?? null) as string | null,
-            reviewedAt: submissionData.reviewedAt,
+            approvedAt: submissionData.approvedAt || submissionData.reviewedAt,
             submittedAt: submissionData.submittedAt,
             textAnswer: (submissionData.textAnswer ?? null) as string | null,
             mediaUrls: (submissionData.mediaUrls ?? []) as string[],
           });
         }
 
-        reviewedItems.sort((a, b) => {
-          const aTime = a.reviewedAt?.seconds ? a.reviewedAt.seconds * 1000 : 0;
-          const bTime = b.reviewedAt?.seconds ? b.reviewedAt.seconds * 1000 : 0;
+        approvedItems.sort((a, b) => {
+          const aTime = a.approvedAt?.seconds ? a.approvedAt.seconds * 1000 : 0;
+          const bTime = b.approvedAt?.seconds ? b.approvedAt.seconds * 1000 : 0;
           return bTime - aTime;
         });
-        setReviewedAssignments(reviewedItems);
+        setApprovedAssignments(approvedItems);
       } else {
-        setReviewedAssignments([]);
+        setApprovedAssignments([]);
       }
     } catch (error) {
       console.error('Error fetching student data:', error);
@@ -552,8 +557,8 @@ export default function StudentDetailPage() {
               selectedView === 'assignments' ? 'ring-2 ring-indigo-400 border-indigo-300' : 'border-indigo-200/50'
             }`}
           >
-            <p className="text-sm text-slate-600 font-medium">Granskade uppgifter</p>
-            <p className="text-4xl font-bold text-indigo-600 mt-3">{reviewedAssignments.length}</p>
+            <p className="text-sm text-slate-600 font-medium">Godkända uppgifter</p>
+            <p className="text-4xl font-bold text-indigo-600 mt-3">{approvedAssignments.length}</p>
             <p className="text-xs text-slate-500 mt-3">Klicka för detaljer</p>
           </button>
         </div>
@@ -1054,25 +1059,25 @@ export default function StudentDetailPage() {
 
             {selectedView === 'assignments' && (
               <div>
-                <h3 className="text-2xl font-bold mb-6 text-slate-900">Granskade uppgifter</h3>
+                <h3 className="text-2xl font-bold mb-6 text-slate-900">Godkända uppgifter</h3>
                 <div className="space-y-4">
-                  {reviewedAssignments.length === 0 ? (
-                    <p className="text-slate-500 text-center py-12">Inga granskade uppgifter ännu</p>
+                  {approvedAssignments.length === 0 ? (
+                    <p className="text-slate-500 text-center py-12">Inga godkända uppgifter ännu</p>
                   ) : (
-                    reviewedAssignments.map((assignment) => (
+                    approvedAssignments.map((assignment) => (
                       <div key={assignment.id} className="border-2 border-slate-200/50 rounded-2xl overflow-hidden bg-slate-50/30 p-6">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <p className="font-semibold text-slate-900 text-lg">{assignment.title}</p>
                             <p className="text-sm text-slate-600 mt-2">
-                              Granskad {assignment.reviewedAt?.seconds ? new Date(assignment.reviewedAt.seconds * 1000).toLocaleDateString('sv-SE') : '-'}
+                              Godkänd {assignment.approvedAt?.seconds ? new Date(assignment.approvedAt.seconds * 1000).toLocaleDateString('sv-SE') : '-'}
                             </p>
                             <p className="text-sm text-slate-600">
                               Inlämnad {assignment.submittedAt?.seconds ? new Date(assignment.submittedAt.seconds * 1000).toLocaleDateString('sv-SE') : '-'}
                             </p>
                           </div>
                           <span className="px-4 py-2 rounded-full text-sm font-medium bg-indigo-100/70 text-indigo-800">
-                            ✓ Granskad
+                            ✓ Godkänd
                           </span>
                         </div>
 
