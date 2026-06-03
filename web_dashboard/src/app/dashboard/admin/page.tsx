@@ -157,7 +157,7 @@ export default function AdminPage() {
 
   const mapTeacher = (teacher: any) => ({
     id: teacher.id,
-    name: teacher.name || 'Okant namn',
+    name: teacher.name || 'Okänt namn',
     email: teacher.email || '',
     school: teacher.school || 'Ingen skola angiven',
     createdAt: teacher.createdAt,
@@ -182,7 +182,7 @@ export default function AdminPage() {
 
   const mapStudent = (student: any) => ({
     id: student.id,
-    name: student.name || 'Okant namn',
+    name: student.name || 'Okänt namn',
     email: student.email || '',
     school: student.school || 'Ingen skola angiven',
     createdAt: student.createdAt,
@@ -214,7 +214,7 @@ export default function AdminPage() {
       setClasses(
         classesSnapshot.docs.map(doc => ({
           id: doc.id,
-          name: doc.data().name || 'Okand klass',
+          name: doc.data().name || 'Okänd klass',
           teacherUid: doc.data().teacherUid || '',
         }))
       );
@@ -245,7 +245,7 @@ export default function AdminPage() {
       setApprovedTeachers(approved.map(mapTeacher));
       setAllTeachers(approved.map((teacher) => ({
         id: teacher.id,
-        name: teacher.name || 'Okant namn',
+        name: teacher.name || 'Okänt namn',
         email: teacher.email || '',
         role: teacher.role || 'teacher',
         school: teacher.school || 'Ingen skola angiven',
@@ -333,7 +333,7 @@ export default function AdminPage() {
   };
 
   const handleDeleteUser = async (uid: string) => {
-    if (!confirm('Ar du saker pa att du vill ta bort anvandaren?')) {
+    if (!confirm('Är du säker på att du vill ta bort användaren?')) {
       return;
     }
     try {
@@ -347,7 +347,7 @@ export default function AdminPage() {
 
   const handleSetUserStatus = async (uid: string, status: 'active' | 'frozen') => {
     const action = status === 'frozen' ? 'frysa' : 'aktivera';
-    if (!confirm(`Ar du saker pa att du vill ${action} denna anvandare?`)) {
+    if (!confirm(`Är du säker på att du vill ${action} denna användare?`)) {
       return;
     }
     try {
@@ -546,7 +546,7 @@ export default function AdminPage() {
                 disabled={creating}
                 className="rounded-xl bg-orange-600 px-4 py-2 text-white transition hover:bg-orange-700 disabled:opacity-60"
               >
-                Skapa larare
+                Skapa lärare
               </button>
             </div>
           </div>
@@ -659,7 +659,7 @@ export default function AdminPage() {
           <div className="bg-white rounded-lg shadow mb-8">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">Skolor</h2>
-              <p className="text-sm text-gray-600 mt-1">Lista over skolor med anslutna larare</p>
+              <p className="text-sm text-gray-600 mt-1">Lista över skolor med anslutna lärare</p>
             </div>
 
             <div className="p-6">
@@ -674,7 +674,7 @@ export default function AdminPage() {
                     >
                       <div className="flex items-center justify-between">
                         <h3 className="font-semibold text-slate-900">{school.name}</h3>
-                        <span className="text-sm text-gray-600">{school.teacherCount} larare</span>
+                        <span className="text-sm text-gray-600">{school.teacherCount} lärare</span>
                       </div>
                     </div>
                   ))}
@@ -688,7 +688,7 @@ export default function AdminPage() {
           <div className="bg-white rounded-lg shadow mb-8">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">Elever</h2>
-              <p className="text-sm text-gray-600 mt-1">Alla elever som ar anslutna till appen</p>
+              <p className="text-sm text-gray-600 mt-1">Alla elever som är anslutna till appen</p>
             </div>
 
             <div className="p-6">
