@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useParams, useSearchParams } from 'next/navigation';
 import { db, functions } from '@/lib/firebase';
 import {
@@ -67,6 +68,7 @@ function sanitizeSupervisorTimesheetSummaries(raw: unknown): SupervisorTimesheet
 }
 
 export default function SupervisorPage() {
+  const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
   const requestId = params.requestId as string;
@@ -219,7 +221,7 @@ export default function SupervisorPage() {
         };
       });
 
-      const submitCallable = httpsCallable(functions, 'submitSupervisorAssessment');
+      const submitCallable = httpsCallable(functions, 'startSupervisorAssessmentVerification');
       await submitCallable({
         requestId,
         token,
@@ -234,9 +236,7 @@ export default function SupervisorPage() {
         averageRating,
         imageComments,
       });
-
-      setSuccess(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      router.push(`/supervisor/${requestId}/verify?token=${encodeURIComponent(token || '')}`);
     } catch (err) {
       console.error('Error submitting assessment:', err);
       // Visa mer detaljerat felmeddelande

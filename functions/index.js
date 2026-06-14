@@ -1,6 +1,7 @@
-const functions = require('firebase-functions');
+﻿const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
 admin.initializeApp();
 
@@ -51,35 +52,254 @@ function toSafeString(value) {
   return (value || '').toString().trim();
 }
 
+function timestampToDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (value.toDate && typeof value.toDate === 'function') {
+    return value.toDate();
+  }
+  return null;
+}
+
+function normalizePhoneNumber(value) {
+  const raw = toSafeString(value).replace(/[\s()-]/g, '');
+  if (!raw) return '';
+
+  let normalized = raw;
+  if (normalized.startsWith('00')) {
+    normalized = `+${normalized.slice(2)}`;
+  } else if (normalized.startsWith('0')) {
+    normalized = `+46${normalized.slice(1)}`;
+  } else if (normalized.startsWith('46')) {
+    normalized = `+${normalized}`;
+  }
+
+  if (!normalized.startsWith('+')) {
+    normalized = `+${normalized}`;
+  }
+
+  if (!/^\+[1-9]\d{7,14}$/.test(normalized)) {
+    return '';
+  }
+
+  return normalized;
+}
+
+function maskPhoneNumber(phone) {
+  const normalized = normalizePhoneNumber(phone);
+  if (!normalized || normalized.length < 6) return 'okant nummer';
+  const suffix = normalized.slice(-2);
+  return `${normalized.slice(0, 4)}******${suffix}`;
+}
+
+function hashOtpCode(code) {
+  const pepper = toSafeString(functions.config().otp?.pepper) || 'apl-otp-default-pepper-change-me';
+  return crypto
+    .createHash('sha256')
+    .update(`${code}:${pepper}`)
+    .digest('hex');
+}
+
+function generateOtpCode() {
+  return `${Math.floor(100000 + Math.random() * 900000)}`;
+}
+
+function buildOtpMessage(code) {
+  return `Din verifieringskod for APL-appen ar: ${code}. Koden ar giltig i 5 minuter.`;
+}
+
+async function sendOtpViaTwilio(phoneNumber, message) {
+  const accountSid = toSafeString(functions.config().twilio?.account_sid);
+  const authToken = toSafeString(functions.config().twilio?.auth_token);
+  const fromNumber = toSafeString(functions.config().twilio?.from_number);
+
+  if (!accountSid || !authToken || !fromNumber) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Twilio-konfiguration saknas (twilio.account_sid, twilio.auth_token, twilio.from_number).',
+    );
+  }
+
+  const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
+  const body = new URLSearchParams({
+    To: phoneNumber,
+    From: fromNumber,
+    Body: message,
+  });
+
+  const response = await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    },
+  );
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    console.error('Twilio send failed:', response.status, responseText);
+    throw new functions.https.HttpsError('internal', 'Kunde inte skicka SMS-kod just nu. Forsok igen om en stund.');
+  }
+}
+
+async function sendOtpVia46Elks(phoneNumber, message) {
+  const username = toSafeString(functions.config().elks46?.username);
+  const password = toSafeString(functions.config().elks46?.password);
+  const fromNumber = toSafeString(functions.config().elks46?.from_number);
+
+  if (!username || !password || !fromNumber) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      '46elks-konfiguration saknas (elks46.username, elks46.password, elks46.from_number).',
+    );
+  }
+
+  const auth = Buffer.from(`${username}:${password}`).toString('base64');
+  const body = new URLSearchParams({
+    from: fromNumber,
+    to: phoneNumber,
+    message,
+  });
+
+  const response = await fetch('https://api.46elks.com/a1/sms', {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    console.error('46elks send failed:', response.status, responseText);
+    throw new functions.https.HttpsError('internal', 'Kunde inte skicka SMS-kod just nu. Forsok igen om en stund.');
+  }
+}
+
+async function sendOtpViaSinch(phoneNumber, message) {
+  const servicePlanId = toSafeString(functions.config().sinch?.service_plan_id);
+  const apiToken = toSafeString(functions.config().sinch?.api_token);
+  const fromNumber = toSafeString(functions.config().sinch?.from_number);
+  const baseUrl = toSafeString(functions.config().sinch?.base_url) || 'https://us.sms.api.sinch.com';
+
+  if (!servicePlanId || !apiToken || !fromNumber) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Sinch-konfiguration saknas (sinch.service_plan_id, sinch.api_token, sinch.from_number).',
+    );
+  }
+
+  const response = await fetch(`${baseUrl}/xms/v1/${servicePlanId}/batches`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: fromNumber,
+      to: [phoneNumber],
+      body: message,
+    }),
+  });
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    console.error('Sinch send failed:', response.status, responseText);
+    throw new functions.https.HttpsError('internal', 'Kunde inte skicka SMS-kod just nu. Forsok igen om en stund.');
+  }
+}
+
+async function sendOtpSms(phoneNumber, code) {
+  const provider = toSafeString(functions.config().sms?.provider).toLowerCase() || 'twilio';
+  const message = buildOtpMessage(code);
+
+  if (provider === 'twilio') {
+    await sendOtpViaTwilio(phoneNumber, message);
+    return;
+  }
+
+  if (provider === '46elks' || provider === 'elks' || provider === '46') {
+    await sendOtpVia46Elks(phoneNumber, message);
+    return;
+  }
+
+  if (provider === 'sinch') {
+    await sendOtpViaSinch(phoneNumber, message);
+    return;
+  }
+
+  throw new functions.https.HttpsError(
+    'failed-precondition',
+    'Okand SMS-provider. Ange sms.provider som twilio, 46elks eller sinch.',
+  );
+}
+
+function sanitizeVerificationDraftPayload(data) {
+  const supervisorCompany = toSafeString(data && data.supervisorCompany);
+  const supervisorName = toSafeString(data && data.supervisorName);
+  const supervisorPhone = normalizePhoneNumber(data && data.supervisorPhone);
+  const supervisorOtherInfo = toSafeString(data && data.supervisorOtherInfo);
+  const lunchApproved = asNonNegativeInt(data && data.lunchApproved);
+  const travelApproved = asNonNegativeInt(data && data.travelApproved);
+  const assessmentData = data && typeof data.assessmentData === 'object' && data.assessmentData !== null
+    ? data.assessmentData
+    : {};
+  const imageComments = data && typeof data.imageComments === 'object' && data.imageComments !== null
+    ? data.imageComments
+    : {};
+  const averageRating = toSafeString(data && data.averageRating);
+
+  if (!supervisorCompany || !supervisorName || !supervisorPhone) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing required supervisor fields.');
+  }
+
+  return {
+    supervisorCompany,
+    supervisorName,
+    supervisorPhone,
+    supervisorOtherInfo,
+    lunchApproved,
+    travelApproved,
+    assessmentData,
+    imageComments,
+    averageRating,
+  };
+}
+
 const DEFAULT_ASSESSMENT_TEMPLATES = {
   selfAssessmentFields: [
     {
       key: 'whatDidYouDo',
-      label: 'Vad har du fått göra?',
-      placeholder: 'Beskriv de arbetsuppgifter du utförde...',
+      label: 'Vad har du f├Ñtt g├Âra?',
+      placeholder: 'Beskriv de arbetsuppgifter du utf├Ârde...',
       inputType: 'text',
     },
     {
       key: 'whatWasPositive',
       label: 'Vad har varit positivt med APLen?',
-      placeholder: 'Vad har varit bra? Vad har du lärt dig?',
+      placeholder: 'Vad har varit bra? Vad har du l├ñrt dig?',
       inputType: 'text',
     },
     {
       key: 'whatCouldBeBetter',
-      label: 'Vad skulle kunnat vara bättre?',
-      placeholder: 'Vad var utmanande? Vad skulle kunna förbättras?',
+      label: 'Vad skulle kunnat vara b├ñttre?',
+      placeholder: 'Vad var utmanande? Vad skulle kunna f├Ârb├ñttras?',
       inputType: 'text',
     },
     {
       key: 'whatCouldYouDoDifferently',
       label: 'Vad kunde du som elev gjort annorlunda?',
-      placeholder: 'Hur kunde du bidragit mer? Vad kan du förbättra till nästa gång?',
+      placeholder: 'Hur kunde du bidragit mer? Vad kan du f├Ârb├ñttra till n├ñsta g├Ñng?',
       inputType: 'text',
     },
     {
       key: 'overallRating',
-      label: 'Vilket betyg för din APL-period? (1-10)',
+      label: 'Vilket betyg f├Âr din APL-period? (1-10)',
       placeholder: '1=mindre bra, 10=fantastiskt',
       inputType: 'number',
     },
@@ -87,9 +307,9 @@ const DEFAULT_ASSESSMENT_TEMPLATES = {
   supervisorCriteria: [
     { key: 'engagement', label: 'Engagemang' },
     { key: 'initiative', label: 'Initiativtagande' },
-    { key: 'collaboration', label: 'Samarbetsförmåga' },
-    { key: 'problemSolving', label: 'Problemlösning' },
-    { key: 'workQuality', label: 'Kvalitet på arbete' },
+    { key: 'collaboration', label: 'Samarbetsf├Ârm├Ñga' },
+    { key: 'problemSolving', label: 'Probleml├Âsning' },
+    { key: 'workQuality', label: 'Kvalitet p├Ñ arbete' },
   ],
 };
 
@@ -204,6 +424,13 @@ exports.getSupervisorAssessmentRequest = functions.https.onCall(async (data) => 
     throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
   }
 
+  if ((requestData.status || 'pending') === 'pending_verification') {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Bedomningen vantar pa SMS-verifiering och kan inte andras.',
+    );
+  }
+
   if ((requestData.status || 'pending') === 'submitted') {
     throw new functions.https.HttpsError('failed-precondition', 'Denna bedomning har redan skickats in och kan inte andras.');
   }
@@ -250,31 +477,231 @@ exports.getSupervisorAssessmentRequest = functions.https.onCall(async (data) => 
   };
 });
 
-exports.submitSupervisorAssessment = functions.https.onCall(async (data) => {
+exports.startSupervisorAssessmentVerification = functions.https.onCall(async (data) => {
   const requestId = toSafeString(data && data.requestId);
   const token = toSafeString(data && data.token);
-
   if (!requestId || !token) {
     throw new functions.https.HttpsError('invalid-argument', 'Missing requestId or token.');
   }
 
-  const supervisorCompany = toSafeString(data && data.supervisorCompany);
-  const supervisorName = toSafeString(data && data.supervisorName);
-  const supervisorPhone = toSafeString(data && data.supervisorPhone);
-  const supervisorOtherInfo = toSafeString(data && data.supervisorOtherInfo);
-  if (!supervisorCompany || !supervisorName || !supervisorPhone) {
-    throw new functions.https.HttpsError('invalid-argument', 'Missing required supervisor fields.');
+  const draftPayload = sanitizeVerificationDraftPayload(data);
+  const now = new Date();
+  const code = generateOtpCode();
+  const codeHash = hashOtpCode(code);
+  const otpExpiresAt = new Date(now.getTime() + 5 * 60 * 1000);
+  const phoneMasked = maskPhoneNumber(draftPayload.supervisorPhone);
+
+  await db.runTransaction(async (tx) => {
+    const ref = db.collection('assessmentRequests').doc(requestId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Bedomningsforfragan hittades inte.');
+    }
+
+    const requestData = snap.data() || {};
+    if (toSafeString(requestData.token) !== token) {
+      throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
+    }
+
+    const currentStatus = toSafeString(requestData.status) || 'pending';
+    if (currentStatus === 'submitted') {
+      throw new functions.https.HttpsError('failed-precondition', 'Denna bedomning har redan skickats in.');
+    }
+    if (currentStatus === 'pending_verification') {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'SMS-verifiering pagar redan. Avbryt verifieringen forst om du vill byta nummer.',
+      );
+    }
+
+    const expiresAt = timestampToDate(requestData.expiresAt);
+    if (expiresAt && expiresAt < now) {
+      throw new functions.https.HttpsError('failed-precondition', 'Denna lank har utgatt.');
+    }
+
+    tx.update(ref, {
+      status: 'pending_verification',
+      pendingVerification: {
+        lockedPhone: draftPayload.supervisorPhone,
+        phoneMasked,
+        draft: draftPayload,
+        otpCodeHash: codeHash,
+        otpExpiresAt: admin.firestore.Timestamp.fromDate(otpExpiresAt),
+        otpAttemptsLeft: 5,
+        otpResendCount: 1,
+        otpResendWindowStart: admin.firestore.Timestamp.fromDate(now),
+        lastOtpSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  await sendOtpSms(draftPayload.supervisorPhone, code);
+
+  return {
+    ok: true,
+    requestId,
+    phoneMasked,
+    expiresInSeconds: 300,
+  };
+});
+
+exports.getSupervisorVerificationState = functions.https.onCall(async (data) => {
+  const requestId = toSafeString(data && data.requestId);
+  const token = toSafeString(data && data.token);
+  if (!requestId || !token) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing requestId or token.');
   }
 
-  const lunchApproved = asNonNegativeInt(data && data.lunchApproved);
-  const travelApproved = asNonNegativeInt(data && data.travelApproved);
-  const assessmentData = data && typeof data.assessmentData === 'object' && data.assessmentData !== null
-    ? data.assessmentData
-    : {};
-  const imageComments = data && typeof data.imageComments === 'object' && data.imageComments !== null
-    ? data.imageComments
-    : {};
-  const averageRating = toSafeString(data && data.averageRating);
+  const ref = db.collection('assessmentRequests').doc(requestId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new functions.https.HttpsError('not-found', 'Bedomningsforfragan hittades inte.');
+  }
+
+  const requestData = snap.data() || {};
+  if (toSafeString(requestData.token) !== token) {
+    throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
+  }
+
+  const currentStatus = toSafeString(requestData.status) || 'pending';
+  if (currentStatus !== 'pending_verification') {
+    throw new functions.https.HttpsError('failed-precondition', 'Ingen aktiv SMS-verifiering hittades.');
+  }
+
+  const pendingVerification = requestData.pendingVerification || {};
+  const otpExpiresAt = timestampToDate(pendingVerification.otpExpiresAt);
+
+  return {
+    ok: true,
+    status: currentStatus,
+    phoneMasked: toSafeString(pendingVerification.phoneMasked),
+    otpAttemptsLeft: asNonNegativeInt(pendingVerification.otpAttemptsLeft),
+    otpResendCount: asNonNegativeInt(pendingVerification.otpResendCount),
+    otpExpiresAtMillis: otpExpiresAt ? otpExpiresAt.getTime() : null,
+  };
+});
+
+exports.resendSupervisorAssessmentOtp = functions.https.onCall(async (data) => {
+  const requestId = toSafeString(data && data.requestId);
+  const token = toSafeString(data && data.token);
+  if (!requestId || !token) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing requestId or token.');
+  }
+
+  const now = new Date();
+  const code = generateOtpCode();
+  const codeHash = hashOtpCode(code);
+  const otpExpiresAt = new Date(now.getTime() + 5 * 60 * 1000);
+  let lockedPhone = '';
+  let phoneMasked = '';
+
+  await db.runTransaction(async (tx) => {
+    const ref = db.collection('assessmentRequests').doc(requestId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Bedomningsforfragan hittades inte.');
+    }
+
+    const requestData = snap.data() || {};
+    if (toSafeString(requestData.token) !== token) {
+      throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
+    }
+
+    const currentStatus = toSafeString(requestData.status) || 'pending';
+    if (currentStatus !== 'pending_verification') {
+      throw new functions.https.HttpsError('failed-precondition', 'Ingen aktiv SMS-verifiering hittades.');
+    }
+
+    const pendingVerification = requestData.pendingVerification || {};
+    lockedPhone = toSafeString(pendingVerification.lockedPhone);
+    phoneMasked = toSafeString(pendingVerification.phoneMasked);
+    if (!lockedPhone) {
+      throw new functions.https.HttpsError('failed-precondition', 'Saknar last nummer for verifiering.');
+    }
+
+    const windowStartDate = timestampToDate(pendingVerification.otpResendWindowStart);
+    let resendWindowStart = windowStartDate || now;
+    let resendCount = asNonNegativeInt(pendingVerification.otpResendCount);
+
+    if ((now.getTime() - resendWindowStart.getTime()) > (15 * 60 * 1000)) {
+      resendWindowStart = now;
+      resendCount = 0;
+    }
+
+    if (resendCount >= 3) {
+      throw new functions.https.HttpsError(
+        'resource-exhausted',
+        'For manga SMS-utskick. Forsok igen om 15 minuter.',
+      );
+    }
+
+    tx.update(ref, {
+      pendingVerification: {
+        ...pendingVerification,
+        otpCodeHash: codeHash,
+        otpExpiresAt: admin.firestore.Timestamp.fromDate(otpExpiresAt),
+        otpAttemptsLeft: 5,
+        otpResendCount: resendCount + 1,
+        otpResendWindowStart: admin.firestore.Timestamp.fromDate(resendWindowStart),
+        lastOtpSentAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  await sendOtpSms(lockedPhone, code);
+
+  return {
+    ok: true,
+    requestId,
+    phoneMasked,
+    expiresInSeconds: 300,
+  };
+});
+
+exports.cancelSupervisorAssessmentVerification = functions.https.onCall(async (data) => {
+  const requestId = toSafeString(data && data.requestId);
+  const token = toSafeString(data && data.token);
+  if (!requestId || !token) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing requestId or token.');
+  }
+
+  await db.runTransaction(async (tx) => {
+    const ref = db.collection('assessmentRequests').doc(requestId);
+    const snap = await tx.get(ref);
+    if (!snap.exists) {
+      throw new functions.https.HttpsError('not-found', 'Bedomningsforfragan hittades inte.');
+    }
+    const requestData = snap.data() || {};
+    if (toSafeString(requestData.token) !== token) {
+      throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
+    }
+
+    const currentStatus = toSafeString(requestData.status) || 'pending';
+    if (currentStatus !== 'pending_verification') {
+      return;
+    }
+
+    tx.update(ref, {
+      status: 'pending',
+      pendingVerification: admin.firestore.FieldValue.delete(),
+      statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  return { ok: true };
+});
+
+exports.verifySupervisorAssessmentOtp = functions.https.onCall(async (data) => {
+  const requestId = toSafeString(data && data.requestId);
+  const token = toSafeString(data && data.token);
+  const code = toSafeString(data && data.code).replace(/\D/g, '');
+
+  if (!requestId || !token || !code) {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing requestId, token or code.');
+  }
 
   await db.runTransaction(async (tx) => {
     const ref = db.collection('assessmentRequests').doc(requestId);
@@ -289,32 +716,65 @@ exports.submitSupervisorAssessment = functions.https.onCall(async (data) => {
       throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
     }
 
-    if ((requestData.status || 'pending') === 'submitted') {
-      throw new functions.https.HttpsError('failed-precondition', 'Denna bedomning har redan skickats in och kan inte andras.');
+    const currentStatus = toSafeString(requestData.status) || 'pending';
+    if (currentStatus !== 'pending_verification') {
+      throw new functions.https.HttpsError('failed-precondition', 'Ingen aktiv SMS-verifiering hittades.');
     }
 
-    const expiresAt = requestData.expiresAt && requestData.expiresAt.toDate
-      ? requestData.expiresAt.toDate()
-      : null;
-    if (expiresAt && expiresAt < new Date()) {
-      throw new functions.https.HttpsError('failed-precondition', 'Denna lank har utgatt.');
+    const pendingVerification = requestData.pendingVerification || {};
+    const draft = pendingVerification.draft || {};
+    const lockedPhone = toSafeString(pendingVerification.lockedPhone);
+    const otpCodeHash = toSafeString(pendingVerification.otpCodeHash);
+    const otpAttemptsLeft = asNonNegativeInt(pendingVerification.otpAttemptsLeft);
+    const otpExpiresAt = timestampToDate(pendingVerification.otpExpiresAt);
+    const now = new Date();
+
+    if (!lockedPhone || !otpCodeHash || !draft || typeof draft !== 'object') {
+      throw new functions.https.HttpsError('failed-precondition', 'Verifieringssessionen ar ogiltig.');
+    }
+
+    if (!otpExpiresAt || otpExpiresAt < now) {
+      throw new functions.https.HttpsError('deadline-exceeded', 'SMS-koden har gatt ut. Begar en ny kod.');
+    }
+
+    if (otpAttemptsLeft <= 0) {
+      throw new functions.https.HttpsError('resource-exhausted', 'For manga felaktiga forsok. Begar en ny kod.');
+    }
+
+    const hashedInputCode = hashOtpCode(code);
+    if (hashedInputCode !== otpCodeHash) {
+      tx.update(ref, {
+        'pendingVerification.otpAttemptsLeft': Math.max(0, otpAttemptsLeft - 1),
+      });
+      throw new functions.https.HttpsError('permission-denied', 'Fel kod. Forsok igen.');
     }
 
     tx.update(ref, {
       status: 'submitted',
       submittedAt: admin.firestore.FieldValue.serverTimestamp(),
-      supervisorCompany,
-      supervisorName,
-      supervisorPhone,
-      supervisorOtherInfo,
-      lunchApproved,
-      travelApproved,
-      assessmentData,
-      imageComments,
-      averageRating,
+      supervisorCompany: toSafeString(draft.supervisorCompany),
+      supervisorName: toSafeString(draft.supervisorName),
+      supervisorPhone: lockedPhone,
+      supervisorOtherInfo: toSafeString(draft.supervisorOtherInfo),
+      lunchApproved: asNonNegativeInt(draft.lunchApproved),
+      travelApproved: asNonNegativeInt(draft.travelApproved),
+      assessmentData:
+        draft.assessmentData && typeof draft.assessmentData === 'object'
+          ? draft.assessmentData
+          : {},
+      imageComments:
+        draft.imageComments && typeof draft.imageComments === 'object'
+          ? draft.imageComments
+          : {},
+      averageRating: toSafeString(draft.averageRating),
+      smsVerification: {
+        verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+        verifiedPhone: lockedPhone,
+      },
+      pendingVerification: admin.firestore.FieldValue.delete(),
+      statusUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    // Behall befintligt beteende fran web-flow: godkann och las kopplade tidkort.
     const timesheetIds = Array.isArray(requestData.timesheetIds)
       ? requestData.timesheetIds.map((id) => toSafeString(id)).filter(Boolean)
       : [];
@@ -329,6 +789,13 @@ exports.submitSupervisorAssessment = functions.https.onCall(async (data) => {
   });
 
   return { ok: true };
+});
+
+exports.submitSupervisorAssessment = functions.https.onCall(async () => {
+  throw new functions.https.HttpsError(
+    'failed-precondition',
+    'Direkt inskickning är avstängd. Använd SMS-verifieringsflödet.',
+  );
 });
 
 exports.createUser = functions.https.onCall(async (data, context) => {
@@ -455,13 +922,13 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
     await doc.ref.delete();
   }
 
-  // Ta bort elevens bedömningar
+  // Ta bort elevens bed├Âmningar
   const assessmentsSnap = await db.collection('assessments').where('studentUid', '==', uid).get();
   for (const doc of assessmentsSnap.docs) {
     await doc.ref.delete();
   }
 
-  // Ta bort elevens bedömningsförfrågningar
+  // Ta bort elevens bed├Âmningsf├Ârfr├Ñgningar
   const requestsSnap = await db.collection('assessmentRequests').where('studentUid', '==', uid).get();
   for (const doc of requestsSnap.docs) {
     await doc.ref.delete();
@@ -651,11 +1118,11 @@ exports.setUserStatus = functions.https.onCall(async (data, context) => {
 });
 
 // ---------------------------------------------------------------------------
-// Account deletion (GDPR Article 17 – Right to erasure)
+// Account deletion (GDPR Article 17 ÔÇô Right to erasure)
 // ---------------------------------------------------------------------------
 
 /**
- * requestAccountDeletion — callable by authenticated student.
+ * requestAccountDeletion ÔÇö callable by authenticated student.
  * Marks the user document for deletion after a 30-day grace period.
  * The student can cancel within those 30 days via cancelAccountDeletion.
  */
@@ -683,7 +1150,7 @@ exports.requestAccountDeletion = functions.https.onCall(async (data, context) =>
 });
 
 /**
- * cancelAccountDeletion — callable by authenticated student.
+ * cancelAccountDeletion ÔÇö callable by authenticated student.
  * Removes the deletion flag so the account is no longer scheduled for deletion.
  */
 exports.cancelAccountDeletion = functions.https.onCall(async (data, context) => {
@@ -701,7 +1168,7 @@ exports.cancelAccountDeletion = functions.https.onCall(async (data, context) => 
 });
 
 /**
- * processScheduledDeletions — runs every 24 hours.
+ * processScheduledDeletions ÔÇö runs every 24 hours.
  * Anonymizes and permanently deletes accounts where the 30-day grace period has passed.
  */
 exports.processScheduledDeletions = functions.pubsub
@@ -783,11 +1250,11 @@ exports.onNewTeacherCreated = functions.firestore
     const mailOptions = {
       from: '"APL-appen" <support@aplappen.com>',
       to: 'support@aplappen.com',
-      subject: `Ny lärare väntar på godkännande: ${userData.name}`,
+      subject: `Ny l├ñrare v├ñntar p├Ñ godk├ñnnande: ${userData.name}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #ff7a00;">Ny lärare har registrerat sig</h2>
-          <p>En ny lärare har skapat ett konto och väntar på godkännande.</p>
+          <h2 style="color: #ff7a00;">Ny l├ñrare har registrerat sig</h2>
+          <p>En ny l├ñrare har skapat ett konto och v├ñntar p├Ñ godk├ñnnande.</p>
           
           <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <p><strong>Namn:</strong> ${userData.name}</p>
@@ -796,15 +1263,15 @@ exports.onNewTeacherCreated = functions.firestore
             <p><strong>Registrerad:</strong> ${new Date().toLocaleString('sv-SE')}</p>
           </div>
           
-          <p><strong>Nästa steg:</strong></p>
+          <p><strong>N├ñsta steg:</strong></p>
           <ol>
-            <li>Logga in på admin-panelen på <a href="https://www.apl-appen.com/dashboard/admin" style="color: #ff7a00;">www.apl-appen.com/dashboard/admin</a></li>
-            <li>Verifiera lärarens uppgifter</li>
-            <li>Godkänn läraren för att ge åtkomst till systemet</li>
+            <li>Logga in p├Ñ admin-panelen p├Ñ <a href="https://www.apl-appen.com/dashboard/admin" style="color: #ff7a00;">www.apl-appen.com/dashboard/admin</a></li>
+            <li>Verifiera l├ñrarens uppgifter</li>
+            <li>Godk├ñnn l├ñraren f├Âr att ge ├Ñtkomst till systemet</li>
           </ol>
           
           <p style="color: #666; font-size: 12px; margin-top: 30px;">
-            Detta är ett automatiskt meddelande från APL-appen.
+            Detta ├ñr ett automatiskt meddelande fr├Ñn APL-appen.
           </p>
         </div>
       `

@@ -14,9 +14,12 @@ const firebaseConfig = {
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-const auth = getAuth(app);
-const db = getFirestore(app);
-const functions = getFunctions(app);
-const storage = getStorage(app);
+const isBrowser = typeof window !== 'undefined';
+
+// Avoid initializing browser-only Firebase services during SSR/prerender.
+const auth = isBrowser ? getAuth(app) : (null as any);
+const db = isBrowser ? getFirestore(app) : (null as any);
+const functions = isBrowser ? getFunctions(app) : (null as any);
+const storage = isBrowser ? getStorage(app) : (null as any);
 
 export { app, auth, db, functions, storage };

@@ -5,7 +5,7 @@ steps:
       - '-t'
       - 'europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web:latest'
       - '--build-arg'
-      - 'NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyC4wmU4JxZUP_ybiIxEdgv2JQ0gMaXKa1g'
+      - 'NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyCAFtTbCOtaRmepRutWup3q8x0Ye5vrFLI'
       - '--build-arg'
       - 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=www.apl-appen.com'
       - '--build-arg'
@@ -17,13 +17,29 @@ steps:
       - '--build-arg'
       - 'NEXT_PUBLIC_FIREBASE_APP_ID=1:103324730349:web:b76e135a4a5673d1bc1de4'
       - '-f'
-      - 'web_dashboard/Dockerfile'
-      - 'web_dashboard'
+      - 'Dockerfile'
+      - '.'
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
       - 'europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web:latest'
 
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'apl-appen-web'
+      - '--image'
+      - 'europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web:latest'
+      - '--region'
+      - 'europe-north1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+
 images:
   - 'europe-north1-docker.pkg.dev/apl-appen-aa472/apl-appen/web:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

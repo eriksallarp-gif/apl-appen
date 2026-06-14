@@ -161,7 +161,7 @@ export default function NyHemsidaFaqPage() {
           <div className="mt-10 space-y-4" data-accordion-group="single">
             <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <summary className="cursor-pointer text-base font-semibold text-slate-900">Måste handledaren ha ett konto?</summary>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">Nej, signering kan ske via länk/QR beroende på ditt upplägg.</p>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">Nej, signering sker via länk eller QR-kod beroende på ditt upplägg. Handledaren signerar bedömningen via SMS-verifiering.</p>
             </details>
 
             <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -171,7 +171,7 @@ export default function NyHemsidaFaqPage() {
 
             <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <summary className="cursor-pointer text-base font-semibold text-slate-900">Kan jag exportera data?</summary>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">Ja, tanken är att du ska kunna ta fram rapporter och sammanställningar.</p>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">Ja, läraren kan exportera en sammanställning av elevernas tidkort och bedömningar.</p>
             </details>
           </div>
 
@@ -201,9 +201,9 @@ export default function NyHemsidaFaqPage() {
               <details className="rounded-2xl border border-orange-200 bg-white p-5 shadow-sm">
                 <summary className="cursor-pointer text-base font-semibold text-slate-900">3. Hur använder vi din data?</summary>
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-relaxed text-slate-600">
-                  <li>Appfunktionalitet: tidkorthantering, bedömningar och kommunikation.</li>
+                  <li>Appfunktionalitet: tidkorthantering, ersättning och bedömning.</li>
                   <li>Kontohantering: inloggning, behörigheter och rollbaserad åtkomst.</li>
-                  <li>äkerhet: skydda konton och förhindra missbruk.</li>
+                  <li>Säkerhet: skydda konton och förhindra missbruk.</li>
                   <li>Support: hjälp vid tekniska problem.</li>
                 </ul>
               </details>
@@ -234,6 +234,7 @@ export default function NyHemsidaFaqPage() {
                   <li>Välj Konto.</li>
                   <li>Tryck på "Radera mitt konto".</li>
                   <li>Bekräfta borttagningen.</li>
+                  <li>Det går även att be din lärare att ta bort ditt konto.</li>
                 </ol>
                 <p className="mt-3 text-sm leading-relaxed text-slate-600">OBS: är du raderar kontot tas all personlig data bort permanent och kan inte återställas.</p>
               </details>
@@ -241,7 +242,7 @@ export default function NyHemsidaFaqPage() {
               <details className="rounded-2xl border border-orange-200 bg-white p-5 shadow-sm">
                 <summary className="cursor-pointer text-base font-semibold text-slate-900">7. Hur länge sparar vi data?</summary>
                 <p className="mt-3 text-sm leading-relaxed text-slate-600">
-                  Data sparas så länge ditt konto är aktivt. Är du raderar ditt konto tas all personlig data bort inom 30 dagar.
+                  Data sparas så länge ditt konto är aktivt. När du raderar ditt konto tas all personlig data bort inom 30 dagar.
                 </p>
               </details>
 
