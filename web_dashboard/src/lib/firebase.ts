@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { getFunctions } from 'firebase/functions';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
@@ -21,5 +21,9 @@ const auth = isBrowser ? getAuth(app) : (null as any);
 const db = isBrowser ? getFirestore(app) : (null as any);
 const functions = isBrowser ? getFunctions(app) : (null as any);
 const storage = isBrowser ? getStorage(app) : (null as any);
+
+if (isBrowser && auth) {
+  void setPersistence(auth, browserSessionPersistence);
+}
 
 export { app, auth, db, functions, storage };

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -177,7 +178,12 @@ export default function NyHemsidaFaqPage() {
 
           <div className="mt-14">
             <h2 className="text-2xl font-bold tracking-tight text-[#191c1e]">Integritetspolicy</h2>
-            <p className="mt-2 max-w-3xl text-sm text-slate-600">Här visas information om hur vi hanterar din data och skyddar din integritet.</p>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">
+              Här visas information om hur vi hanterar din data och skyddar din integritet.{' '}
+              <Link href="/integritet" className="font-semibold text-orange-700 hover:text-orange-800">
+                Läs vår fullständiga integritetspolicy här.
+              </Link>
+            </p>
 
             <div className="mt-6 space-y-3" data-accordion-group="single">
               <details className="rounded-2xl border border-orange-200 bg-white p-5 shadow-sm">
@@ -236,7 +242,7 @@ export default function NyHemsidaFaqPage() {
                   <li>Bekräfta borttagningen.</li>
                   <li>Det går även att be din lärare att ta bort ditt konto.</li>
                 </ol>
-                <p className="mt-3 text-sm leading-relaxed text-slate-600">OBS: är du raderar kontot tas all personlig data bort permanent och kan inte återställas.</p>
+                <p className="mt-3 text-sm leading-relaxed text-slate-600">OBS: När du raderar kontot tas all personlig data bort permanent och kan inte återställas.</p>
               </details>
 
               <details className="rounded-2xl border border-orange-200 bg-white p-5 shadow-sm">
@@ -249,11 +255,9 @@ export default function NyHemsidaFaqPage() {
               <details className="rounded-2xl border border-orange-200 bg-white p-5 shadow-sm">
                 <summary className="cursor-pointer text-base font-semibold text-slate-900">8. Dina rättigheter</summary>
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-relaxed text-slate-600">
-                  <li>FÅ tillgång till din data.</li>
-                  <li>Ätta felaktig data.</li>
+                  <li>Få tillgång till din data.</li>
+                  <li>Rätta felaktig data.</li>
                   <li>Radera ditt konto och din data.</li>
-                  <li>Begära dataportabilitet.</li>
-                  <li>Återkalla samtycke när som helst.</li>
                 </ul>
               </details>
 

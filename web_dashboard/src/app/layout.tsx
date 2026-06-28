@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import '../../styles/globals.css'
 import ChunkErrorReload from '../ChunkErrorReload';
+import CookieConsentBanner from '@/components/CookieConsentBanner';
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -21,6 +22,7 @@ export default function RootLayout({
         {/* ChunkLoadError reload component */}
         <ChunkErrorReload />
         {children}
+        <CookieConsentBanner />
       </body>
     </html>
   )
