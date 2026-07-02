@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:math';
 import 'dart:async';
 import 'core/program_catalog.dart';
@@ -1375,60 +1376,29 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _showRegisterDialog() async {
-    // Först välja roll
-    final role = await showDialog<String>(
+    final shouldCreateStudent = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Skapa konto'),
-        content: const Text('Välj din roll:'),
+        title: const Text('Skapa elevkonto'),
+        content: const Text(
+          'I appen kan du skapa elevkonto.\n\nLärare ansluter sig till appen via hemsidan.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Avbryt'),
           ),
           ElevatedButton.icon(
-            onPressed: () => Navigator.pop(ctx, 'student'),
+            onPressed: () => Navigator.pop(ctx, true),
             icon: const Icon(Icons.school),
-            label: const Text('Elev'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              print('Lärarknapp tryckt');
-              Navigator.pop(ctx, 'teacher');
-            },
-            icon: const Icon(Icons.person),
-            label: const Text('Lärare'),
+            label: const Text('Fortsätt som elev'),
           ),
         ],
       ),
     );
 
-    if (role == null) return;
-
-    if (role == 'student') {
+    if (shouldCreateStudent == true) {
       await _showStudentRegisterDialog();
-    } else {
-      print('Försöker visa lärarregistreringsdialog');
-      try {
-        await _showTeacherRegisterDialog();
-      } catch (e) {
-        print('Kunde inte visa lärarregistreringsdialog: $e');
-        if (context.mounted) {
-          showDialog(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Fel'),
-              content: Text('Kunde inte visa lärarregistreringsdialog: $e'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
-        }
-      }
     }
   }
 
@@ -1693,6 +1663,11 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _openWebsite() async {
+    final uri = Uri.parse('https://www.apl-appen.com');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1739,7 +1714,123 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: Color(0xFF6B7280), // gray-600
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
+
+                      // Informationsruta för elever innan de fortsätter i appen.
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF7ED), // orange-50
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFFFDBA74), // orange-300
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.info_outline,
+                                  color: Color(0xFFEA580C), // orange-600
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      RichText(
+                                        text: const TextSpan(
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            height: 1.35,
+                                            color: Color(
+                                              0xFF9A3412,
+                                            ), // orange-800
+                                          ),
+                                          children: [
+                                            TextSpan(text: 'Appen fungerar '),
+                                            TextSpan(
+                                              text: 'BARA',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            TextSpan(
+                                              text: ' om du är elev till en ',
+                                            ),
+                                            TextSpan(
+                                              text: 'lärare',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            TextSpan(
+                                              text:
+                                                  ' som är ansluten till appen via appens hemsida',
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      TextButton(
+                                        onPressed: _openWebsite,
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: const Color(
+                                            0xFFEA580C,
+                                          ),
+                                          padding: EdgeInsets.zero,
+                                          minimumSize: const Size(0, 0),
+                                          tapTargetSize:
+                                              MaterialTapTargetSize.shrinkWrap,
+                                          alignment: Alignment.centerLeft,
+                                        ),
+                                        child: const Text(
+                                          'www.apl-appen.com',
+                                          style: TextStyle(
+                                            decoration:
+                                                TextDecoration.underline,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            const Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.info_outline,
+                                  color: Color(0xFFEA580C), // orange-600
+                                  size: 20,
+                                ),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Lärare ansluter sig till appen via hemsidan.',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      height: 1.35,
+                                      color: Color(0xFF9A3412), // orange-800
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
 
                       // E-post fält
                       TextField(
