@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -396,10 +397,37 @@ class CompanyContactScreen extends StatelessWidget {
 
           final data = docs.first.data() as Map<String, dynamic>;
           final name = data['name'] as String? ?? 'Företag';
+          final contactHeading = data['contactHeading'] as String?;
           final address = data['address'] as String?;
           final contact = data['contactPerson'] as String?;
           final phone = data['phone'] as String?;
           final email = data['email'] as String?;
+
+          final List<Map<String, String>> contactSections = [];
+          final rawSections = data['contactSections'];
+          if (rawSections is List) {
+            for (final raw in rawSections) {
+              if (raw is Map) {
+                final heading = (raw['heading'] ?? '').toString().trim();
+                final content = (raw['content'] ?? '').toString().trim();
+                if (heading.isNotEmpty || content.isNotEmpty) {
+                  contactSections.add({
+                    'heading': heading,
+                    'content': content,
+                  });
+                }
+              }
+            }
+          }
+
+          if (contactSections.isEmpty &&
+              ((contactHeading != null && contactHeading.isNotEmpty) ||
+                  (contact != null && contact.isNotEmpty))) {
+            contactSections.add({
+              'heading': (contactHeading ?? '').trim(),
+              'content': (contact ?? '').trim(),
+            });
+          }
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -422,14 +450,44 @@ class CompanyContactScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    if (contact != null && contact.isNotEmpty)
-                      _InfoRow(icon: Icons.person_outline_rounded, label: contact),
                     if (address != null && address.isNotEmpty)
                       _InfoRow(icon: Icons.location_on_outlined, label: address),
                     if (phone != null && phone.isNotEmpty)
-                      _InfoRow(icon: Icons.phone_outlined, label: phone),
+                      _InfoRow(
+                        icon: Icons.phone_outlined,
+                        label: phone,
+                        linkifyPhones: true,
+                      ),
                     if (email != null && email.isNotEmpty)
                       _InfoRow(icon: Icons.mail_outline_rounded, label: email),
+                    if (contactSections.isNotEmpty) const SizedBox(height: 8),
+                    ...contactSections.map(
+                      (section) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if ((section['heading'] ?? '').isNotEmpty) ...[
+                              Text(
+                                section['heading']!,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.grey.shade800,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                            ],
+                            if ((section['content'] ?? '').isNotEmpty)
+                              _InfoRow(
+                                icon: Icons.person_outline_rounded,
+                                label: section['content']!,
+                                linkifyPhones: true,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -444,8 +502,13 @@ class CompanyContactScreen extends StatelessWidget {
 class _InfoRow extends StatelessWidget {
   final IconData icon;
   final String label;
+  final bool linkifyPhones;
 
-  const _InfoRow({required this.icon, required this.label});
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    this.linkifyPhones = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -455,10 +518,114 @@ class _InfoRow extends StatelessWidget {
         children: [
           Icon(icon, size: 18, color: Colors.orange.shade600),
           const SizedBox(width: 8),
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
+          Expanded(
+            child: linkifyPhones
+                ? _PhoneLinkifiedText(text: label)
+                : Text(label, style: const TextStyle(fontSize: 14)),
+          ),
         ],
       ),
     );
+  }
+}
+
+class _PhoneLinkifiedText extends StatelessWidget {
+  final String text;
+
+  const _PhoneLinkifiedText({required this.text});
+
+  static final RegExp _phoneRegex = RegExp(r'\+?[0-9][0-9\s\-]{5,}[0-9]');
+
+  String _toDialable(String raw) {
+    return raw.replaceAll(RegExp(r'[^0-9+]'), '');
+  }
+
+  Future<void> _callNumber(String rawNumber) async {
+    final dialable = _toDialable(rawNumber);
+    if (dialable.isEmpty) return;
+    await launchUrl(Uri(scheme: 'tel', path: dialable));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = text.split('\n');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < lines.length; i++) ...[
+          _PhoneRichLine(
+            line: lines[i],
+            phoneRegex: _phoneRegex,
+            onTapPhone: _callNumber,
+          ),
+          if (i != lines.length - 1) const SizedBox(height: 2),
+        ],
+      ],
+    );
+  }
+}
+
+class _PhoneRichLine extends StatelessWidget {
+  final String line;
+  final RegExp phoneRegex;
+  final Future<void> Function(String rawNumber) onTapPhone;
+
+  const _PhoneRichLine({
+    required this.line,
+    required this.phoneRegex,
+    required this.onTapPhone,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = phoneRegex.allMatches(line).toList();
+    if (matches.isEmpty) {
+      return Text(line, style: const TextStyle(fontSize: 14));
+    }
+
+    final spans = <InlineSpan>[];
+    var start = 0;
+
+    for (final match in matches) {
+      if (match.start > start) {
+        spans.add(
+          TextSpan(
+            text: line.substring(start, match.start),
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
+          ),
+        );
+      }
+
+      final rawNumber = line.substring(match.start, match.end);
+      spans.add(
+        TextSpan(
+          text: rawNumber,
+          style: const TextStyle(
+            fontSize: 14,
+            color: Colors.blue,
+            decoration: TextDecoration.underline,
+          ),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () {
+              onTapPhone(rawNumber);
+            },
+        ),
+      );
+
+      start = match.end;
+    }
+
+    if (start < line.length) {
+      spans.add(
+        TextSpan(
+          text: line.substring(start),
+          style: const TextStyle(fontSize: 14, color: Colors.black87),
+        ),
+      );
+    }
+
+    return RichText(text: TextSpan(children: spans));
   }
 }
 

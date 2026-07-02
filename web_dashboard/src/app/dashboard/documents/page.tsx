@@ -53,6 +53,7 @@ const CATEGORY_VISUALS = {
 
 const CATEGORIES = sharedCategories.map((category) => ({
   ...category,
+  displayName: category.id === 'kontakt_foretag' ? 'APL-företag' : category.name,
   icon: CATEGORY_VISUALS[category.id as keyof typeof CATEGORY_VISUALS]?.icon ?? FileText,
   emoji: CATEGORY_VISUALS[category.id as keyof typeof CATEGORY_VISUALS]?.emoji ?? '📄',
 }));
@@ -238,7 +239,7 @@ export default function DocumentsPage() {
   };
 
   const getCategoryName = (categoryId: string) => {
-    return CATEGORIES.find(c => c.id === categoryId)?.name || categoryId;
+    return CATEGORIES.find(c => c.id === categoryId)?.displayName || categoryId;
   };
 
   const getCategoryIcon = (categoryId: string) => {
@@ -300,15 +301,26 @@ export default function DocumentsPage() {
             const count = documents.filter(d => d.category === cat.id).length;
             const IconComponent = cat.icon;
             return (
-              <div key={cat.id} className="bg-white p-6 rounded-lg border-2 border-gray-200">
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() =>
+                  router.push(
+                    cat.id === 'kontakt_foretag'
+                      ? '/dashboard/companies'
+                      : `/dashboard/documents/${cat.id}`,
+                  )
+                }
+                className="bg-white p-6 rounded-lg border-2 border-gray-200 text-left transition-all hover:border-orange-300"
+              >
                 <div className="mb-2 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
                   <IconComponent className="h-5 w-5 text-orange-600" />
                 </div>
-                <h3 className="font-semibold text-gray-900">{cat.name}</h3>
+                <h3 className="font-semibold text-gray-900">{cat.displayName}</h3>
                 <p className="text-sm text-gray-600 mt-1">
                   {count} {count === 1 ? 'dokument' : 'dokument'}
                 </p>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -416,7 +428,7 @@ export default function DocumentsPage() {
                     <option value="">Välj kategori...</option>
                     {CATEGORIES.map(cat => (
                       <option key={cat.id} value={cat.id}>
-                        {cat.emoji} {cat.name}
+                        {cat.emoji} {cat.displayName}
                       </option>
                     ))}
                   </select>

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { auth } from '@/lib/firebase';
 import Header from '@/components/Header';
-import { Home, Users, Calendar, School, Clock, ClipboardCheck, ListTodo, Building2, FileText, Settings, UserCog, Layers } from 'lucide-react';
+import { Home, Users, Calendar, School, Clock, ClipboardCheck, ListTodo, FileText, Settings, UserCog, Layers } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -53,8 +53,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           { href: '/dashboard/bedomning', label: 'Bedömning', icon: ClipboardCheck, match: (p: string) => p.startsWith('/dashboard/bedomning') },
           { href: '/dashboard/assignments', label: 'Uppgifter', icon: ListTodo, match: (p: string) => p.startsWith('/dashboard/assignments') },
         ] : []),
-        { href: '/dashboard/companies', label: 'Företag', icon: Building2, match: (p: string) => p.startsWith('/dashboard/companies') },
-        { href: '/dashboard/documents', label: 'Dokument', icon: FileText, match: (p: string) => p.startsWith('/dashboard/documents') },
+        {
+          href: '/dashboard/documents',
+          label: 'Dokument',
+          icon: FileText,
+          match: (p: string) =>
+            p.startsWith('/dashboard/documents') || p.startsWith('/dashboard/companies'),
+        },
         { href: '/dashboard/settings', label: 'Inställningar', icon: Settings, match: (p: string) => p === '/dashboard/settings' || p.startsWith('/dashboard/settings/') },
       ];
 

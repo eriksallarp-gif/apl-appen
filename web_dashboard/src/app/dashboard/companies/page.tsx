@@ -22,7 +22,9 @@ interface Company {
   id: string;
   name: string;
   address?: string;
+  contactHeading?: string;
   contactPerson?: string;
+  contactSections?: ContactSection[];
   phone?: string;
   email?: string;
   teacherUid: string;
@@ -45,6 +47,11 @@ interface StudentData {
   className?: string;
 }
 
+interface ContactSection {
+  heading: string;
+  content: string;
+}
+
 function normalizeStudentIds(singleStudentId?: string | null, multipleStudentIds?: unknown): string[] {
   const result: string[] = [];
   const seen = new Set<string>();
@@ -65,6 +72,19 @@ function normalizeStudentIds(singleStudentId?: string | null, multipleStudentIds
   return result;
 }
 
+function createEmptyContactSection(): ContactSection {
+  return { heading: '', content: '' };
+}
+
+function normalizeContactSections(sections: ContactSection[]): ContactSection[] {
+  return sections
+    .map((section) => ({
+      heading: (section.heading || '').trim(),
+      content: (section.content || '').trim(),
+    }))
+    .filter((section) => section.heading.length > 0 || section.content.length > 0);
+}
+
 export default function CompaniesPage() {
   const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -77,7 +97,9 @@ export default function CompaniesPage() {
   const [formData, setFormData] = useState({
     name: '',
     address: '',
+    contactHeading: '',
     contactPerson: '',
+    contactSections: [createEmptyContactSection()] as ContactSection[],
     phone: '',
     email: '',
     classId: '',
@@ -180,12 +202,16 @@ export default function CompaniesPage() {
 
     try {
       const normalizedStudentIds = normalizeStudentIds(undefined, formData.studentIds);
+      const normalizedContactSections = normalizeContactSections(formData.contactSections);
+      const primaryContactSection = normalizedContactSections[0] || null;
       if (editingCompany) {
         // Update existing company
         await updateDoc(doc(db, 'companies', editingCompany.id), {
           name: formData.name,
           address: formData.address,
-          contactPerson: formData.contactPerson,
+          contactHeading: primaryContactSection?.heading || '',
+          contactPerson: primaryContactSection?.content || '',
+          contactSections: normalizedContactSections,
           phone: formData.phone,
           email: formData.email,
           classId: formData.classId,
@@ -197,7 +223,9 @@ export default function CompaniesPage() {
         await addDoc(collection(db, 'companies'), {
           name: formData.name,
           address: formData.address,
-          contactPerson: formData.contactPerson,
+          contactHeading: primaryContactSection?.heading || '',
+          contactPerson: primaryContactSection?.content || '',
+          contactSections: normalizedContactSections,
           phone: formData.phone,
           email: formData.email,
           teacherUid: user.uid,
@@ -212,7 +240,9 @@ export default function CompaniesPage() {
       setFormData({
         name: '',
         address: '',
+        contactHeading: '',
         contactPerson: '',
+        contactSections: [createEmptyContactSection()],
         phone: '',
         email: '',
         classId: '',
@@ -230,11 +260,28 @@ export default function CompaniesPage() {
 
   const handleEdit = (company: Company) => {
     const normalizedStudentIds = normalizeStudentIds(company.studentId, company.studentIds);
+    const sectionsFromCompany = Array.isArray(company.contactSections)
+      ? normalizeContactSections(company.contactSections)
+      : [];
+    const fallbackSections =
+      sectionsFromCompany.length > 0
+        ? sectionsFromCompany
+        : normalizeContactSections([
+            {
+              heading: company.contactHeading || '',
+              content: company.contactPerson || '',
+            },
+          ]);
     setEditingCompany(company);
     setFormData({
       name: company.name,
       address: company.address || '',
+      contactHeading: company.contactHeading || '',
       contactPerson: company.contactPerson || '',
+      contactSections:
+        fallbackSections.length > 0
+          ? fallbackSections
+          : [createEmptyContactSection()],
       phone: company.phone || '',
       email: company.email || '',
       classId: company.classId || '',
@@ -264,7 +311,9 @@ export default function CompaniesPage() {
     setFormData({
       name: '',
       address: '',
+      contactHeading: '',
       contactPerson: '',
+      contactSections: [createEmptyContactSection()],
       phone: '',
       email: '',
       classId: '',
@@ -281,6 +330,37 @@ export default function CompaniesPage() {
         studentIds: isSelected
           ? current.studentIds.filter((id) => id !== studentId)
           : [...current.studentIds, studentId],
+      };
+    });
+  };
+
+  const updateContactSection = (
+    index: number,
+    field: 'heading' | 'content',
+    value: string,
+  ) => {
+    setFormData((current) => ({
+      ...current,
+      contactSections: current.contactSections.map((section, sectionIndex) =>
+        sectionIndex === index ? { ...section, [field]: value } : section,
+      ),
+    }));
+  };
+
+  const addContactSection = () => {
+    setFormData((current) => ({
+      ...current,
+      contactSections: [...current.contactSections, createEmptyContactSection()],
+    }));
+  };
+
+  const removeContactSection = (index: number) => {
+    setFormData((current) => {
+      const nextSections = current.contactSections.filter((_, i) => i !== index);
+      return {
+        ...current,
+        contactSections:
+          nextSections.length > 0 ? nextSections : [createEmptyContactSection()],
       };
     });
   };
@@ -375,6 +455,16 @@ export default function CompaniesPage() {
             {companies.map((company) => {
               const companyClass = classes.find(c => c.id === company.classId);
               const companyStudentIds = normalizeStudentIds(company.studentId, company.studentIds);
+              const companyContactSections = normalizeContactSections(
+                Array.isArray(company.contactSections)
+                  ? company.contactSections
+                  : [
+                      {
+                        heading: company.contactHeading || '',
+                        content: company.contactPerson || '',
+                      },
+                    ],
+              );
               const linkedStudents = companyStudentIds
                 .map((studentId) => students.find((student) => student.id === studentId))
                 .filter((student): student is StudentData => !!student);
@@ -385,17 +475,15 @@ export default function CompaniesPage() {
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">
                         {company.name}
                       </h3>
+
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                        Företagsinfo
+                      </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                         {company.address && (
                           <div className="flex items-center text-gray-600">
                             <span className="mr-2">📍</span>
                             {company.address}
-                          </div>
-                        )}
-                        {company.contactPerson && (
-                          <div className="flex items-center text-gray-600">
-                            <span className="mr-2">👤</span>
-                            {company.contactPerson}
                           </div>
                         )}
                         {company.phone && (
@@ -411,6 +499,28 @@ export default function CompaniesPage() {
                           </div>
                         )}
                       </div>
+
+                      {companyContactSections.length > 0 && (
+                        <div className="mt-4">
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Kontaktsektioner
+                          </p>
+                          {companyContactSections.map((section, index) => (
+                            <div key={`${company.id}-section-${index}`} className="mb-2">
+                              {section.heading && (
+                                <p className="text-sm font-semibold text-gray-700">{section.heading}</p>
+                              )}
+                              {section.content && (
+                                <div className="flex items-start text-gray-600 text-sm">
+                                  <span className="mr-2">👤</span>
+                                  <span className="whitespace-pre-line">{section.content}</span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       {companyClass && (
                         <div className="mt-2">
                           <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">
@@ -462,67 +572,114 @@ export default function CompaniesPage() {
               </h2>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Företagsnamn <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  placeholder="t.ex. ABC AB"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Adress
-                </label>
-                <input
-                  type="text"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  placeholder="t.ex. Storgatan 1, 123 45 Stockholm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Kontaktperson
-                </label>
-                <input
-                  type="text"
-                  value={formData.contactPerson}
-                  onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  placeholder="t.ex. Anna Andersson"
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Telefon
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                    placeholder="t.ex. 070-123 45 67"
-                  />
+              <div className="rounded-lg border border-gray-200 p-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Företagsinfo
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Företagsnamn <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      placeholder="t.ex. ABC AB"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Adress
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      placeholder="t.ex. Storgatan 1, 123 45 Stockholm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Telefon
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                        placeholder="t.ex. 070-123 45 67"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        E-post
+                      </label>
+                      <input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                        placeholder="t.ex. info@foretag.se"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    E-post
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                    placeholder="t.ex. info@foretag.se"
-                  />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Kontaktsektioner och övriga rubriker
+                </label>
+                <div className="space-y-3">
+                  {formData.contactSections.map((section, index) => (
+                    <div key={`contact-section-${index}`} className="rounded-lg border border-gray-200 p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          Rubrik {index + 1}
+                        </p>
+                        {formData.contactSections.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeContactSection(index)}
+                            className="text-xs font-medium text-red-600 hover:text-red-700"
+                          >
+                            Ta bort
+                          </button>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        value={section.heading}
+                        onChange={(e) => updateContactSection(index, 'heading', e.target.value)}
+                        className="mb-2 w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-orange-500"
+                        placeholder="t.ex. Handledare"
+                      />
+                      <textarea
+                        value={section.content}
+                        onChange={(e) => updateContactSection(index, 'content', e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-orange-500"
+                        rows={3}
+                        placeholder={"t.ex. Anna Andersson\n070-123 45 67"}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <p className="text-xs text-gray-500">
+                    Lägg till en eller flera rubriker med tillhörande information.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={addContactSection}
+                    className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-medium text-orange-700 hover:bg-orange-100"
+                  >
+                    + Lägg till rubrik
+                  </button>
                 </div>
               </div>
               <div>
