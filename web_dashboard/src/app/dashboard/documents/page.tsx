@@ -39,6 +39,12 @@ interface UserProfile {
   role: string;
   schoolId: string;
   teacherId?: string;
+  classId?: string;
+}
+
+interface ContactCounts {
+  companies: number;
+  schoolContacts: number;
 }
 
 const CATEGORY_VISUALS = {
@@ -63,6 +69,11 @@ export default function DocumentsPage() {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [documents, setDocuments] = useState<AplDocument[]>([]);
+  const [contactCounts, setContactCounts] = useState<ContactCounts>({
+    companies: 0,
+    schoolContacts: 0,
+  });
+  const [isDocumentsExpanded, setIsDocumentsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -100,6 +111,7 @@ export default function DocumentsPage() {
         role,
         schoolId: schoolId,
         teacherId: studentTeacherId,
+        classId: (userData?.classId || '').toString(),
       });
 
       if (role !== 'teacher' && role !== 'admin' && role !== 'student') {
@@ -108,6 +120,13 @@ export default function DocumentsPage() {
       }
 
       await fetchDocuments(currentUser.uid, role, schoolId, studentTeacherId);
+      await fetchContactCounts(
+        currentUser.uid,
+        role,
+        schoolId,
+        studentTeacherId,
+        (userData?.classId || '').toString(),
+      );
       setLoading(false);
     });
 
@@ -140,6 +159,100 @@ export default function DocumentsPage() {
       setDocuments(docs);
     } catch (error) {
       console.error('Error fetching documents:', error);
+    }
+  };
+
+  const fetchContactCounts = async (
+    uid: string,
+    role: string,
+    schoolId: string,
+    studentTeacherId?: string,
+    studentClassId?: string,
+  ) => {
+    try {
+      let companiesCount = 0;
+      let schoolContactsCount = 0;
+
+      if (role === 'teacher') {
+        const companiesSnapshot = await getDocs(
+          query(collection(db, 'companies'), where('teacherUid', '==', uid)),
+        );
+        companiesCount = companiesSnapshot.size;
+
+        const schoolContactsSnapshot = await getDocs(
+          query(
+            collection(db, 'schoolContacts'),
+            where('teacherUid', '==', uid),
+            where('school', '==', schoolId),
+          ),
+        );
+        schoolContactsCount = schoolContactsSnapshot.size;
+      } else if (role === 'admin') {
+        const companiesSnapshot = await getDocs(collection(db, 'companies'));
+        companiesCount = companiesSnapshot.size;
+
+        const schoolContactsSnapshot = await getDocs(
+          query(collection(db, 'schoolContacts'), where('school', '==', schoolId)),
+        );
+        schoolContactsCount = schoolContactsSnapshot.size;
+      } else {
+        const companyIds = new Set<string>();
+
+        const byStudentIdSnapshot = await getDocs(
+          query(collection(db, 'companies'), where('studentId', '==', uid)),
+        );
+        byStudentIdSnapshot.docs.forEach((item) => companyIds.add(item.id));
+
+        try {
+          const byStudentIdsSnapshot = await getDocs(
+            query(collection(db, 'companies'), where('studentIds', 'array-contains', uid)),
+          );
+          byStudentIdsSnapshot.docs.forEach((item) => companyIds.add(item.id));
+        } catch (_) {
+          // Ignore if array-contains query is blocked by current rules.
+        }
+        companiesCount = companyIds.size;
+
+        if (studentTeacherId) {
+          const schoolContactsSnapshot = await getDocs(
+            query(
+              collection(db, 'schoolContacts'),
+              where('school', '==', schoolId),
+              where('teacherUid', '==', studentTeacherId),
+            ),
+          );
+
+          schoolContactsCount = schoolContactsSnapshot.docs.filter((item) => {
+            const data = item.data();
+            const studentId = String(data.studentId || '').trim();
+            const studentIds = Array.isArray(data.studentIds)
+              ? data.studentIds.map((value: unknown) => String(value || '').trim()).filter(Boolean)
+              : [];
+            const classIds = Array.isArray(data.classIds)
+              ? data.classIds.map((value: unknown) => String(value || '').trim()).filter(Boolean)
+              : [];
+
+            if (!studentId && studentIds.length === 0 && classIds.length === 0) {
+              return true;
+            }
+            if (studentId === uid || studentIds.includes(uid)) {
+              return true;
+            }
+            return !!studentClassId && classIds.includes(studentClassId);
+          }).length;
+        }
+      }
+
+      setContactCounts({
+        companies: companiesCount,
+        schoolContacts: schoolContactsCount,
+      });
+    } catch (error) {
+      console.error('Error fetching contact counts:', error);
+      setContactCounts({
+        companies: 0,
+        schoolContacts: 0,
+      });
     }
   };
 
@@ -298,7 +411,14 @@ export default function DocumentsPage() {
         {/* Category overview */}
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
           {CATEGORIES.map(cat => {
-            const count = documents.filter(d => d.category === cat.id).length;
+            const documentCount = documents.filter(d => d.category === cat.id).length;
+            const isContactCategory = cat.id === 'kontakt_foretag' || cat.id === 'kontakt_skola';
+            const categoryCount =
+              cat.id === 'kontakt_foretag'
+                ? contactCounts.companies
+                : cat.id === 'kontakt_skola'
+                  ? contactCounts.schoolContacts
+                  : documentCount;
             const IconComponent = cat.icon;
             return (
               <button
@@ -319,9 +439,20 @@ export default function DocumentsPage() {
                   <IconComponent className="h-5 w-5 text-orange-600" />
                 </div>
                 <h3 className="font-semibold text-gray-900">{cat.displayName}</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  {count} {count === 1 ? 'dokument' : 'dokument'}
-                </p>
+                {isContactCategory ? (
+                  <div className="mt-1 text-sm text-gray-600">
+                    <p>
+                      {categoryCount} {categoryCount === 1 ? 'kontakt' : 'kontakter'}
+                    </p>
+                    <p>
+                      {documentCount} {documentCount === 1 ? 'dokument' : 'dokument'}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600 mt-1">
+                    {documentCount} {documentCount === 1 ? 'dokument' : 'dokument'}
+                  </p>
+                )}
               </button>
             );
           })}
@@ -330,10 +461,22 @@ export default function DocumentsPage() {
         {/* Documents list */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
           <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold text-gray-900">Alla dokument</h2>
+            <button
+              type="button"
+              onClick={() => setIsDocumentsExpanded((current) => !current)}
+              className="flex w-full items-center justify-between text-left"
+              aria-expanded={isDocumentsExpanded}
+            >
+              <h2 className="text-xl font-semibold text-gray-900">
+                Alla dokument ({documents.length})
+              </h2>
+              <span className="text-sm font-medium text-gray-500">
+                {isDocumentsExpanded ? '▲ Dölj' : '▼ Visa'}
+              </span>
+            </button>
           </div>
-          
-          {documents.length === 0 ? (
+
+          {isDocumentsExpanded && documents.length === 0 ? (
             <div className="p-12 text-center">
               <div className="text-6xl mb-4">📁</div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
@@ -349,7 +492,7 @@ export default function DocumentsPage() {
                 Ladda upp dokument
               </button>
             </div>
-          ) : (
+          ) : isDocumentsExpanded ? (
             <div className="divide-y divide-gray-200">
               {documents.map(doc => (
                 <div key={doc.id} className="p-6 hover:bg-gray-50 transition-colors">
@@ -393,7 +536,7 @@ export default function DocumentsPage() {
                 </div>
               ))}
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Upload Modal */}
