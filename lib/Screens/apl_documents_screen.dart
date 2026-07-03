@@ -10,8 +10,13 @@ import 'package:url_launcher/url_launcher.dart';
 class _UserScope {
   final String school;
   final String teacherId;
+  final String classId;
 
-  const _UserScope({required this.school, required this.teacherId});
+  const _UserScope({
+    required this.school,
+    required this.teacherId,
+    required this.classId,
+  });
 }
 
 Future<_UserScope> _resolveUserScope(String uid) async {
@@ -25,6 +30,12 @@ Future<_UserScope> _resolveUserScope(String uid) async {
   var teacherId = ((userData['teacherId'] ?? userData['teacherUid']) ?? '')
       .toString()
       .trim();
+  final classId = (userData['classId'] ?? '').toString().trim();
+  final role = (userData['role'] ?? '').toString().trim();
+
+  if (teacherId.isEmpty && (role == 'teacher' || role == 'admin')) {
+    teacherId = uid;
+  }
 
   if (teacherId.isNotEmpty && (userData['teacherId'] == null)) {
     await userRef.set({'teacherId': teacherId}, SetOptions(merge: true));
@@ -46,7 +57,7 @@ Future<_UserScope> _resolveUserScope(String uid) async {
     await userRef.set({'school': school}, SetOptions(merge: true));
   }
 
-  return _UserScope(school: school, teacherId: teacherId);
+  return _UserScope(school: school, teacherId: teacherId, classId: classId);
 }
 
 class _AplDocumentCategory {
@@ -152,6 +163,37 @@ Future<List<_AplDocumentCategory>> _loadAplDocumentCategories() async {
 final Future<List<_AplDocumentCategory>> _aplDocumentCategoriesFuture =
     _loadAplDocumentCategories();
 
+Future<QueryDocumentSnapshot<Map<String, dynamic>>?> _findCompanyForStudent(
+  String studentUid,
+) async {
+  final companiesRef = FirebaseFirestore.instance.collection('companies');
+
+  final byStudentId = await companiesRef
+      .where('studentId', isEqualTo: studentUid)
+      .limit(1)
+      .get();
+  if (byStudentId.docs.isNotEmpty) {
+    return byStudentId.docs.first;
+  }
+
+  // Fallback for newer company links stored in studentIds.
+  // This query can be blocked by stricter rules in some environments,
+  // so we treat failures as "no match" instead of breaking the page.
+  try {
+    final byStudentIds = await companiesRef
+        .where('studentIds', arrayContains: studentUid)
+        .limit(1)
+        .get();
+    if (byStudentIds.docs.isNotEmpty) {
+      return byStudentIds.docs.first;
+    }
+  } catch (_) {
+    // Ignore and continue with null result.
+  }
+
+  return null;
+}
+
 class AplDocumentsScreen extends StatelessWidget {
   const AplDocumentsScreen({super.key});
 
@@ -195,6 +237,12 @@ class AplDocumentsScreen extends StatelessWidget {
                           icon: category.icon,
                         );
                       }
+                      if (category.id == 'kontakt_skola') {
+                        return _SchoolContactCard(
+                          categoryName: category.name,
+                          icon: category.icon,
+                        );
+                      }
                       return _CategoryCard(
                         categoryId: category.id,
                         categoryName: category.name,
@@ -230,14 +278,10 @@ class _ContactCompanyCard extends StatelessWidget {
       );
     }
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('companies')
-          .where('studentId', isEqualTo: user.uid)
-          .limit(1)
-          .snapshots(),
+    return FutureBuilder<QueryDocumentSnapshot<Map<String, dynamic>>?>(
+      future: _findCompanyForStudent(user.uid),
       builder: (context, snapshot) {
-        final hasCompany = (snapshot.data?.docs ?? []).isNotEmpty;
+        final hasCompany = snapshot.data != null;
         final subtitle = hasCompany
             ? 'Visa kontaktuppgifter till ditt APL-företag'
             : 'Ingen företagskoppling ännu';
@@ -252,6 +296,50 @@ class _ContactCompanyCard extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const CompanyContactScreen()),
             );
           },
+        );
+      },
+    );
+  }
+}
+
+class _SchoolContactCard extends StatelessWidget {
+  final String categoryName;
+  final IconData icon;
+
+  const _SchoolContactCard({required this.categoryName, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return _SimpleCard(
+        icon: icon,
+        title: categoryName,
+        subtitle: 'Logga in igen för att se skolkontakter',
+        onTap: null,
+      );
+    }
+
+    return FutureBuilder<_UserScope>(
+      future: _resolveUserScope(user.uid),
+      builder: (context, scopeSnapshot) {
+        final scope = scopeSnapshot.data;
+        final hasScope = scope != null && scope.school.isNotEmpty && scope.teacherId.isNotEmpty;
+
+        return _SimpleCard(
+          icon: icon,
+          title: categoryName,
+          subtitle: hasScope
+              ? 'Visa kontaktuppgifter till skolan'
+              : 'Kunde inte hitta skolkoppling',
+          onTap: hasScope
+              ? () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SchoolContactScreen()),
+                  );
+                }
+              : null,
         );
       },
     );
@@ -334,6 +422,58 @@ class _SimpleCard extends StatelessWidget {
 class CompanyContactScreen extends StatelessWidget {
   const CompanyContactScreen({super.key});
 
+  Future<void> _openDocument(
+    BuildContext context,
+    String url,
+    String title,
+  ) async {
+    final pdfViewerUrl = Uri(
+      scheme: 'https',
+      host: 'apl-appen.com',
+      path: '/view-pdf',
+      queryParameters: {'url': url, 'title': title},
+    ).toString();
+
+    try {
+      await launchUrl(
+        Uri.parse(pdfViewerUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fel: Kunde inte öppna dokument ($e)'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  IconData _getFileIcon(String? fileType) {
+    if (fileType == null) return Icons.insert_drive_file_outlined;
+    if (fileType.contains('pdf')) return Icons.picture_as_pdf_outlined;
+    if (fileType.contains('doc')) return Icons.description_outlined;
+    if (fileType.contains('image') ||
+        fileType.contains('jpg') ||
+        fileType.contains('png')) {
+      return Icons.image_outlined;
+    }
+    if (fileType.contains('excel') || fileType.contains('spreadsheet')) {
+      return Icons.table_chart_outlined;
+    }
+    return Icons.insert_drive_file_outlined;
+  }
+
+  String _formatDate(Timestamp? timestamp) {
+    if (timestamp == null) return '';
+    final date = timestamp.toDate();
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -348,19 +488,15 @@ class CompanyContactScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Kontakt företag'), elevation: 0),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('companies')
-            .where('studentId', isEqualTo: user.uid)
-            .limit(1)
-            .snapshots(),
+      body: FutureBuilder<QueryDocumentSnapshot<Map<String, dynamic>>?>(
+        future: _findCompanyForStudent(user.uid),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final docs = snapshot.data?.docs ?? [];
-          if (docs.isEmpty) {
+          final companyDoc = snapshot.data;
+          if (companyDoc == null) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
@@ -395,7 +531,10 @@ class CompanyContactScreen extends StatelessWidget {
             );
           }
 
-          final data = docs.first.data() as Map<String, dynamic>;
+          final data = companyDoc.data();
+          final companyId = companyDoc.id;
+            final companyTeacherId =
+              (data['teacherUid'] ?? '').toString().trim();
           final name = data['name'] as String? ?? 'Företag';
           final contactHeading = data['contactHeading'] as String?;
           final address = data['address'] as String?;
@@ -491,7 +630,421 @@ class CompanyContactScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 12),
+              FutureBuilder<_UserScope>(
+                future: _resolveUserScope(user.uid),
+                builder: (context, scopeSnapshot) {
+                  if (scopeSnapshot.connectionState == ConnectionState.waiting) {
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                        color: Colors.white,
+                      ),
+                      child: const Center(child: CircularProgressIndicator()),
+                    );
+                  }
+
+                  final scope = scopeSnapshot.data;
+                  if (scope == null || scope.school.isEmpty) {
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                        color: Colors.white,
+                      ),
+                      child: const Text(
+                        'Kunde inte ladda företagsdokument.',
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    );
+                  }
+
+                  Query<Map<String, dynamic>> documentsQuery = FirebaseFirestore
+                      .instance
+                      .collection('aplDocuments')
+                      .where('school', isEqualTo: scope.school)
+                      .where('category', isEqualTo: 'kontakt_foretag');
+
+                  final teacherFilter = companyTeacherId.isNotEmpty
+                      ? companyTeacherId
+                      : scope.teacherId;
+                  if (teacherFilter.isNotEmpty) {
+                    documentsQuery = documentsQuery.where(
+                      'teacherId',
+                      isEqualTo: teacherFilter,
+                    );
+                  }
+
+                  return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: documentsQuery.snapshots(),
+                    builder: (context, documentsSnapshot) {
+                      if (documentsSnapshot.connectionState ==
+                          ConnectionState.waiting) {
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey.shade200),
+                            color: Colors.white,
+                          ),
+                          child: const Center(child: CircularProgressIndicator()),
+                        );
+                      }
+
+                      final companyDocs = (documentsSnapshot.data?.docs ?? [])
+                          .where((doc) {
+                            final docData = doc.data();
+                            return (docData['companyId'] ?? '').toString() ==
+                                companyId;
+                          })
+                          .toList()
+                        ..sort((a, b) {
+                          final aTs = a.data()['uploadedAt'] as Timestamp?;
+                          final bTs = b.data()['uploadedAt'] as Timestamp?;
+                          if (aTs == null && bTs == null) return 0;
+                          if (aTs == null) return 1;
+                          if (bTs == null) return -1;
+                          return bTs.compareTo(aTs);
+                        });
+
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.orange.shade200),
+                          color: Colors.white,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Företagsdokument',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            if (companyDocs.isEmpty)
+                              Text(
+                                'Inga dokument uppladdade ännu.',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade600,
+                                ),
+                              )
+                            else
+                              ...companyDocs.map((docSnap) {
+                                final docData = docSnap.data();
+                                final title =
+                                    (docData['title'] ?? 'Dokument').toString();
+                                final url = (docData['url'] ?? '').toString();
+                                final fileType = docData['fileType'] as String?;
+                                final uploadedAt =
+                                    docData['uploadedAt'] as Timestamp?;
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: url.isEmpty
+                                          ? null
+                                          : () => _openDocument(
+                                                context,
+                                                url,
+                                                title,
+                                              ),
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 10,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          border: Border.all(
+                                            color: Colors.grey.shade200,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              _getFileIcon(fileType),
+                                              size: 22,
+                                              color: Colors.blue.shade600,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    title,
+                                                    style: const TextStyle(
+                                                      fontSize: 14,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                  if (uploadedAt != null)
+                                                    Text(
+                                                      _formatDate(uploadedAt),
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors
+                                                            .grey.shade600,
+                                                      ),
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                            Icon(
+                                              Icons.open_in_new_rounded,
+                                              size: 18,
+                                              color: Colors.grey.shade500,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class SchoolContactScreen extends StatelessWidget {
+  const SchoolContactScreen({super.key});
+
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _filterForStudent(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    String studentUid,
+    String studentClassId,
+  ) {
+    return docs.where((doc) {
+      final data = doc.data();
+      final singleStudentId = (data['studentId'] ?? '').toString().trim();
+      final rawStudentIds = data['studentIds'];
+      final rawClassIds = data['classIds'];
+
+      final studentIds = <String>[];
+      if (rawStudentIds is List) {
+        for (final value in rawStudentIds) {
+          final id = value.toString().trim();
+          if (id.isNotEmpty) studentIds.add(id);
+        }
+      }
+
+      final classIds = <String>[];
+      if (rawClassIds is List) {
+        for (final value in rawClassIds) {
+          final id = value.toString().trim();
+          if (id.isNotEmpty) classIds.add(id);
+        }
+      }
+
+      if (studentIds.isEmpty && singleStudentId.isEmpty && classIds.isEmpty) {
+        return true;
+      }
+      if (singleStudentId == studentUid) {
+        return true;
+      }
+      if (studentIds.contains(studentUid)) {
+        return true;
+      }
+      if (studentClassId.isNotEmpty && classIds.contains(studentClassId)) {
+        return true;
+      }
+      return false;
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Kontakt skola'), elevation: 0),
+        body: const Center(
+          child: Text('Logga in igen för att se information.'),
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Kontakt skola'), elevation: 0),
+      body: FutureBuilder<_UserScope>(
+        future: _resolveUserScope(user.uid),
+        builder: (context, scopeSnapshot) {
+          if (scopeSnapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final scope = scopeSnapshot.data;
+          if (scope == null || scope.school.isEmpty || scope.teacherId.isEmpty) {
+            return const Center(
+              child: Text('Kunde inte ladda skolkontakter.'),
+            );
+          }
+
+          final contactsQuery = FirebaseFirestore.instance
+              .collection('schoolContacts')
+              .where('school', isEqualTo: scope.school)
+              .where('teacherUid', isEqualTo: scope.teacherId);
+
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: contactsQuery.snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final filtered = _filterForStudent(
+                snapshot.data?.docs ?? [],
+                user.uid,
+                scope.classId,
+              );
+
+              if (filtered.isEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.school_outlined,
+                          size: 64,
+                          color: Colors.grey.shade300,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Inga skolkontakter ännu',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Din lärare har inte lagt upp några kontakter ännu.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: filtered.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final data = filtered[index].data();
+                  final name = (data['name'] ?? 'Kontakt').toString();
+                  final address = (data['address'] ?? '').toString();
+                  final phone = (data['phone'] ?? '').toString();
+                  final email = (data['email'] ?? '').toString();
+
+                  final List<Map<String, String>> sections = [];
+                  final rawSections = data['contactSections'];
+                  if (rawSections is List) {
+                    for (final raw in rawSections) {
+                      if (raw is Map) {
+                        final heading = (raw['heading'] ?? '').toString().trim();
+                        final content = (raw['content'] ?? '').toString().trim();
+                        if (heading.isNotEmpty || content.isNotEmpty) {
+                          sections.add({'heading': heading, 'content': content});
+                        }
+                      }
+                    }
+                  }
+
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.shade200),
+                      color: Colors.white,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        if (address.isNotEmpty)
+                          _InfoRow(icon: Icons.location_on_outlined, label: address),
+                        if (phone.isNotEmpty)
+                          _InfoRow(
+                            icon: Icons.phone_outlined,
+                            label: phone,
+                            linkifyPhones: true,
+                          ),
+                        if (email.isNotEmpty)
+                          _InfoRow(icon: Icons.mail_outline_rounded, label: email),
+                        if (sections.isNotEmpty) const SizedBox(height: 8),
+                        ...sections.map(
+                          (section) => Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if ((section['heading'] ?? '').isNotEmpty) ...[
+                                  Text(
+                                    section['heading']!,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.grey.shade800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                ],
+                                if ((section['content'] ?? '').isNotEmpty)
+                                  _InfoRow(
+                                    icon: Icons.person_outline_rounded,
+                                    label: section['content']!,
+                                    linkifyPhones: true,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
           );
         },
       ),
@@ -642,6 +1195,10 @@ class _CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (categoryId == 'kontakt_skola') {
+      return _SchoolContactCard(categoryName: categoryName, icon: icon);
+    }
+
     final currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
@@ -666,7 +1223,7 @@ class _CategoryCard extends StatelessWidget {
         }
 
         final scope = userSnapshot.data ??
-            const _UserScope(school: '', teacherId: '');
+          const _UserScope(school: '', teacherId: '', classId: '');
         final schoolId = scope.school;
         final teacherId = scope.teacherId;
 
@@ -856,8 +1413,8 @@ class CategoryDocumentsScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final scope =
-              userSnapshot.data ?? const _UserScope(school: '', teacherId: '');
+            final scope = userSnapshot.data ??
+              const _UserScope(school: '', teacherId: '', classId: '');
           final schoolId = scope.school;
           final teacherId = scope.teacherId;
 

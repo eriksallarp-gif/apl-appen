@@ -92,6 +92,10 @@ export default function DocumentCategoryPage() {
   useEffect(() => {
     if (categoryId === 'kontakt_foretag') {
       router.replace('/dashboard/companies');
+      return;
+    }
+    if (categoryId === 'kontakt_skola') {
+      router.replace('/dashboard/school-contacts');
     }
   }, [categoryId, router]);
 

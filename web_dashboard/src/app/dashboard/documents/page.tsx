@@ -308,6 +308,8 @@ export default function DocumentsPage() {
                   router.push(
                     cat.id === 'kontakt_foretag'
                       ? '/dashboard/companies'
+                      : cat.id === 'kontakt_skola'
+                        ? '/dashboard/school-contacts'
                       : `/dashboard/documents/${cat.id}`,
                   )
                 }

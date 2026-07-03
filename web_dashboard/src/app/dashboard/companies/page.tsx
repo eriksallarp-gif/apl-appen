@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { storage } from '@/lib/firebase';
 import { 
   collection, 
   getDocs, 
@@ -14,8 +15,10 @@ import {
   getDoc,
   query,
   where,
+  orderBy,
   Timestamp
 } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { usePathname } from 'next/navigation';
 
 interface Company {
@@ -50,6 +53,16 @@ interface StudentData {
 interface ContactSection {
   heading: string;
   content: string;
+}
+
+interface CompanyDocument {
+  id: string;
+  title: string;
+  url: string;
+  fileType: string;
+  fileName: string;
+  uploadedAt?: any;
+  companyId?: string;
 }
 
 function normalizeStudentIds(singleStudentId?: string | null, multipleStudentIds?: unknown): string[] {
@@ -94,6 +107,14 @@ export default function CompaniesPage() {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [expandedCompanyId, setExpandedCompanyId] = useState<string | null>(null);
+  const [userSchoolId, setUserSchoolId] = useState('');
+  const [companyDocuments, setCompanyDocuments] = useState<Record<string, CompanyDocument[]>>({});
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [selectedCompanyForDocument, setSelectedCompanyForDocument] = useState<Company | null>(null);
+  const [documentTitle, setDocumentTitle] = useState('');
+  const [selectedDocumentFile, setSelectedDocumentFile] = useState<File | null>(null);
+  const [uploadingDocument, setUploadingDocument] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     address: '',
@@ -120,6 +141,7 @@ export default function CompaniesPage() {
       if (userDoc.exists()) {
         const role = userDoc.data().role;
         setUserRole(role);
+        setUserSchoolId((userDoc.data().school || '').toString());
         
         if (role !== 'teacher' && role !== 'admin') {
           router.push('/dashboard');
@@ -128,14 +150,14 @@ export default function CompaniesPage() {
       }
       
       setUser(currentUser);
-      await fetchData(currentUser.uid, userDoc.data()?.role);
+      await fetchData(currentUser.uid, userDoc.data()?.role, (userDoc.data()?.school || '').toString());
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [router]);
 
-  const fetchData = async (currentUserId: string, role?: string) => {
+  const fetchData = async (currentUserId: string, role?: string, schoolId?: string) => {
     try {
       // Fetch classes
       const classesSnapshot = await getDocs(collection(db, 'classes'));
@@ -187,6 +209,38 @@ export default function CompaniesPage() {
       } as Company));
       
       setCompanies(companiesData);
+
+      const resolvedSchoolId = (schoolId || '').trim();
+      if (resolvedSchoolId) {
+        const docConstraints: any[] = [
+          where('school', '==', resolvedSchoolId),
+          where('category', '==', 'kontakt_foretag'),
+        ];
+        if (isTeacher) {
+          docConstraints.push(where('teacherId', '==', currentUserId));
+        }
+        docConstraints.push(orderBy('uploadedAt', 'desc'));
+        const aplDocsSnapshot = await getDocs(query(collection(db, 'aplDocuments'), ...docConstraints));
+        const groupedDocs: Record<string, CompanyDocument[]> = {};
+        for (const aplDoc of aplDocsSnapshot.docs) {
+          const data = aplDoc.data() as Omit<CompanyDocument, 'id'>;
+          const companyId = (data.companyId || '').toString();
+          if (!companyId) continue;
+          if (!groupedDocs[companyId]) groupedDocs[companyId] = [];
+          groupedDocs[companyId].push({
+            id: aplDoc.id,
+            title: data.title || 'Dokument',
+            url: data.url || '',
+            fileType: data.fileType || '',
+            fileName: data.fileName || '',
+            uploadedAt: data.uploadedAt,
+            companyId,
+          });
+        }
+        setCompanyDocuments(groupedDocs);
+      } else {
+        setCompanyDocuments({});
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
     }
@@ -251,7 +305,7 @@ export default function CompaniesPage() {
       setStudentSearchTerm('');
       setShowAddModal(false);
       setEditingCompany(null);
-      await fetchData(user.uid, userRole || undefined);
+      await fetchData(user.uid, userRole || undefined, userSchoolId);
     } catch (error) {
       console.error('Error saving company:', error);
       alert('Ett fel uppstod när företaget skulle sparas');
@@ -298,7 +352,7 @@ export default function CompaniesPage() {
 
     try {
       await deleteDoc(doc(db, 'companies', companyId));
-      await fetchData(user.uid, userRole || undefined);
+      await fetchData(user.uid, userRole || undefined, userSchoolId);
     } catch (error) {
       console.error('Error deleting company:', error);
       alert('Ett fel uppstod när företaget skulle tas bort');
@@ -392,6 +446,86 @@ export default function CompaniesPage() {
       }));
   }, [filteredStudents]);
 
+  const toggleCompanyExpanded = (companyId: string) => {
+    setExpandedCompanyId((current) => (current === companyId ? null : companyId));
+  };
+
+  const openDocumentModal = (company: Company) => {
+    setSelectedCompanyForDocument(company);
+    setDocumentTitle('');
+    setSelectedDocumentFile(null);
+    setShowDocumentModal(true);
+  };
+
+  const closeDocumentModal = () => {
+    setShowDocumentModal(false);
+    setSelectedCompanyForDocument(null);
+    setDocumentTitle('');
+    setSelectedDocumentFile(null);
+  };
+
+  const formatDocumentDate = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('sv-SE', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const handleDocumentFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setSelectedDocumentFile(file);
+    if (file && !documentTitle.trim()) {
+      setDocumentTitle(file.name.replace(/\.[^/.]+$/, ''));
+    }
+  };
+
+  const handleUploadCompanyDocument = async () => {
+    if (!user || !selectedCompanyForDocument || !selectedDocumentFile || !documentTitle.trim()) {
+      alert('Fyll i dokumenttitel och välj en fil');
+      return;
+    }
+    if (!userSchoolId) {
+      alert('Kunde inte hitta din skola. Kontakta administratör.');
+      return;
+    }
+
+    setUploadingDocument(true);
+    try {
+      const fileName = `${selectedCompanyForDocument.id}__${Date.now()}_${selectedDocumentFile.name}`;
+      const storageRef = ref(storage, `apl-documents/kontakt_foretag/${fileName}`);
+      await uploadBytes(storageRef, selectedDocumentFile);
+      const downloadURL = await getDownloadURL(storageRef);
+
+      await addDoc(collection(db, 'aplDocuments'), {
+        title: documentTitle.trim(),
+        category: 'kontakt_foretag',
+        url: downloadURL,
+        fileType: selectedDocumentFile.type,
+        fileName,
+        uploadedBy: user.uid,
+        school: userSchoolId,
+        teacherId: user.uid,
+        companyId: selectedCompanyForDocument.id,
+        companyName: selectedCompanyForDocument.name,
+        createdAt: Timestamp.now(),
+        uploadedAt: Timestamp.now(),
+      });
+
+      await fetchData(user.uid, userRole || undefined, userSchoolId);
+      closeDocumentModal();
+      setExpandedCompanyId(selectedCompanyForDocument.id);
+      alert('Dokument uppladdat');
+    } catch (error) {
+      console.error('Error uploading company document:', error);
+      alert('Ett fel uppstod vid uppladdning av dokument');
+    } finally {
+      setUploadingDocument(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -410,10 +544,10 @@ export default function CompaniesPage() {
             <p className="text-gray-600 mt-1">Hantera företag där eleverna har APL</p>
           </div>
           <button
-            onClick={() => router.push('/dashboard')}
+            onClick={() => router.push('/dashboard/documents')}
             className="px-4 py-2 text-gray-600 hover:text-gray-900 transition"
           >
-            ← Tillbaka till översikt
+            ← Tillbaka till dokument
           </button>
         </div>
 
@@ -453,6 +587,7 @@ export default function CompaniesPage() {
         ) : (
           <div className="divide-y divide-gray-200">
             {companies.map((company) => {
+              const isExpanded = expandedCompanyId === company.id;
               const companyClass = classes.find(c => c.id === company.classId);
               const companyStudentIds = normalizeStudentIds(company.studentId, company.studentIds);
               const companyContactSections = normalizeContactSections(
@@ -468,14 +603,23 @@ export default function CompaniesPage() {
               const linkedStudents = companyStudentIds
                 .map((studentId) => students.find((student) => student.id === studentId))
                 .filter((student): student is StudentData => !!student);
+              const docsForCompany = companyDocuments[company.id] || [];
               return (
-                <div key={company.id} className="p-6 hover:bg-gray-50 transition">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        {company.name}
-                      </h3>
+                <div key={company.id} className="transition">
+                  <button
+                    type="button"
+                    onClick={() => toggleCompanyExpanded(company.id)}
+                    className="flex w-full items-center justify-between px-6 py-4 text-left hover:bg-gray-50 transition"
+                    aria-expanded={isExpanded}
+                  >
+                    <span className="text-lg font-semibold text-gray-900">{company.name}</span>
+                    <span className="text-sm font-medium text-gray-500">
+                      {isExpanded ? '▲ Dölj info' : '▼ Visa info'}
+                    </span>
+                  </button>
 
+                  {isExpanded && (
+                    <div className="border-t border-gray-100 px-6 pb-6 pt-4">
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
                         Företagsinfo
                       </p>
@@ -528,6 +672,7 @@ export default function CompaniesPage() {
                           </span>
                         </div>
                       )}
+
                       {linkedStudents.length > 0 && (
                         <div className="mt-2">
                           <div className="flex flex-wrap gap-2">
@@ -539,22 +684,56 @@ export default function CompaniesPage() {
                           </div>
                         </div>
                       )}
+
+                      <div className="mt-4">
+                        <div className="mb-2 flex items-center justify-between">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            Företagsdokument
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => openDocumentModal(company)}
+                            className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm font-medium text-orange-700 hover:bg-orange-100"
+                          >
+                            + Lägg till dokument
+                          </button>
+                        </div>
+                        {docsForCompany.length === 0 ? (
+                          <p className="text-sm text-gray-500">Inga dokument uppladdade ännu.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {docsForCompany.map((docItem) => (
+                              <a
+                                key={docItem.id}
+                                href={docItem.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                              >
+                                <span className="truncate pr-3">{docItem.title}</span>
+                                <span className="text-xs text-gray-500">{formatDocumentDate(docItem.uploadedAt)}</span>
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-4 flex gap-2">
+                        <button
+                          onClick={() => handleEdit(company)}
+                          className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition"
+                        >
+                          Redigera
+                        </button>
+                        <button
+                          onClick={() => handleDelete(company.id)}
+                          className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition"
+                        >
+                          Ta bort
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex gap-2 ml-4">
-                      <button
-                        onClick={() => handleEdit(company)}
-                        className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition"
-                      >
-                        Redigera
-                      </button>
-                      <button
-                        onClick={() => handleDelete(company.id)}
-                        className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition"
-                      >
-                        Ta bort
-                      </button>
-                    </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
@@ -766,6 +945,64 @@ export default function CompaniesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showDocumentModal && selectedCompanyForDocument && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="w-full max-w-lg rounded-lg bg-white shadow-xl">
+            <div className="border-b border-gray-200 p-6">
+              <h2 className="text-2xl font-bold">Lägg till dokument</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Företag: {selectedCompanyForDocument.name}
+              </p>
+            </div>
+            <div className="space-y-4 p-6">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Dokumenttitel <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={documentTitle}
+                  onChange={(e) => setDocumentTitle(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-orange-500"
+                  placeholder="t.ex. Säkerhetsrutin APL"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">
+                  Fil <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="file"
+                  onChange={handleDocumentFileSelect}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                />
+                {selectedDocumentFile && (
+                  <p className="mt-2 text-xs text-gray-500">Vald fil: {selectedDocumentFile.name}</p>
+                )}
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleUploadCompanyDocument}
+                  disabled={uploadingDocument}
+                  className="flex-1 rounded-lg bg-orange-600 px-6 py-3 font-medium text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {uploadingDocument ? 'Laddar upp...' : 'Lägg till dokument'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeDocumentModal}
+                  disabled={uploadingDocument}
+                  className="rounded-lg bg-gray-100 px-6 py-3 text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Avbryt
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

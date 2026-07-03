@@ -402,7 +402,12 @@
         // Companies collection (för APL-företag)
         match /companies/{companyId} {
           // Teachers/admins can read all, students can read only their linked company
-          allow read: if isTeacherOrAdmin() || (isStudent() && resource.data.studentId == request.auth.uid);
+          allow read: if isTeacherOrAdmin() || (
+            isStudent() && (
+              resource.data.get('studentId', '') == request.auth.uid ||
+              resource.data.get('studentIds', []).hasAny([request.auth.uid])
+            )
+          );
 
           // Teachers can create companies
           allow create: if isTeacher() || isAdmin();
@@ -411,6 +416,28 @@
           allow update, delete: if isSignedIn() && (
             request.auth.uid == resource.data.teacherUid ||
             isAdmin()
+          );
+        }
+
+        // School contacts collection (kontakt skola)
+        match /schoolContacts/{contactId} {
+          // Teachers/admins can read, students only from their assigned teacher in same school
+          allow read: if isAdmin() ||
+            (isTeacher() && resource.data.get('school', '') == userSchool()) ||
+            (
+              isStudent() &&
+              resource.data.get('school', '') == userSchool() &&
+              resource.data.get('teacherUid', '') == userTeacherUid(request.auth.uid)
+            );
+
+          // Teachers/admins can create school contacts for their own school
+          allow create: if isSignedIn() && isTeacherOrAdmin() &&
+            request.resource.data.get('school', '') == userSchool() &&
+            request.resource.data.get('teacherUid', '') == request.auth.uid;
+
+          // Update/delete by admins or owning teacher
+          allow update, delete: if isSignedIn() && (
+            isAdmin() || resource.data.get('teacherUid', '') == request.auth.uid
           );
         }
 
