@@ -105,7 +105,7 @@ function generateOtpCode() {
 }
 
 function buildOtpMessage(code) {
-  return `Din verifieringskod for APL-appen ar: ${code}. Koden ar giltig i 5 minuter.`;
+  return `Din verifieringskod för APL-appen är: ${code}. Koden är giltig i 5 minuter.`;
 }
 
 async function sendOtpViaTwilio(phoneNumber, message) {
@@ -495,28 +495,28 @@ exports.startSupervisorAssessmentVerification = functions.https.onCall(async (da
     const ref = db.collection('assessmentRequests').doc(requestId);
     const snap = await tx.get(ref);
     if (!snap.exists) {
-      throw new functions.https.HttpsError('not-found', 'Bedomningsforfragan hittades inte.');
+      throw new functions.https.HttpsError('not-found', 'Bedömningsförfrågan hittades inte.');
     }
 
     const requestData = snap.data() || {};
     if (toSafeString(requestData.token) !== token) {
-      throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
+      throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgången länk.');
     }
 
     const currentStatus = toSafeString(requestData.status) || 'pending';
     if (currentStatus === 'submitted') {
-      throw new functions.https.HttpsError('failed-precondition', 'Denna bedomning har redan skickats in.');
+      throw new functions.https.HttpsError('failed-precondition', 'Denna bedömning har redan skickats in.');
     }
     if (currentStatus === 'pending_verification') {
       throw new functions.https.HttpsError(
         'failed-precondition',
-        'SMS-verifiering pagar redan. Avbryt verifieringen forst om du vill byta nummer.',
+        'SMS-verifiering pågår redan. Avbryt verifieringen först om du vill byta nummer.',
       );
     }
 
     const expiresAt = timestampToDate(requestData.expiresAt);
     if (expiresAt && expiresAt < now) {
-      throw new functions.https.HttpsError('failed-precondition', 'Denna lank har utgatt.');
+      throw new functions.https.HttpsError('failed-precondition', 'Denna länk har utgått.');
     }
 
     tx.update(ref, {
@@ -557,12 +557,12 @@ exports.getSupervisorVerificationState = functions.https.onCall(async (data) => 
   const ref = db.collection('assessmentRequests').doc(requestId);
   const snap = await ref.get();
   if (!snap.exists) {
-    throw new functions.https.HttpsError('not-found', 'Bedomningsforfragan hittades inte.');
+    throw new functions.https.HttpsError('not-found', 'Bedömningsförfrågan hittades inte.');
   }
 
   const requestData = snap.data() || {};
   if (toSafeString(requestData.token) !== token) {
-    throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
+    throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgången länk.');
   }
 
   const currentStatus = toSafeString(requestData.status) || 'pending';
@@ -601,12 +601,12 @@ exports.resendSupervisorAssessmentOtp = functions.https.onCall(async (data) => {
     const ref = db.collection('assessmentRequests').doc(requestId);
     const snap = await tx.get(ref);
     if (!snap.exists) {
-      throw new functions.https.HttpsError('not-found', 'Bedomningsforfragan hittades inte.');
+      throw new functions.https.HttpsError('not-found', 'Bedömningsförfrågan hittades inte.');
     }
 
     const requestData = snap.data() || {};
     if (toSafeString(requestData.token) !== token) {
-      throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
+      throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgången länk.');
     }
 
     const currentStatus = toSafeString(requestData.status) || 'pending';
@@ -618,7 +618,7 @@ exports.resendSupervisorAssessmentOtp = functions.https.onCall(async (data) => {
     lockedPhone = toSafeString(pendingVerification.lockedPhone);
     phoneMasked = toSafeString(pendingVerification.phoneMasked);
     if (!lockedPhone) {
-      throw new functions.https.HttpsError('failed-precondition', 'Saknar last nummer for verifiering.');
+      throw new functions.https.HttpsError('failed-precondition', 'Saknar låst nummer för verifiering.');
     }
 
     const windowStartDate = timestampToDate(pendingVerification.otpResendWindowStart);
@@ -633,7 +633,7 @@ exports.resendSupervisorAssessmentOtp = functions.https.onCall(async (data) => {
     if (resendCount >= 3) {
       throw new functions.https.HttpsError(
         'resource-exhausted',
-        'For manga SMS-utskick. Forsok igen om 15 minuter.',
+        'För många SMS-utskick. Försök igen om 15 minuter.',
       );
     }
 
@@ -672,11 +672,11 @@ exports.cancelSupervisorAssessmentVerification = functions.https.onCall(async (d
     const ref = db.collection('assessmentRequests').doc(requestId);
     const snap = await tx.get(ref);
     if (!snap.exists) {
-      throw new functions.https.HttpsError('not-found', 'Bedomningsforfragan hittades inte.');
+      throw new functions.https.HttpsError('not-found', 'Bedömningsförfrågan hittades inte.');
     }
     const requestData = snap.data() || {};
     if (toSafeString(requestData.token) !== token) {
-      throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
+      throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgången länk.');
     }
 
     const currentStatus = toSafeString(requestData.status) || 'pending';
@@ -708,12 +708,12 @@ exports.verifySupervisorAssessmentOtp = functions.https.onCall(async (data) => {
     const snap = await tx.get(ref);
 
     if (!snap.exists) {
-      throw new functions.https.HttpsError('not-found', 'Bedomningsforfragan hittades inte.');
+      throw new functions.https.HttpsError('not-found', 'Bedömningsförfrågan hittades inte.');
     }
 
     const requestData = snap.data() || {};
     if (toSafeString(requestData.token) !== token) {
-      throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgangen lank.');
+      throw new functions.https.HttpsError('permission-denied', 'Ogiltig eller utgången länk.');
     }
 
     const currentStatus = toSafeString(requestData.status) || 'pending';
@@ -730,15 +730,15 @@ exports.verifySupervisorAssessmentOtp = functions.https.onCall(async (data) => {
     const now = new Date();
 
     if (!lockedPhone || !otpCodeHash || !draft || typeof draft !== 'object') {
-      throw new functions.https.HttpsError('failed-precondition', 'Verifieringssessionen ar ogiltig.');
+      throw new functions.https.HttpsError('failed-precondition', 'Verifieringssessionen är ogiltig.');
     }
 
     if (!otpExpiresAt || otpExpiresAt < now) {
-      throw new functions.https.HttpsError('deadline-exceeded', 'SMS-koden har gatt ut. Begar en ny kod.');
+      throw new functions.https.HttpsError('deadline-exceeded', 'SMS-koden har gått ut. Begär en ny kod.');
     }
 
     if (otpAttemptsLeft <= 0) {
-      throw new functions.https.HttpsError('resource-exhausted', 'For manga felaktiga forsok. Begar en ny kod.');
+      throw new functions.https.HttpsError('resource-exhausted', 'För många felaktiga försök. Begär en ny kod.');
     }
 
     const hashedInputCode = hashOtpCode(code);
@@ -746,7 +746,7 @@ exports.verifySupervisorAssessmentOtp = functions.https.onCall(async (data) => {
       tx.update(ref, {
         'pendingVerification.otpAttemptsLeft': Math.max(0, otpAttemptsLeft - 1),
       });
-      throw new functions.https.HttpsError('permission-denied', 'Fel kod. Forsok igen.');
+      throw new functions.https.HttpsError('permission-denied', 'Fel kod. Försök igen.');
     }
 
     tx.update(ref, {
