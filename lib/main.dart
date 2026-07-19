@@ -891,11 +891,13 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
   Widget _buildProgramStep(List<ProgramOption> availablePrograms) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final bottomInset = MediaQuery.of(context).viewPadding.bottom;
         return SingleChildScrollView(
+          padding: EdgeInsets.only(bottom: 24 + bottomInset),
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Icon(
@@ -989,11 +991,13 @@ class _StudentOnboardingScreenState extends State<StudentOnboardingScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final bottomInset = MediaQuery.of(context).viewPadding.bottom;
         return SingleChildScrollView(
+          padding: EdgeInsets.only(bottom: 24 + bottomInset),
           child: ConstrainedBox(
             constraints: BoxConstraints(minHeight: constraints.maxHeight),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Icon(Icons.construction, size: 80, color: Colors.orange),
@@ -1166,6 +1170,10 @@ class AuthGate extends StatelessWidget {
                 return const MainNavigation();
 
               default: // student
+                if (!user.emailVerified) {
+                  return StudentEmailVerificationScreen(user: user);
+                }
+
                 // Kolla om eleven har begärt radering
                 final deletionRequested =
                     data?['deletionRequested'] as bool? ?? false;
@@ -2337,6 +2345,145 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   }
 }
 
+class StudentEmailVerificationScreen extends StatefulWidget {
+  final User user;
+  const StudentEmailVerificationScreen({required this.user, super.key});
+
+  @override
+  State<StudentEmailVerificationScreen> createState() =>
+      _StudentEmailVerificationScreenState();
+}
+
+class _StudentEmailVerificationScreenState
+    extends State<StudentEmailVerificationScreen> {
+  bool _sending = false;
+  String? _message;
+
+  Future<void> _reloadAndContinue() async {
+    setState(() {
+      _message = 'Kontrollerar verifiering...';
+    });
+
+    try {
+      await widget.user.reload();
+      final currentUser = FirebaseAuth.instance.currentUser;
+
+      if (currentUser != null && currentUser.emailVerified) {
+        setState(() {
+          _message =
+              'E-post verifierad! Du skickas vidare till klasskodssidan.';
+        });
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const StudentOnboardingScreen()),
+          (route) => false,
+        );
+      } else {
+        setState(() {
+          _message =
+              'Kontot är fortfarande inte verifierat. Kontrollera din e-post och klicka på verifieringslänken.';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _message = 'Fel vid kontroll: $e';
+      });
+    }
+  }
+
+  Future<void> _resend() async {
+    setState(() {
+      _sending = true;
+      _message = null;
+    });
+
+    try {
+      final actionCodeSettings = ActionCodeSettings(
+        url: 'https://www.apl-appen.com',
+        handleCodeInApp: false,
+        androidPackageName: 'com.aplappen.app',
+        androidInstallApp: false,
+      );
+      await widget.user.sendEmailVerification(actionCodeSettings);
+      setState(() {
+        _message =
+            'Verifieringsmejl skickat igen. Kontrollera även skräppost.';
+      });
+    } catch (e) {
+      setState(() {
+        _message = 'Kunde inte skicka mejl: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _sending = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Verifiera din e-post'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logga ut',
+            onPressed: () => FirebaseAuth.instance.signOut(),
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'Ditt konto är skapat men inte verifierat ännu. Vi har skickat ett verifieringsmejl till din e-post.\n\nNär du verifierat mejlen släpps du vidare till klasskodssidan.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 24),
+            if (_message != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _message!,
+                  style: TextStyle(color: Colors.orange.shade900),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            ElevatedButton(
+              onPressed: _sending ? null : _resend,
+              child: _sending
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Skicka om e-post'),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _reloadAndContinue,
+              child: const Text('Jag har verifierat - fortsätt'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // Dialog som hanterar elevregistrering internt för att undvika race conditions
 class _StudentRegistrationDialog extends StatefulWidget {
   const _StudentRegistrationDialog();
@@ -2354,6 +2501,113 @@ class _StudentRegistrationDialogState
   final _passCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
+
+  bool get _hasMinLength => _passCtrl.text.length >= 8;
+  bool get _hasUppercase => RegExp(r'[A-Z]').hasMatch(_passCtrl.text);
+  bool get _hasDigit => RegExp(r'\d').hasMatch(_passCtrl.text);
+  bool get _hasLowercase => RegExp(r'[a-z]').hasMatch(_passCtrl.text);
+  bool get _hasSpecial => RegExp(r'[^A-Za-z0-9]').hasMatch(_passCtrl.text);
+
+  int get _passwordStrengthScore {
+    final password = _passCtrl.text;
+    if (password.isEmpty) return 0;
+
+    var score = 0;
+    if (_hasMinLength) score += 1;
+    if (_hasUppercase) score += 1;
+    if (_hasDigit) score += 1;
+    if (_hasLowercase) score += 1;
+    if (_hasSpecial || password.length >= 12) score += 1;
+    return score;
+  }
+
+  String get _passwordStrengthLabel {
+    final score = _passwordStrengthScore;
+    if (score == 0) return 'Ej angivet';
+    if (score <= 2) return 'Svagt';
+    if (score <= 4) return 'Medel';
+    return 'Starkt';
+  }
+
+  Color get _passwordStrengthColor {
+    final score = _passwordStrengthScore;
+    if (score == 0) return Colors.grey;
+    if (score <= 2) return Colors.red;
+    if (score <= 4) return Colors.orange;
+    return Colors.green;
+  }
+
+  String? _validatePassword(String password) {
+    if (password.length < 8) {
+      return 'Lösenordet måste vara minst 8 tecken.';
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(password)) {
+      return 'Lösenordet måste innehålla minst en stor bokstav.';
+    }
+    if (!RegExp(r'\d').hasMatch(password)) {
+      return 'Lösenordet måste innehålla minst en siffra.';
+    }
+    return null;
+  }
+
+  Widget _buildPasswordRule(String text, bool passed) {
+    return Row(
+      children: [
+        Icon(
+          passed ? Icons.check_circle : Icons.radio_button_unchecked,
+          size: 16,
+          color: passed ? Colors.green : Colors.grey,
+        ),
+        const SizedBox(width: 6),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 12,
+            color: passed ? Colors.green.shade700 : Colors.grey.shade700,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPasswordStrengthIndicator() {
+    final score = _passwordStrengthScore;
+    final color = _passwordStrengthColor;
+    final progress = score / 5;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Lösenordsstyrka',
+              style: TextStyle(fontSize: 12, color: Colors.black87),
+            ),
+            Text(
+              _passwordStrengthLabel,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            minHeight: 8,
+            value: progress,
+            backgroundColor: Colors.grey.shade300,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   void dispose() {
@@ -2378,6 +2632,12 @@ class _StudentRegistrationDialogState
       return;
     }
 
+    final passwordError = _validatePassword(password);
+    if (passwordError != null) {
+      setState(() => _error = passwordError);
+      return;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
@@ -2393,6 +2653,14 @@ class _StudentRegistrationDialogState
       final fullName = '$firstName $lastName'.trim();
 
       await cred.user!.updateDisplayName(fullName);
+
+      final actionCodeSettings = ActionCodeSettings(
+        url: 'https://www.apl-appen.com',
+        handleCodeInApp: false,
+        androidPackageName: 'com.aplappen.app',
+        androidInstallApp: false,
+      );
+      await cred.user!.sendEmailVerification(actionCodeSettings);
 
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'name': fullName,
@@ -2468,14 +2736,24 @@ class _StudentRegistrationDialogState
                 controller: _passCtrl,
                 decoration: const InputDecoration(
                   labelText: 'Lösenord',
+                  hintText: 'Minst 8 tecken, 1 stor bokstav, 1 siffra',
                   border: OutlineInputBorder(),
                 ),
+                onChanged: (_) => setState(() {}),
                 obscureText: true,
                 enabled: !_loading,
               ),
               const SizedBox(height: 8),
+              _buildPasswordStrengthIndicator(),
+              const SizedBox(height: 8),
+              _buildPasswordRule('Minst 8 tecken', _hasMinLength),
+              const SizedBox(height: 4),
+              _buildPasswordRule('Minst 1 stor bokstav', _hasUppercase),
+              const SizedBox(height: 4),
+              _buildPasswordRule('Minst 1 siffra', _hasDigit),
+              const SizedBox(height: 8),
               const Text(
-                'Du kommer att ange klasskod, program och eventuell yrkesutgång efter att kontot skapats',
+                'Du kommer att ange klasskod, program och yrkesutgång efter att din e-mail har verifierats.',
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
               if (_error != null) ...[

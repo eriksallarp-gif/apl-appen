@@ -142,7 +142,7 @@ class _GdprConsentScreenState extends State<GdprConsentScreen> {
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : const Text('Godkann och fortsatt'),
+                                : const Text('Godkänn och fortsätt'),
                           ),
                         ),
                       ],
