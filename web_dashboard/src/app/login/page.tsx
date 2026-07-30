@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
 import { sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
 function mapVerificationError(error: unknown): string {
   const authError = error as { code?: string; message?: string };
@@ -99,6 +99,13 @@ export default function LoginPage() {
         setError(verificationMessage);
         setLoading(false);
         return;
+      }
+
+      if (role === 'teacher' && user.emailVerified && userData.emailVerified !== true) {
+        await updateDoc(doc(db, 'users', user.uid), {
+          emailVerified: true,
+          emailVerifiedAt: serverTimestamp(),
+        });
       }
 
       // Check if teacher is approved

@@ -99,11 +99,13 @@
               'name', 'displayName', 'firstName', 'lastName',
               'email', 'role', 'school', 'approved',
               'mobileNumber', 'assignedPrograms',
+              'emailVerified',
               'createdAt', 'onboardingComplete'
             ]) &&
             request.resource.data.get('role', '') in ['student', 'teacher'] &&
             request.resource.data.get('mobileNumber', '') is string &&
             request.resource.data.get('assignedPrograms', []) is list &&
+            request.resource.data.get('emailVerified', false) == false &&
             request.resource.data.get('approved', false) == false &&
             request.resource.data.get('classId', '') == '' &&
             request.resource.data.get('teacherUid', '') == '' &&
@@ -126,7 +128,7 @@
             isUserActive() &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'name', 'displayName', 'firstName', 'lastName',
-              'program', 'specialization', 'onboardingComplete',
+              'program', 'assignedPrograms', 'mobileNumber', 'emailVerified', 'emailVerifiedAt', 'specialization', 'onboardingComplete',
               'gdprConsentAccepted', 'gdprConsentVersion',
               'gdprConsentAcceptedAt', 'gdprConsentLocale',
               'classId', 'teacherUid', 'teacherId', 'school'

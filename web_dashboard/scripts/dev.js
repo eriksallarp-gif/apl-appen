@@ -1,9 +1,21 @@
-const { rmSync } = require('node:fs');
+const { realpathSync, rmSync } = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const net = require('node:net');
 
-const projectRoot = path.resolve(__dirname, '..');
+function normalizeWindowsPathCase(targetPath) {
+  if (process.platform !== 'win32') {
+    return targetPath;
+  }
+
+  try {
+    return realpathSync.native(targetPath);
+  } catch {
+    return targetPath.replace(/^[a-z]:/, (drive) => drive.toUpperCase());
+  }
+}
+
+const projectRoot = normalizeWindowsPathCase(path.resolve(__dirname, '..'));
 const nextOutputDirectory = path.join(projectRoot, '.next');
 const devPort = 3001;
 

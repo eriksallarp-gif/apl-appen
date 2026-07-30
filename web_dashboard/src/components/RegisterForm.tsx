@@ -10,7 +10,7 @@ import {
   signOut,
   updateProfile,
 } from 'firebase/auth';
-import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore';
 
 type RegisterFormState = {
   firstName: string;
@@ -210,24 +210,13 @@ export default function RegisterForm() {
         firstName: trimmedFirstName,
         lastName: trimmedLastName,
         email,
+        emailVerified: false,
         mobileNumber,
         role: 'teacher',
         school,
         assignedPrograms: [program],
         approved: false,
         createdAt: serverTimestamp(),
-      });
-
-      await addDoc(collection(db, 'adminNotifications'), {
-        type: 'newTeacher',
-        teacherId: uid,
-        teacherName: trimmedFullName,
-        teacherEmail: email,
-        teacherPhone: mobileNumber,
-        school,
-        program,
-        createdAt: serverTimestamp(),
-        resolved: false,
       });
 
       await signOut(auth);

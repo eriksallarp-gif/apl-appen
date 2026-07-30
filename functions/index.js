@@ -1376,17 +1376,28 @@ exports.processScheduledDeletions = functions.pubsub
   });
 
 /**
- * Send notification email when a new teacher registers and needs approval.
- * Triggers when a new user document is created in Firestore.
+ * Send notification email when a teacher has verified their email and needs approval.
+ * Triggers on user document writes and sends once when emailVerified flips to true.
  */
 exports.onNewTeacherCreated = functions.firestore
   .document('users/{userId}')
-  .onCreate(async (snap, context) => {
-    const userData = snap.data();
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) {
+      return null;
+    }
+
+    const userData = change.after.data();
+    const beforeData = change.before.exists ? change.before.data() : null;
     const userId = context.params.userId;
     
     // Only send email for new teachers waiting for approval
     if (userData.role !== 'teacher' || userData.approved === true) {
+      return null;
+    }
+
+    const isVerifiedNow = userData.emailVerified === true;
+    const wasVerifiedBefore = beforeData?.emailVerified === true;
+    if (!isVerifiedNow || wasVerifiedBefore) {
       return null;
     }
 
@@ -1405,8 +1416,8 @@ exports.onNewTeacherCreated = functions.firestore
       subject: `Ny lärare väntar på godkännande: ${userData.name || userData.email || userId}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #ff7a00;">Ny lärare har registrerat sig</h2>
-          <p>En ny lärare har skapat ett konto och väntar på godkännande.</p>
+          <h2 style="color: #ff7a00;">Ny lärare väntar på godkännande</h2>
+          <p>En lärare har verifierat sin e-post och väntar nu på godkännande.</p>
           
           <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <p><strong>Namn:</strong> ${userData.name || '-'}</p>
