@@ -162,7 +162,8 @@ export default function NyHemsidaFaqPage() {
           <div className="mt-10 space-y-4" data-accordion-group="single">
             <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <summary className="cursor-pointer text-base font-semibold text-slate-900">Måste handledaren ha ett konto?</summary>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">Nej, signering sker via länk eller QR-kod beroende på ditt upplägg. Handledaren signerar bedömningen via SMS-verifiering.</p>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600">Nej, signering sker via länk eller QR-kod beroende på ditt upplägg. 
+                För att stärka signeringen innan appen har tillgång till mobilt bankID signerar handledaren bedömningen via SMS-verifiering.</p>
             </details>
 
             <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
