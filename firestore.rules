@@ -98,9 +98,12 @@
             request.resource.data.keys().hasOnly([
               'name', 'displayName', 'firstName', 'lastName',
               'email', 'role', 'school', 'approved',
+              'mobileNumber', 'assignedPrograms',
               'createdAt', 'onboardingComplete'
             ]) &&
             request.resource.data.get('role', '') in ['student', 'teacher'] &&
+            request.resource.data.get('mobileNumber', '') is string &&
+            request.resource.data.get('assignedPrograms', []) is list &&
             request.resource.data.get('approved', false) == false &&
             request.resource.data.get('classId', '') == '' &&
             request.resource.data.get('teacherUid', '') == '' &&
