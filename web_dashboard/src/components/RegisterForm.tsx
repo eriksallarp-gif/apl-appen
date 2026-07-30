@@ -10,14 +10,16 @@ import {
   signOut,
   updateProfile,
 } from 'firebase/auth';
-import { addDoc, collection, doc, getDocs, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore';
 
 type RegisterFormState = {
   firstName: string;
   lastName: string;
   password: string;
   email: string;
+  mobileNumber: string;
   school: string;
+  program: string;
 };
 
 type SchoolOption = {
@@ -25,13 +27,49 @@ type SchoolOption = {
   name: string;
 };
 
+type ProgramOption = {
+  id: string;
+  name: string;
+};
+
+const DEFAULT_PROGRAMS: ProgramOption[] = [
+  { id: 'Barn- och fritidsprogrammet', name: 'Barn- och fritidsprogrammet' },
+  { id: 'Bygg- och anläggningsprogrammet', name: 'Bygg- och anläggningsprogrammet' },
+  { id: 'El- och energiprogrammet', name: 'El- och energiprogrammet' },
+  { id: 'Fordons- och transportprogrammet', name: 'Fordons- och transportprogrammet' },
+  { id: 'Försäljning- och serviceprogrammet', name: 'Försäljning- och serviceprogrammet' },
+  { id: 'Industritekniska programmet', name: 'Industritekniska programmet' },
+  { id: 'Restaurang- och livsmedelsprogrammet', name: 'Restaurang- och livsmedelsprogrammet' },
+  { id: 'Vård- och omsorgsprogrammet', name: 'Vård- och omsorgsprogrammet' },
+  { id: 'VVS- och fastighetsprogrammet', name: 'VVS- och fastighetsprogrammet' },
+];
+
 const INITIAL_FORM: RegisterFormState = {
   firstName: '',
   lastName: '',
   password: '',
   email: '',
+  mobileNumber: '',
   school: '',
+  program: '',
 };
+
+function parseProgramOptions(rawPrograms: unknown): ProgramOption[] {
+  if (!Array.isArray(rawPrograms)) {
+    return DEFAULT_PROGRAMS;
+  }
+
+  const parsed = rawPrograms
+    .filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object')
+    .map((entry) => ({
+      id: String(entry.name ?? '').trim(),
+      name: String(entry.name ?? '').trim(),
+    }))
+    .filter((program) => program.name.length > 0)
+    .sort((a, b) => a.name.localeCompare(b.name, 'sv-SE'));
+
+  return parsed.length > 0 ? parsed : DEFAULT_PROGRAMS;
+}
 
 function mapAuthError(error: unknown): string {
   const authError = error as AuthError;
@@ -70,6 +108,8 @@ export default function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [schoolsLoading, setSchoolsLoading] = useState(true);
   const [schools, setSchools] = useState<SchoolOption[]>([]);
+  const [programsLoading, setProgramsLoading] = useState(true);
+  const [programs, setPrograms] = useState<ProgramOption[]>([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -98,6 +138,24 @@ export default function RegisterForm() {
     void loadSchools();
   }, []);
 
+  useEffect(() => {
+    const loadPrograms = async () => {
+      try {
+        setProgramsLoading(true);
+        const catalogDoc = await getDoc(doc(db, 'appSettings', 'programCatalog'));
+        const rawPrograms = catalogDoc.exists() ? catalogDoc.data()?.programs : [];
+        setPrograms(parseProgramOptions(rawPrograms));
+      } catch (loadError) {
+        setPrograms(DEFAULT_PROGRAMS);
+        console.error('Program load error:', loadError);
+      } finally {
+        setProgramsLoading(false);
+      }
+    };
+
+    void loadPrograms();
+  }, []);
+
   const trimmedFirstName = useMemo(() => form.firstName.trim(), [form.firstName]);
   const trimmedLastName = useMemo(() => form.lastName.trim(), [form.lastName]);
   const trimmedFullName = useMemo(
@@ -110,7 +168,7 @@ export default function RegisterForm() {
     setError('');
     setSuccess('');
 
-    if (!trimmedFirstName || !trimmedLastName || !form.password || !form.email.trim() || !form.school.trim()) {
+    if (!trimmedFirstName || !trimmedLastName || !form.password || !form.email.trim() || !form.mobileNumber.trim() || !form.school.trim() || !form.program.trim()) {
       setError('Fyll i alla fält för att skapa ett konto.');
       return;
     }
@@ -120,11 +178,18 @@ export default function RegisterForm() {
       return;
     }
 
+    if (programs.length === 0) {
+      setError('Det finns inga program att välja mellan ännu. Lägg till ett program först.');
+      return;
+    }
+
     setLoading(true);
 
     try {
       const email = form.email.trim().toLowerCase();
+      const mobileNumber = form.mobileNumber.trim();
       const school = form.school.trim();
+      const program = form.program.trim();
       let verificationErrorMessage = '';
 
       const credential = await createUserWithEmailAndPassword(auth, email, form.password);
@@ -145,8 +210,10 @@ export default function RegisterForm() {
         firstName: trimmedFirstName,
         lastName: trimmedLastName,
         email,
+        mobileNumber,
         role: 'teacher',
         school,
+        assignedPrograms: [program],
         approved: false,
         createdAt: serverTimestamp(),
       });
@@ -156,7 +223,9 @@ export default function RegisterForm() {
         teacherId: uid,
         teacherName: trimmedFullName,
         teacherEmail: email,
+        teacherPhone: mobileNumber,
         school,
+        program,
         createdAt: serverTimestamp(),
         resolved: false,
       });
@@ -231,6 +300,7 @@ export default function RegisterForm() {
           </label>
           <input
             id="password"
+            name="password"
             type="password"
             value={form.password}
             onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
@@ -248,6 +318,7 @@ export default function RegisterForm() {
           </label>
           <input
             id="email"
+            name="email"
             type="email"
             value={form.email}
             onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
@@ -259,15 +330,35 @@ export default function RegisterForm() {
         </div>
 
         <div>
+          <label htmlFor="mobileNumber" className="mb-1 block text-sm font-medium text-slate-700">
+            Mobilnummer
+          </label>
+          <input
+            id="mobileNumber"
+            name="mobileNumber"
+            type="tel"
+            inputMode="tel"
+            value={form.mobileNumber}
+            onChange={(event) => setForm((prev) => ({ ...prev, mobileNumber: event.target.value }))}
+            className="w-full rounded-xl border border-slate-300 px-4 py-2 text-slate-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+            placeholder="070-123 45 67"
+            autoComplete="tel"
+            required
+          />
+        </div>
+
+        <div>
           <label htmlFor="school" className="mb-1 block text-sm font-medium text-slate-700">
             Skola
           </label>
           <select
             id="school"
+            name="school"
             value={form.school}
             onChange={(event) => setForm((prev) => ({ ...prev, school: event.target.value }))}
             disabled={schoolsLoading || schools.length === 0}
             className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-slate-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+            autoComplete="organization"
             required
           >
             <option value="">
@@ -282,6 +373,30 @@ export default function RegisterForm() {
           <p className="mt-1.5 text-sm text-slate-500">
             Admin kommer att granska din ansökan innan du får tillgång.
           </p>
+        </div>
+
+        <div>
+          <label htmlFor="program" className="mb-1 block text-sm font-medium text-slate-700">
+            Program
+          </label>
+          <select
+            id="program"
+            name="program"
+            value={form.program}
+            onChange={(event) => setForm((prev) => ({ ...prev, program: event.target.value }))}
+            disabled={programsLoading || programs.length === 0}
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-slate-900 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+            required
+          >
+            <option value="">
+              {programsLoading ? 'Laddar program...' : programs.length === 0 ? 'Inga program tillgängliga' : 'Välj program'}
+            </option>
+            {programs.map((program) => (
+              <option key={program.id} value={program.name}>
+                {program.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <input type="hidden" name="role" value="teacher" readOnly />

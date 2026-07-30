@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { db } from "@/lib/firebase";
-import { collection, addDoc, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, orderBy, serverTimestamp } from "firebase/firestore";
 
 export default function SchoolsPage() {
   const [schools, setSchools] = useState<Array<{ id: string; name: string }>>([]);
@@ -31,14 +31,26 @@ export default function SchoolsPage() {
 
   const handleAddSchool = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!schoolName.trim()) return;
-    await addDoc(collection(db, "schools"), {
-      name: schoolName.trim(),
-      createdAt: new Date(),
-    });
-    setSchoolName("");
-    setMsg("Skola tillagd!");
-    fetchSchools();
+    const trimmedName = schoolName.trim();
+    if (!trimmedName) return;
+
+    setLoading(true);
+    setMsg("");
+
+    try {
+      await addDoc(collection(db, "schools"), {
+        name: trimmedName,
+        createdAt: serverTimestamp(),
+      });
+      setSchoolName("");
+      setMsg("Skola tillagd!");
+      await fetchSchools();
+    } catch (error) {
+      console.error("Error adding school:", error);
+      setMsg("Kunde inte lägga till skolan. Kontrollera att du är inloggad som admin och försök igen.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -54,7 +66,7 @@ export default function SchoolsPage() {
         />
         <button type="submit" className="bg-orange-600 text-white px-4 py-2 rounded font-semibold">Lägg till</button>
       </form>
-      {msg && <div className="mb-4 text-green-600">{msg}</div>}
+      {msg && <div className={`mb-4 ${msg.includes("Kunde inte") ? "text-red-600" : "text-green-600"}`}>{msg}</div>}
       {loading ? (
         <div>Laddar...</div>
       ) : (

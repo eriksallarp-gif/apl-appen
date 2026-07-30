@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { auth, db, functions } from '@/lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, getDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { Clock3, GraduationCap, School, Users } from 'lucide-react';
 
@@ -61,6 +61,13 @@ interface UserSummary {
   assignedPrograms?: string[];
 }
 
+interface ClassSummary {
+  id: string;
+  name: string;
+  teacherUid?: string;
+  archived?: boolean;
+}
+
 function normalizeProgramList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
 
@@ -96,11 +103,13 @@ export default function AdminPage() {
   const [schools, setSchools] = useState<SchoolSummary[]>([]);
   const [allTeachers, setAllTeachers] = useState<UserSummary[]>([]);
   const [allStudents, setAllStudents] = useState<UserSummary[]>([]);
-  const [classes, setClasses] = useState<Array<{ id: string; name: string; teacherUid?: string }>>([]);
+  const [classes, setClasses] = useState<ClassSummary[]>([]);
   const [programOptions, setProgramOptions] = useState<string[]>([]);
   const [teacherProgramsById, setTeacherProgramsById] = useState<Record<string, string[]>>({});
   const [savingTeacherProgramsId, setSavingTeacherProgramsId] = useState<string | null>(null);
   const [openProgramDropdownByTeacher, setOpenProgramDropdownByTeacher] = useState<Record<string, boolean>>({});
+  const [expandedTeacherId, setExpandedTeacherId] = useState<string | null>(null);
+  const [classActionLoadingId, setClassActionLoadingId] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<'pending' | 'approved' | 'schools' | 'students'>('pending');
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -216,6 +225,7 @@ export default function AdminPage() {
           id: doc.id,
           name: doc.data().name || 'Okänd klass',
           teacherUid: doc.data().teacherUid || '',
+          archived: doc.data().archived === true,
         }))
       );
 
@@ -243,15 +253,36 @@ export default function AdminPage() {
       // Update teacher lists
       setPendingTeachers(sortedPendingTeachers);
       setApprovedTeachers(approved.map(mapTeacher));
-      setAllTeachers(approved.map((teacher) => ({
-        id: teacher.id,
-        name: teacher.name || 'Okänt namn',
-        email: teacher.email || '',
-        role: teacher.role || 'teacher',
-        school: teacher.school || 'Ingen skola angiven',
-        status: teacher.status || 'active',
-        assignedPrograms: normalizeProgramList(teacher.assignedPrograms),
-      })));
+      setAllTeachers(
+        approved
+          .map((teacher) => ({
+            id: teacher.id,
+            name: teacher.name || 'Okänt namn',
+            email: teacher.email || '',
+            role: teacher.role || 'teacher',
+            school: teacher.school || 'Ingen skola angiven',
+            status: teacher.status || 'active',
+            assignedPrograms: normalizeProgramList(teacher.assignedPrograms),
+          }))
+          .sort((a, b) => {
+            const schoolCompare = (a.school || '').localeCompare((b.school || ''), 'sv-SE');
+            if (schoolCompare !== 0) return schoolCompare;
+            return a.name.localeCompare(b.name, 'sv-SE');
+          }),
+      );
+
+      setAllStudents(
+        students.map((student) => ({
+          id: student.id,
+          name: student.name || 'Okänt namn',
+          email: student.email || '',
+          role: student.role || 'student',
+          school: student.school || 'Ingen skola angiven',
+          classId: student.classId || '',
+          teacherUid: student.teacherUid || '',
+          status: student.status || 'active',
+        })),
+      );
       
       // Update stats
       setStats({
@@ -342,6 +373,87 @@ export default function AdminPage() {
       await fetchAdminData();
     } catch (error: any) {
       alert(error?.message || 'Fel vid borttagning.');
+    }
+  };
+
+  const getTeacherClasses = (teacherId: string) =>
+    classes
+      .filter((classItem) => (classItem.teacherUid || '') === teacherId)
+      .sort((a, b) => a.name.localeCompare(b.name, 'sv-SE'));
+
+  const teacherGroups = Object.entries(
+    allTeachers.reduce<Record<string, UserSummary[]>>((groups, teacher) => {
+      const schoolName = (teacher.school || 'Ingen skola angiven').trim() || 'Ingen skola angiven';
+      if (!groups[schoolName]) {
+        groups[schoolName] = [];
+      }
+      groups[schoolName].push(teacher);
+      return groups;
+    }, {}),
+  )
+    .sort((a, b) => a[0].localeCompare(b[0], 'sv-SE'))
+    .map(([school, teacherList]) => ({
+      school,
+      teachers: [...teacherList].sort((a, b) => a.name.localeCompare(b.name, 'sv-SE')),
+    }));
+
+  const getClassStudentCount = (classId: string) =>
+    allStudents.filter((student) => (student.classId || '') === classId).length;
+
+  const getClassStudents = (classId: string) =>
+    allStudents
+      .filter((student) => (student.classId || '') === classId)
+      .sort((a, b) => a.name.localeCompare(b.name, 'sv-SE'));
+
+  const handleArchiveClass = async (classId: string) => {
+    try {
+      setClassActionLoadingId(classId);
+      await updateDoc(doc(db, 'classes', classId), {
+        archived: true,
+        archivedAt: new Date(),
+        archivedBy: currentUser?.uid || '',
+      });
+      await fetchAdminData();
+    } catch (error: any) {
+      alert(error?.message || 'Kunde inte arkivera klassen.');
+    } finally {
+      setClassActionLoadingId(null);
+    }
+  };
+
+  const handleRestoreClass = async (classId: string) => {
+    try {
+      setClassActionLoadingId(classId);
+      await updateDoc(doc(db, 'classes', classId), {
+        archived: false,
+        archivedAt: deleteField(),
+        archivedBy: deleteField(),
+      });
+      await fetchAdminData();
+    } catch (error: any) {
+      alert(error?.message || 'Kunde inte återställa klassen.');
+    } finally {
+      setClassActionLoadingId(null);
+    }
+  };
+
+  const handleDeleteClassPermanent = async (classId: string, className: string) => {
+    const confirmDelete = confirm(
+      `Ta bort klassen "${className}" permanent? Historik kopplas loss men själva klassen försvinner. Detta kan inte ångras.`,
+    );
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      setClassActionLoadingId(classId);
+      const deleteClassCallable = httpsCallable(functions, 'deleteClass');
+      await deleteClassCallable({ classId, confirm: classId, hardDeleteTimesheets: false });
+      await fetchAdminData();
+    } catch (error: any) {
+      alert(error?.message || 'Kunde inte ta bort klassen permanent.');
+    } finally {
+      setClassActionLoadingId(null);
     }
   };
 
@@ -552,101 +664,250 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="mb-8">
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-6 py-4">
               <h2 className="text-xl font-bold text-slate-900">Hantera lärare</h2>
               <p className="mt-1 text-sm text-slate-600">Frysa/aktivera/ta bort lärare</p>
             </div>
             <div className="space-y-3 p-6">
-              {allTeachers.length === 0 ? (
+              {teacherGroups.length === 0 ? (
                 <p className="text-slate-500">Inga lärare</p>
               ) : (
-                allTeachers.map((teacher) => (
-                  <div key={teacher.id} className="flex items-center justify-between rounded-xl border border-slate-200 p-3">
-                    <div className="flex-1">
-                      <p className="font-medium text-slate-900">{teacher.name}</p>
-                      <p className="text-xs text-slate-600">{teacher.email}</p>
-                      <p className="text-xs text-slate-500">Skola: {teacher.school || 'Ej angiven'}</p>
-                      {teacher.status && (
-                        <p className={`mt-1 text-xs ${teacher.status === 'frozen' ? 'text-red-600' : 'text-green-600'}`}>
-                          Status: {teacher.status === 'frozen' ? 'Fryst' : 'Aktiv'}
-                        </p>
-                      )}
-                      <p className="mt-1 text-xs text-slate-500">
-                        Program:{' '}
-                        {(teacherProgramsById[teacher.id] ?? []).length > 0
-                          ? (teacherProgramsById[teacher.id] ?? []).join(', ')
-                          : 'Alla program'}
-                      </p>
-                      {programOptions.length > 0 && (
-                        <div className="mt-2 rounded-lg border border-slate-200 p-2">
-                          <button
-                            type="button"
-                            onClick={() => toggleTeacherProgramDropdown(teacher.id)}
-                            className="flex w-full items-center justify-between text-left text-xs font-semibold text-slate-700"
-                            aria-expanded={openProgramDropdownByTeacher[teacher.id] ? 'true' : 'false'}
-                          >
-                            <span>Koppla program</span>
-                            <span>{openProgramDropdownByTeacher[teacher.id] ? '▲' : '▼'}</span>
-                          </button>
-
-                          {openProgramDropdownByTeacher[teacher.id] && (
-                            <div className="mt-2">
-                              <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                                {programOptions.map((programName) => {
-                                  const checked = (teacherProgramsById[teacher.id] ?? []).some(
-                                    (entry) => entry.toLowerCase() === programName.toLowerCase(),
-                                  );
-
-                                  return (
-                                    <label key={`${teacher.id}-${programName}`} className="flex items-center gap-2 text-xs text-slate-700">
-                                      <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onChange={() => handleTeacherProgramToggle(teacher.id, programName)}
-                                      />
-                                      <span>{programName}</span>
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleSaveTeacherPrograms(teacher.id)}
-                                disabled={savingTeacherProgramsId === teacher.id}
-                                className="mt-2 rounded-md border border-orange-300 px-2 py-1 text-xs font-medium text-orange-700 transition hover:bg-orange-50 disabled:opacity-60"
-                              >
-                                {savingTeacherProgramsId === teacher.id ? 'Sparar...' : 'Spara program'}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                teacherGroups.map((group) => (
+                  <div key={group.school} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="mb-3 flex items-center justify-between gap-3 border-b border-slate-100 pb-2">
+                      <div>
+                        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{group.school}</h3>
+                        <p className="text-xs text-slate-500">{group.teachers.length} lärare</p>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      {teacher.status !== 'frozen' && (
-                        <button
-                          onClick={() => handleSetUserStatus(teacher.id, 'frozen')}
-                          className="text-sm font-medium text-red-600 hover:text-red-800"
-                        >
-                          Frysa
-                        </button>
-                      )}
-                      {teacher.status === 'frozen' && (
-                        <button
-                          onClick={() => handleSetUserStatus(teacher.id, 'active')}
-                          className="text-sm font-medium text-green-600 hover:text-green-800"
-                        >
-                          Aktivera
-                        </button>
-                      )}
-                      <button
-                        onClick={() => handleDeleteUser(teacher.id)}
-                        className="text-sm font-medium text-slate-600 hover:text-slate-800"
-                      >
-                        Ta bort
-                      </button>
+
+                    <div className="space-y-2">
+                      {group.teachers.map((teacher) => {
+                        const teacherClasses = getTeacherClasses(teacher.id);
+                        const activeTeacherClasses = teacherClasses.filter((classItem) => !classItem.archived);
+                        const archivedTeacherClasses = teacherClasses.filter((classItem) => classItem.archived);
+                        const isExpanded = expandedTeacherId === teacher.id;
+
+                        return (
+                          <div key={teacher.id} className="rounded-xl border border-slate-200">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedTeacherId((current) => (current === teacher.id ? null : teacher.id))}
+                              className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                            >
+                              <span className="font-medium text-slate-900">{teacher.name}</span>
+                              <span className="text-sm text-slate-500">{isExpanded ? 'Dölj info' : 'Visa info'}</span>
+                            </button>
+
+                            {isExpanded && (
+                              <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-4">
+                                <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+                                  <div className="space-y-1 text-sm text-slate-700">
+                                    <p><span className="font-medium text-slate-900">E-post:</span> {teacher.email}</p>
+                                    <p><span className="font-medium text-slate-900">Skola:</span> {teacher.school || 'Ej angiven'}</p>
+                                    {teacher.status && (
+                                      <p className={teacher.status === 'frozen' ? 'text-red-600' : 'text-green-600'}>
+                                        <span className="font-medium text-slate-900">Status:</span> {teacher.status === 'frozen' ? 'Fryst' : 'Aktiv'}
+                                      </p>
+                                    )}
+                                    <p>
+                                      <span className="font-medium text-slate-900">Program:</span>{' '}
+                                      {(teacherProgramsById[teacher.id] ?? []).length > 0
+                                        ? (teacherProgramsById[teacher.id] ?? []).join(', ')
+                                        : 'Alla program'}
+                                    </p>
+                                    <p>
+                                      <span className="font-medium text-slate-900">Klasser:</span> {activeTeacherClasses.length} aktiva, {archivedTeacherClasses.length} arkiverade
+                                    </p>
+                                  </div>
+
+                                  <div>
+                                    {programOptions.length > 0 && (
+                                      <div className="rounded-lg border border-slate-200 bg-white p-3">
+                                        <button
+                                          type="button"
+                                          onClick={() => toggleTeacherProgramDropdown(teacher.id)}
+                                          className="flex w-full items-center justify-between text-left text-xs font-semibold text-slate-700"
+                                          aria-expanded={openProgramDropdownByTeacher[teacher.id] ? 'true' : 'false'}
+                                        >
+                                          <span>Koppla program</span>
+                                          <span>{openProgramDropdownByTeacher[teacher.id] ? '▲' : '▼'}</span>
+                                        </button>
+
+                                        {openProgramDropdownByTeacher[teacher.id] && (
+                                          <div className="mt-2">
+                                            <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                                              {programOptions.map((programName) => {
+                                                const checked = (teacherProgramsById[teacher.id] ?? []).some(
+                                                  (entry) => entry.toLowerCase() === programName.toLowerCase(),
+                                                );
+
+                                                return (
+                                                  <label key={`${teacher.id}-${programName}`} className="flex items-center gap-2 text-xs text-slate-700">
+                                                    <input
+                                                      type="checkbox"
+                                                      checked={checked}
+                                                      onChange={() => handleTeacherProgramToggle(teacher.id, programName)}
+                                                    />
+                                                    <span>{programName}</span>
+                                                  </label>
+                                                );
+                                              })}
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleSaveTeacherPrograms(teacher.id)}
+                                              disabled={savingTeacherProgramsId === teacher.id}
+                                              className="mt-2 rounded-md border border-orange-300 px-2 py-1 text-xs font-medium text-orange-700 transition hover:bg-orange-50 disabled:opacity-60"
+                                            >
+                                              {savingTeacherProgramsId === teacher.id ? 'Sparar...' : 'Spara program'}
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      {teacher.status !== 'frozen' && (
+                                        <button
+                                          onClick={() => handleSetUserStatus(teacher.id, 'frozen')}
+                                          className="text-sm font-medium text-red-600 hover:text-red-800"
+                                        >
+                                          Frysa
+                                        </button>
+                                      )}
+                                      {teacher.status === 'frozen' && (
+                                        <button
+                                          onClick={() => handleSetUserStatus(teacher.id, 'active')}
+                                          className="text-sm font-medium text-green-600 hover:text-green-800"
+                                        >
+                                          Aktivera
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={() => handleDeleteUser(teacher.id)}
+                                        className="text-sm font-medium text-slate-600 hover:text-slate-800"
+                                      >
+                                        Ta bort
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="mt-4 space-y-3">
+                                  <div>
+                                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Aktiva klasser</p>
+                                    {activeTeacherClasses.length === 0 ? (
+                                      <p className="text-sm text-slate-500">Inga aktiva klasser.</p>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {activeTeacherClasses.map((classItem) => (
+                                          <div key={classItem.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2">
+                                            <div className="min-w-0 flex-1 pr-3">
+                                              <p className="text-sm font-medium text-slate-900">{classItem.name}</p>
+                                              <p className="text-xs text-slate-500">{getClassStudentCount(classItem.id)} elever</p>
+                                              <div className="mt-1 flex flex-wrap gap-1">
+                                                {getClassStudents(classItem.id).slice(0, 6).map((student) => (
+                                                  <span
+                                                    key={student.id}
+                                                    className="inline-flex max-w-full rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700 ring-1 ring-orange-100 transition hover:bg-orange-100"
+                                                  >
+                                                    <a href={`/dashboard/students/${student.id}`} className="truncate">
+                                                      {student.name}
+                                                    </a>
+                                                  </span>
+                                                ))}
+                                                {getClassStudents(classItem.id).length > 6 && (
+                                                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                                                    +{getClassStudents(classItem.id).length - 6} till
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleArchiveClass(classItem.id)}
+                                                disabled={classActionLoadingId === classItem.id}
+                                                className="text-xs font-medium text-orange-700 hover:text-orange-900 disabled:opacity-60"
+                                              >
+                                                Arkivera
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteClassPermanent(classItem.id, classItem.name)}
+                                                disabled={classActionLoadingId === classItem.id}
+                                                className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-60"
+                                              >
+                                                Ta bort permanent
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div>
+                                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Arkiverade klasser</p>
+                                    {archivedTeacherClasses.length === 0 ? (
+                                      <p className="text-sm text-slate-500">Inga arkiverade klasser.</p>
+                                    ) : (
+                                      <div className="space-y-2">
+                                        {archivedTeacherClasses.map((classItem) => (
+                                          <div key={classItem.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2">
+                                            <div className="min-w-0 flex-1 pr-3">
+                                              <p className="text-sm font-medium text-slate-900">{classItem.name}</p>
+                                              <p className="text-xs text-slate-500">{getClassStudentCount(classItem.id)} elever</p>
+                                              <div className="mt-1 flex flex-wrap gap-1">
+                                                {getClassStudents(classItem.id).slice(0, 6).map((student) => (
+                                                  <span
+                                                    key={student.id}
+                                                    className="inline-flex max-w-full rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200 transition hover:bg-slate-100"
+                                                  >
+                                                    <a href={`/dashboard/students/${student.id}`} className="truncate">
+                                                      {student.name}
+                                                    </a>
+                                                  </span>
+                                                ))}
+                                                {getClassStudents(classItem.id).length > 6 && (
+                                                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                                                    +{getClassStudents(classItem.id).length - 6} till
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRestoreClass(classItem.id)}
+                                                disabled={classActionLoadingId === classItem.id}
+                                                className="text-xs font-medium text-green-700 hover:text-green-900 disabled:opacity-60"
+                                              >
+                                                Återställ
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteClassPermanent(classItem.id, classItem.name)}
+                                                disabled={classActionLoadingId === classItem.id}
+                                                className="text-xs font-medium text-red-700 hover:text-red-900 disabled:opacity-60"
+                                              >
+                                                Ta bort permanent
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 ))

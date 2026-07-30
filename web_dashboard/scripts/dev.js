@@ -7,6 +7,16 @@ const projectRoot = path.resolve(__dirname, '..');
 const nextOutputDirectory = path.join(projectRoot, '.next');
 const devPort = 3001;
 
+function shouldResetNextOutput() {
+  const argv = process.argv.slice(2).map((arg) => arg.trim().toLowerCase());
+  if (argv.includes('--clean') || argv.includes('--reset-cache')) {
+    return true;
+  }
+
+  const envFlag = String(process.env.APL_DEV_CLEAN_NEXT || '').trim().toLowerCase();
+  return envFlag === '1' || envFlag === 'true' || envFlag === 'yes';
+}
+
 function runCommand(command, args) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
@@ -92,10 +102,13 @@ async function ensurePortAvailable(port) {
   }
 }
 
-try {
-  rmSync(nextOutputDirectory, { recursive: true, force: true });
-} catch {
-  // Ignore cleanup errors; Next will recreate what it needs.
+if (shouldResetNextOutput()) {
+  console.log('Cleaning .next cache before startup...');
+  try {
+    rmSync(nextOutputDirectory, { recursive: true, force: true });
+  } catch {
+    // Ignore cleanup errors; Next will recreate what it needs.
+  }
 }
 
 async function startDevServer() {

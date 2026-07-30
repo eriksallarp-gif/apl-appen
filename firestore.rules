@@ -155,7 +155,15 @@
         // Schools collection - tillåt alla att läsa skolor (för registrering)
         match /schools/{schoolId} {
           allow read: if true;
-          // Skrivregler kan vara mer restriktiva
+          allow create: if isAdmin() &&
+            request.resource.data.keys().hasOnly(['name', 'createdAt']) &&
+            request.resource.data.name is string &&
+            request.resource.data.name.size() > 0;
+          allow update: if isAdmin() &&
+            request.resource.data.keys().hasOnly(['name', 'createdAt']) &&
+            request.resource.data.name is string &&
+            request.resource.data.name.size() > 0;
+          allow delete: if isAdmin();
         }
 
         // Users collection
@@ -461,7 +469,7 @@
 
         // App settings and shared catalogs
         match /appSettings/{documentId} {
-          allow read: if isSignedIn();
+          allow read: if isSignedIn() || documentId == 'programCatalog';
           allow create, update, delete: if isAdmin();
         }
 

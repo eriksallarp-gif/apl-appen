@@ -807,6 +807,8 @@ exports.createUser = functions.https.onCall(async (data, context) => {
   const firstName = (data.firstName || '').toString().trim();
   const lastName = (data.lastName || '').toString().trim();
   const school = (data.school || '').toString().trim();
+  const mobileNumber = (data.mobileNumber || '').toString().trim();
+  const program = (data.program || '').toString().trim();
   const classId = (data.classId || '').toString().trim();
   const teacherUidInput = (data.teacherUid || '').toString().trim();
   const approved = data.approved === true;
@@ -860,6 +862,8 @@ exports.createUser = functions.https.onCall(async (data, context) => {
 
   if (role === 'teacher') {
     userDoc.school = school;
+    if (mobileNumber) userDoc.mobileNumber = mobileNumber;
+    if (program) userDoc.assignedPrograms = [program];
     userDoc.approved = approved;
   }
 
@@ -891,6 +895,8 @@ exports.createUser = functions.https.onCall(async (data, context) => {
       teacherName: fullName,
       teacherEmail: email,
       school,
+      mobileNumber,
+      program,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       resolved: false,
     });
@@ -907,7 +913,137 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('invalid-argument', 'Missing uid.');
   }
 
+  async function deleteDocsByField(collectionName, field, value) {
+    while (true) {
+      const snap = await db.collection(collectionName).where(field, '==', value).limit(350).get();
+      if (snap.empty) break;
+
+      const batch = db.batch();
+      for (const docSnap of snap.docs) {
+        batch.delete(docSnap.ref);
+      }
+      await batch.commit();
+
+      if (snap.size < 350) break;
+    }
+  }
+
+  async function updateDocsByField(collectionName, field, value, updater) {
+    while (true) {
+      const snap = await db.collection(collectionName).where(field, '==', value).limit(300).get();
+      if (snap.empty) break;
+
+      const batch = db.batch();
+      for (const docSnap of snap.docs) {
+        batch.update(docSnap.ref, updater(docSnap));
+      }
+      await batch.commit();
+
+      if (snap.size < 300) break;
+    }
+  }
+
   const userSnap = await db.collection('users').doc(uid).get();
+  const role = userSnap.exists ? (userSnap.data().role || '').toString().trim() : '';
+
+  if (role === 'teacher') {
+    const ownedClassesSnap = await db.collection('classes').where('teacherUid', '==', uid).get();
+    const ownedClassIds = ownedClassesSnap.docs.map((docSnap) => docSnap.id);
+
+    await updateDocsByField('users', 'teacherUid', uid, () => ({
+      teacherUid: admin.firestore.FieldValue.delete(),
+      teacherId: admin.firestore.FieldValue.delete(),
+      classId: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      orphanedTeacher: true,
+    }));
+
+    await updateDocsByField('users', 'teacherId', uid, () => ({
+      teacherUid: admin.firestore.FieldValue.delete(),
+      teacherId: admin.firestore.FieldValue.delete(),
+      classId: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      orphanedTeacher: true,
+    }));
+
+    await updateDocsByField('timesheets', 'teacherUid', uid, () => ({
+      teacherUid: '',
+      teacherId: '',
+      classId: '',
+      orphanedTeacher: true,
+      teacherDeletedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }));
+
+    await deleteDocsByField('assessmentRequests', 'teacherUid', uid);
+    await deleteDocsByField('companies', 'teacherUid', uid);
+    await deleteDocsByField('schoolContacts', 'teacherUid', uid);
+    await deleteDocsByField('aplDocuments', 'teacherId', uid);
+    await deleteDocsByField('classCodes', 'teacherUid', uid);
+    await deleteDocsByField('invites', 'teacherUid', uid);
+
+    await db.collection('teacherAssessmentTemplates').doc(uid).delete().catch(() => null);
+
+    const assignmentsSnap = await db.collection('assignments').where('createdBy', '==', uid).get();
+    for (const assignmentDoc of assignmentsSnap.docs) {
+      try {
+        await admin.firestore().recursiveDelete(assignmentDoc.ref);
+      } catch (recursiveDeleteError) {
+        console.warn('recursiveDelete failed for assignment, using manual cleanup:', assignmentDoc.id, recursiveDeleteError);
+        const assigneesSnap = await assignmentDoc.ref.collection('assignees').get();
+        for (const assigneeDoc of assigneesSnap.docs) {
+          await assigneeDoc.ref.delete();
+        }
+
+        const submissionsSnap = await assignmentDoc.ref.collection('submissions').get();
+        for (const submissionDoc of submissionsSnap.docs) {
+          await submissionDoc.ref.delete();
+        }
+
+        await assignmentDoc.ref.delete();
+      }
+
+      try {
+        await admin.storage().bucket().deleteFiles({ prefix: `assignments/${assignmentDoc.id}/` });
+      } catch (storageDeleteError) {
+        console.warn('Assignment storage cleanup failed:', assignmentDoc.id, storageDeleteError);
+      }
+    }
+
+    for (const classId of ownedClassIds) {
+      await updateDocsByField('users', 'classId', classId, () => ({
+        classId: admin.firestore.FieldValue.delete(),
+        teacherUid: admin.firestore.FieldValue.delete(),
+        teacherId: admin.firestore.FieldValue.delete(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        orphanedTeacher: true,
+      }));
+
+      await updateDocsByField('timesheets', 'classId', classId, () => ({
+        classId: '',
+        orphanedClass: true,
+        classDeletedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }));
+
+      await deleteDocsByField('classCodes', 'classId', classId);
+
+      const classRef = db.collection('classes').doc(classId);
+      try {
+        await admin.firestore().recursiveDelete(classRef);
+      } catch (recursiveDeleteError) {
+        console.warn('recursiveDelete failed for class, using manual cleanup:', classId, recursiveDeleteError);
+        const studentsSnap = await classRef.collection('students').get();
+        for (const studentDoc of studentsSnap.docs) {
+          await studentDoc.ref.delete();
+        }
+        const overridesSnap = await classRef.collection('studentWeekOverrides').get();
+        for (const overrideDoc of overridesSnap.docs) {
+          await overrideDoc.ref.delete();
+        }
+        await classRef.delete().catch(() => null);
+      }
+    }
+  }
+
   if (userSnap.exists) {
     const userData = userSnap.data();
     const classId = (userData.classId || '').toString().trim();
@@ -934,7 +1070,14 @@ exports.deleteUser = functions.https.onCall(async (data, context) => {
     await doc.ref.delete();
   }
 
-  await admin.auth().deleteUser(uid);
+  try {
+    await admin.auth().deleteUser(uid);
+  } catch (error) {
+    // Some legacy users may only exist in Firestore. Treat missing Auth user as already deleted.
+    if (!(error && error.errorInfo && error.errorInfo.code === 'auth/user-not-found')) {
+      throw error;
+    }
+  }
   await db.collection('users').doc(uid).delete();
 
   return { ok: true };
@@ -1247,42 +1390,55 @@ exports.onNewTeacherCreated = functions.firestore
       return null;
     }
 
+    const gmailUser = toSafeString(functions.config().gmail?.email) || 'support@aplappen.com';
+    const gmailPassword = toSafeString(functions.config().gmail?.password);
+    if (!gmailPassword) {
+      console.error(
+        `[onNewTeacherCreated] Missing gmail.password config. Could not send notification for teacher ${userData.email || userId}.`,
+      );
+      return null;
+    }
+
     const mailOptions = {
       from: '"APL-appen" <support@aplappen.com>',
       to: 'support@aplappen.com',
-      subject: `Ny l├ñrare v├ñntar p├Ñ godk├ñnnande: ${userData.name}`,
+      subject: `Ny lärare väntar på godkännande: ${userData.name || userData.email || userId}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #ff7a00;">Ny l├ñrare har registrerat sig</h2>
-          <p>En ny l├ñrare har skapat ett konto och v├ñntar p├Ñ godk├ñnnande.</p>
+          <h2 style="color: #ff7a00;">Ny lärare har registrerat sig</h2>
+          <p>En ny lärare har skapat ett konto och väntar på godkännande.</p>
           
           <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <p><strong>Namn:</strong> ${userData.name}</p>
-            <p><strong>E-post:</strong> ${userData.email}</p>
-            <p><strong>Skola:</strong> ${userData.school}</p>
+            <p><strong>Namn:</strong> ${userData.name || '-'}</p>
+            <p><strong>E-post:</strong> ${userData.email || '-'}</p>
+            <p><strong>Skola:</strong> ${userData.school || '-'}</p>
+            <p><strong>Mobilnummer:</strong> ${userData.mobileNumber || '-'}</p>
+            <p><strong>Program:</strong> ${Array.isArray(userData.assignedPrograms) && userData.assignedPrograms.length > 0 ? userData.assignedPrograms.join(', ') : (userData.program || '-')}</p>
             <p><strong>Registrerad:</strong> ${new Date().toLocaleString('sv-SE')}</p>
           </div>
           
-          <p><strong>N├ñsta steg:</strong></p>
+          <p><strong>Nästa steg:</strong></p>
           <ol>
-            <li>Logga in p├Ñ admin-panelen p├Ñ <a href="https://www.apl-appen.com/dashboard/admin" style="color: #ff7a00;">www.apl-appen.com/dashboard/admin</a></li>
-            <li>Verifiera l├ñrarens uppgifter</li>
-            <li>Godk├ñnn l├ñraren f├Âr att ge ├Ñtkomst till systemet</li>
+            <li>Logga in på admin-panelen på <a href="https://www.apl-appen.com/dashboard/admin" style="color: #ff7a00;">www.apl-appen.com/dashboard/admin</a></li>
+            <li>Verifiera lärarens uppgifter</li>
+            <li>Godkänn läraren för att ge åtkomst till systemet</li>
           </ol>
           
           <p style="color: #666; font-size: 12px; margin-top: 30px;">
-            Detta ├ñr ett automatiskt meddelande fr├Ñn APL-appen.
+            Detta är ett automatiskt meddelande från APL-appen.
           </p>
         </div>
       `
     };
 
     try {
+      gmailTransporter.options.auth.user = gmailUser;
+      gmailTransporter.options.auth.pass = gmailPassword;
       await gmailTransporter.sendMail(mailOptions);
-      console.log(`Notification email sent for new teacher: ${userData.email}`);
+      console.log(`[onNewTeacherCreated] Notification email sent for new teacher: ${userData.email || userId}`);
       return null;
     } catch (error) {
-      console.error('Error sending notification email:', error);
+      console.error(`[onNewTeacherCreated] Error sending notification email for ${userData.email || userId}:`, error);
       return null;
     }
   });

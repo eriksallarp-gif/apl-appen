@@ -17,12 +17,20 @@ type Student = {
   name: string;
   classId: string;
   className: string;
+  teacherUid?: string;
   specialization: string;
   status?: string;
   timesheetCount?: number;
   approvedTimesheets?: number;
   totalHours?: number;
   assessmentCount?: number;
+};
+
+type TeacherOption = {
+  id: string;
+  name: string;
+  email: string;
+  school: string;
 };
 
 type ProgramCatalogEntry = {
@@ -191,7 +199,9 @@ export default function StudentsPage() {
   const [studentForm, setStudentForm] = useState({ firstName: '', lastName: '', email: '', password: '', classId: '', teacherUid: '' });
   const [formError, setFormError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [classes, setClasses] = useState<{ id: string; name: string }[]>([]);
+  const [classes, setClasses] = useState<Array<{ id: string; name: string; teacherUid?: string }>>([]);
+  const [teachers, setTeachers] = useState<TeacherOption[]>([]);
+  const [selectedTeacherUid, setSelectedTeacherUid] = useState<string>('ALL');
   const [selectedClassId, setSelectedClassId] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -202,6 +212,8 @@ export default function StudentsPage() {
   const [isPdfExportingFull, setIsPdfExportingFull] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportInfo, setExportInfo] = useState<string | null>(null);
+  const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
+  const [isCreateStudentPanelOpen, setIsCreateStudentPanelOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -288,8 +300,8 @@ export default function StudentsPage() {
         classesSnapshot = await getDocs(collection(db, 'classes'));
       }
 
-      // Exclude legacy docs that have been marked as migrated (they contain a 'migratedTo' field)
-      const allDocs = classesSnapshot.docs.filter((d: any) => !d.data().migratedTo);
+      // Exclude migrated and archived classes from normal class workflows.
+      const allDocs = classesSnapshot.docs.filter((d: any) => !d.data().migratedTo && d.data().archived !== true);
 
       // Dev-only debug logs to help trace unexpected classes (doc.id, name, teacherUid)
       if (process.env.NODE_ENV !== 'production') {
@@ -302,6 +314,7 @@ export default function StudentsPage() {
       const classesData = allDocs.map((doc: any) => ({
         id: doc.id,
         name: doc.data().name || 'Okänd klass',
+        teacherUid: (doc.data().teacherUid || '').toString(),
       }));
       setClasses(classesData);
     } catch (error) {
@@ -330,9 +343,9 @@ export default function StudentsPage() {
       const isTeacher = role === 'teacher';
       const classIds = isTeacher
         ? new Set(classesSnapshot.docs
-            .filter((doc: any) => !doc.data().migratedTo)
+            .filter((doc: any) => !doc.data().migratedTo && doc.data().archived !== true)
             .map((doc: any) => doc.id))
-        : new Set(classesSnapshot.docs.map((doc: any) => doc.id));
+        : new Set(classesSnapshot.docs.filter((doc: any) => doc.data().archived !== true).map((doc: any) => doc.id));
       
       const studentUsers = usersSnapshot.docs
         .filter((doc: any) => doc.data().role === 'student')
@@ -352,10 +365,30 @@ export default function StudentsPage() {
             name: doc.data().displayName || doc.data().email || 'Okänd',
             classId: classId,
             className: classDoc ? classDoc.data().name : 'Ingen klass',
+            teacherUid: (doc.data().teacherUid || '').toString(),
             specialization: doc.data().specialization || '',
             status: doc.data().status || 'active',
           };
         });
+
+      if (role === 'admin') {
+        const teacherUsers = usersSnapshot.docs
+          .filter((doc: any) => doc.data().role === 'teacher')
+          .map((doc: any) => ({
+            id: doc.id,
+            name: (doc.data().displayName || doc.data().name || doc.data().email || 'Okänd lärare').toString(),
+            email: (doc.data().email || '').toString(),
+            school: (doc.data().school || '').toString().trim() || 'Okänd skola',
+          }))
+          .sort((a: TeacherOption, b: TeacherOption) => {
+            const schoolCompare = a.school.localeCompare(b.school, 'sv');
+            if (schoolCompare !== 0) return schoolCompare;
+            return a.name.localeCompare(b.name, 'sv');
+          });
+        setTeachers(teacherUsers);
+      } else {
+        setTeachers([]);
+      }
 
       // Load stats collections defensively so a single permission error does not block student visibility.
       let timesheetsDocs: any[] = [];
@@ -499,8 +532,89 @@ export default function StudentsPage() {
     }
   };
 
+  const availableClasses = useMemo(() => {
+    const scopedClasses = userRole === 'admin'
+      ? (selectedTeacherUid === 'ALL'
+          ? classes
+          : classes.filter((cls) => (cls.teacherUid || '') === selectedTeacherUid))
+      : classes;
+
+    return [...scopedClasses].sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+  }, [classes, selectedTeacherUid, userRole]);
+
+  const adminTeacherOverview = useMemo(() => {
+    if (userRole !== 'admin') {
+      return null;
+    }
+
+    if (selectedTeacherUid === 'ALL') {
+      return {
+        teacherName: 'Alla lärare',
+        studentCount: students.length,
+        classCount: classes.length,
+      };
+    }
+
+    const selectedTeacher = teachers.find((teacher) => teacher.id === selectedTeacherUid);
+    return {
+      teacherName: selectedTeacher?.name || 'Vald lärare',
+      studentCount: students.filter((student) => (student.teacherUid || '') === selectedTeacherUid).length,
+      classCount: classes.filter((cls) => (cls.teacherUid || '') === selectedTeacherUid).length,
+    };
+  }, [classes, selectedTeacherUid, students, teachers, userRole]);
+
+  const teacherGroups = useMemo(() => {
+    const groupMap = new Map<string, TeacherOption[]>();
+
+    for (const teacher of teachers) {
+      const school = teacher.school || 'Okänd skola';
+      const current = groupMap.get(school) || [];
+      current.push(teacher);
+      groupMap.set(school, current);
+    }
+
+    return Array.from(groupMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], 'sv'))
+      .map(([school, teacherList]) => ({
+        school,
+        teachers: [...teacherList].sort((a, b) => a.name.localeCompare(b.name, 'sv')),
+      }));
+  }, [teachers]);
+
+  useEffect(() => {
+    if (userRole !== 'admin') {
+      return;
+    }
+
+    if (selectedClassId === 'ALL') {
+      return;
+    }
+
+    const classStillAvailable = availableClasses.some((cls) => cls.id === selectedClassId);
+    if (!classStillAvailable) {
+      setSelectedClassId('ALL');
+    }
+  }, [availableClasses, selectedClassId, userRole]);
+
+  useEffect(() => {
+    if (userRole !== 'admin') {
+      return;
+    }
+
+    setStudentForm((prev) => ({
+      ...prev,
+      classId: '',
+    }));
+  }, [selectedTeacherUid, userRole]);
+
   const filteredStudents = students
     .filter(s => {
+      if (userRole === 'admin' && selectedTeacherUid !== 'ALL') {
+        if ((s.teacherUid || '') !== selectedTeacherUid) {
+          return false;
+        }
+      }
+
       // Klassfilter
       if (selectedClassId !== 'ALL' && s.classId !== selectedClassId) {
         return false;
@@ -522,9 +636,9 @@ export default function StudentsPage() {
 
   useEffect(() => {
     if (!exportClassId && classes.length > 0) {
-      setExportClassId(classes[0].id);
+      setExportClassId(availableClasses[0]?.id || '');
     }
-  }, [classes, exportClassId]);
+  }, [availableClasses, classes.length, exportClassId]);
 
   const isTeacherOrAdmin = userRole === 'teacher' || userRole === 'admin';
 
@@ -677,178 +791,253 @@ export default function StudentsPage() {
                 </div>
               </div>
             )}
-      {/* Class Filter */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Välj klass
-        </label>
-        <select
-          value={selectedClassId}
-          onChange={(e) => setSelectedClassId(e.target.value)}
-          className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
-        >
-          <option value="ALL">Alla klasser</option>
-          {classes.map(cls => (
-            <option key={cls.id} value={cls.id}>
-              {cls.name}
-            </option>
-          ))}
-        </select>
+      {/* Admin-only: teacher filter above class filter */}
+      <div className="mb-6 space-y-4">
+        {userRole === 'admin' && (
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              Välj lärare
+            </label>
+            <select
+              value={selectedTeacherUid}
+              onChange={(e) => {
+                setSelectedTeacherUid(e.target.value);
+                setSelectedClassId('ALL');
+              }}
+              className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+            >
+              <option value="ALL">Alla lärare</option>
+              {teacherGroups.map((group) => (
+                <optgroup key={group.school} label={group.school}>
+                  {group.teachers.map((teacher) => (
+                    <option key={teacher.id} value={teacher.id}>
+                      {teacher.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            {adminTeacherOverview && (
+              <p className="mt-2 text-sm text-gray-600">
+                {adminTeacherOverview.teacherName}: {adminTeacherOverview.studentCount} elever, {adminTeacherOverview.classCount} klasser
+              </p>
+            )}
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Välj klass
+          </label>
+          <select
+            value={selectedClassId}
+            onChange={(e) => setSelectedClassId(e.target.value)}
+            className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+          >
+            <option value="ALL">Alla klasser</option>
+            {availableClasses.map(cls => (
+              <option key={cls.id} value={cls.id}>
+                {cls.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <div className="mb-8 rounded-lg border border-orange-100 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Exportera elevdata (PDF)</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Exporten skapar PDF-rapporter med sammanställning, aktiviteter, statistik och diagram.
-        </p>
-
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="mb-8 rounded-lg border border-orange-100 bg-white shadow-sm">
+        <button
+          type="button"
+          onClick={() => setIsExportPanelOpen((prev) => !prev)}
+          className="flex w-full items-center justify-between px-6 py-4 text-left"
+        >
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Urval</label>
-            <select
-              value={exportScope}
-              onChange={(event) => setExportScope(event.target.value as ExportScope)}
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
-            >
-              <option value="single">En specifik elev</option>
-              <option value="class">En hel klass</option>
-            </select>
+            <h2 className="text-lg font-semibold text-gray-900">Exportera elevdata (PDF)</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Exporten skapar PDF-rapporter med sammanställning, aktiviteter, statistik och diagram.
+            </p>
           </div>
+          <span className="ml-4 text-sm font-medium text-orange-700">{isExportPanelOpen ? 'Dolj' : 'Visa'}</span>
+        </button>
 
-          {exportScope === 'single' && (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Elev</label>
-              <select
-                value={exportStudentId}
-                onChange={(event) => setExportStudentId(event.target.value)}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
-              >
-                <option value="">Välj elev</option>
-                {filteredStudents.map((student) => (
-                  <option key={student.id} value={student.id}>
-                    {student.name} ({student.className || 'Ingen klass'})
-                  </option>
-                ))}
-              </select>
+        {isExportPanelOpen && (
+          <div className="border-t border-orange-100 px-6 pb-6 pt-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Urval</label>
+                <select
+                  value={exportScope}
+                  onChange={(event) => setExportScope(event.target.value as ExportScope)}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                >
+                  <option value="single">En specifik elev</option>
+                  <option value="class">En hel klass</option>
+                </select>
+              </div>
+
+              {exportScope === 'single' && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Elev</label>
+                  <select
+                    value={exportStudentId}
+                    onChange={(event) => setExportStudentId(event.target.value)}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  >
+                    <option value="">Välj elev</option>
+                    {filteredStudents.map((student) => (
+                      <option key={student.id} value={student.id}>
+                        {student.name} ({student.className || 'Ingen klass'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {exportScope === 'class' && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Klass</label>
+                  <select
+                    value={exportClassId}
+                    onChange={(event) => setExportClassId(event.target.value)}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  >
+                    <option value="">Välj klass</option>
+                    {availableClasses.map((classItem) => (
+                      <option key={classItem.id} value={classItem.id}>
+                        {classItem.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
-          )}
 
-          {exportScope === 'class' && (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">Klass</label>
-              <select
-                value={exportClassId}
-                onChange={(event) => setExportClassId(event.target.value)}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+            {exportError && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {exportError}
+              </div>
+            )}
+
+            {exportInfo && (
+              <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+                {exportInfo}
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-col items-start gap-3 md:flex-row">
+              <button
+                onClick={handleExportPdf}
+                disabled={isPdfExporting}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
               >
-                <option value="">Välj klass</option>
-                {classes.map((classItem) => (
-                  <option key={classItem.id} value={classItem.id}>
-                    {classItem.name}
-                  </option>
-                ))}
-              </select>
+                {isPdfExporting ? 'Genererar PDF...' : 'Exportera till PDF'}
+              </button>
+              <button
+                onClick={handleExportPdfFull}
+                disabled={isPdfExportingFull || exportScope !== 'single' || !exportStudentId}
+                className="rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 font-semibold text-orange-800 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+              >
+                {isPdfExportingFull ? 'Genererar fullständig PDF...' : 'Exportera till PDF - Fullständig'}
+              </button>
             </div>
-          )}
-        </div>
-
-        {exportError && (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {exportError}
           </div>
         )}
-
-        {exportInfo && (
-          <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
-            {exportInfo}
-          </div>
-        )}
-
-        <div className="mt-4 flex flex-col items-start gap-3 md:flex-row">
-          <button
-            onClick={handleExportPdf}
-            disabled={isPdfExporting}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            type="button"
-          >
-            {isPdfExporting ? 'Genererar PDF...' : 'Exportera till PDF'}
-          </button>
-          <button
-            onClick={handleExportPdfFull}
-            disabled={isPdfExportingFull || exportScope !== 'single' || !exportStudentId}
-            className="rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 font-semibold text-orange-800 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
-            type="button"
-          >
-            {isPdfExportingFull ? 'Genererar fullständig PDF...' : 'Exportera till PDF - Fullständig'}
-          </button>
-        </div>
       </div>
 
       {/* Admin: Lägg till elev formulär */}
       {userRole === 'admin' && (
-        <div className="bg-white rounded-lg shadow mb-8 p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Lägg till elev</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <input
-              value={studentForm.firstName}
-              onChange={(e) => setStudentForm({ ...studentForm, firstName: e.target.value })}
-              className="border border-gray-300 rounded-lg px-3 py-2"
-              placeholder="Förnamn"
-              autoComplete="off"
-            />
-            <input
-              value={studentForm.lastName}
-              onChange={(e) => setStudentForm({ ...studentForm, lastName: e.target.value })}
-              className="border border-gray-300 rounded-lg px-3 py-2"
-              placeholder="Efternamn"
-              autoComplete="off"
-            />
-            <input
-              value={studentForm.email}
-              onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
-              className="border border-gray-300 rounded-lg px-3 py-2"
-              placeholder="E-post"
-              autoComplete="off"
-              type="email"
-            />
-            <input
-              value={studentForm.password}
-              onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
-              className="border border-gray-300 rounded-lg px-3 py-2"
-              placeholder="Lösenord"
-              type="password"
-              autoComplete="new-password"
-            />
-            <select
-              value={studentForm.classId}
-              onChange={(e) => setStudentForm({ ...studentForm, classId: e.target.value })}
-              className="border border-gray-300 rounded-lg px-3 py-2"
-            >
-              <option value="">Valfri klass</option>
-              {classes.map((cls) => (
-                <option key={cls.id} value={cls.id}>
-                  {cls.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={studentForm.teacherUid}
-              onChange={(e) => setStudentForm({ ...studentForm, teacherUid: e.target.value })}
-              className="border border-gray-300 rounded-lg px-3 py-2"
-            >
-              <option value="">Valfri lärare</option>
-            </select>
-          </div>
-          {formError && (
-            <p className="text-sm text-red-600 mb-4">{formError}</p>
-          )}
+        <div className="mb-8 rounded-lg bg-white shadow">
           <button
-            onClick={handleCreateStudent}
-            disabled={creating}
-            className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition disabled:opacity-60"
+            type="button"
+            onClick={() => setIsCreateStudentPanelOpen((prev) => !prev)}
+            className="flex w-full items-center justify-between px-6 py-4 text-left"
           >
-            Skapa elev
+            <h2 className="text-xl font-bold text-gray-900">Lägg till elev</h2>
+            <span className="ml-4 text-sm font-medium text-orange-700">{isCreateStudentPanelOpen ? 'Dolj' : 'Visa'}</span>
           </button>
+
+          {isCreateStudentPanelOpen && (
+            <div className="border-t border-slate-100 px-6 pb-6 pt-4">
+              <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <input
+                  value={studentForm.firstName}
+                  onChange={(e) => setStudentForm({ ...studentForm, firstName: e.target.value })}
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Förnamn"
+                  autoComplete="off"
+                />
+                <input
+                  value={studentForm.lastName}
+                  onChange={(e) => setStudentForm({ ...studentForm, lastName: e.target.value })}
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Efternamn"
+                  autoComplete="off"
+                />
+                <input
+                  value={studentForm.email}
+                  onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="E-post"
+                  autoComplete="off"
+                  type="email"
+                />
+                <input
+                  value={studentForm.password}
+                  onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Lösenord"
+                  type="password"
+                  autoComplete="new-password"
+                />
+                <select
+                  value={studentForm.classId}
+                  onChange={(e) => setStudentForm({ ...studentForm, classId: e.target.value })}
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                >
+                  <option value="">Valfri klass</option>
+                  {availableClasses.map((cls) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={studentForm.teacherUid}
+                  onChange={(e) => {
+                    const nextTeacherUid = e.target.value;
+                    setStudentForm({ ...studentForm, teacherUid: nextTeacherUid, classId: '' });
+                    if (userRole === 'admin') {
+                      setSelectedTeacherUid(nextTeacherUid || 'ALL');
+                      setSelectedClassId('ALL');
+                    }
+                  }}
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                >
+                  <option value="">Valfri lärare</option>
+                  {teacherGroups.map((group) => (
+                    <optgroup key={group.school} label={group.school}>
+                      {group.teachers.map((teacher) => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {teacher.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              {formError && (
+                <p className="mb-4 text-sm text-red-600">{formError}</p>
+              )}
+              <button
+                onClick={handleCreateStudent}
+                disabled={creating}
+                className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition disabled:opacity-60"
+              >
+                Skapa elev
+              </button>
+            </div>
+          )}
         </div>
       )}      {/* Search */}
       <div className="mb-6">

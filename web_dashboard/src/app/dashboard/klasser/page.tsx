@@ -52,7 +52,7 @@ export default function ClassesPage() {
 
       const addDocIfValid = async (d: any) => {
         const data = d.data();
-        if (data.migratedTo) return; // skip migrated legacy docs
+        if (data.migratedTo || data.archived === true) return; // skip migrated and archived docs
         const docId = d.id;
         const name = data.name || 'Okänd';
         const teacherUidField = data.teacherUid || null;
