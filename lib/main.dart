@@ -1625,21 +1625,11 @@ class _LoginScreenState extends State<LoginScreen> {
         'firstName': firstName,
         'lastName': lastName,
         'email': email.toLowerCase(),
+        'emailVerified': false,
         'role': 'teacher',
         'school': school,
         'approved': false, // Väntar på admin-godkännande
         'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      // Skapa notis till admin
-      await FirebaseFirestore.instance.collection('adminNotifications').add({
-        'type': 'newTeacher',
-        'teacherId': uid,
-        'teacherName': fullName,
-        'teacherEmail': email,
-        'school': school,
-        'createdAt': FieldValue.serverTimestamp(),
-        'resolved': false,
       });
 
       if (mounted) {
@@ -2818,14 +2808,23 @@ class _ApprovalPendingScreenState extends State<ApprovalPendingScreen> {
     try {
       await widget.user.reload();
       final currentUser = FirebaseAuth.instance.currentUser;
-      final userDoc = await FirebaseFirestore.instance
+      final userRef = FirebaseFirestore.instance
           .collection('users')
-          .doc(widget.user.uid)
-          .get();
+          .doc(widget.user.uid);
+      final emailVerified = currentUser?.emailVerified == true;
+      var userDoc = await userRef.get();
+
+      if (emailVerified && userDoc.data()?['emailVerified'] != true) {
+        await userRef.update({
+          'emailVerified': true,
+          'emailVerifiedAt': FieldValue.serverTimestamp(),
+        });
+        userDoc = await userRef.get();
+      }
 
       if (!mounted) return;
       setState(() {
-        _emailVerified = currentUser?.emailVerified == true;
+        _emailVerified = emailVerified;
         _approved = userDoc.data()?['approved'] == true;
         _statusMessage =
             'Senast uppdaterad: ${TimeOfDay.now().format(context)}';
