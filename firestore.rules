@@ -1,0 +1,607 @@
+    rules_version = '2';
+    service cloud.firestore {
+      match /databases/{database}/documents {
+
+        // Helper functions (safe role lookup)
+        function isSignedIn() {
+          return request.auth != null;
+        }
+
+        function userDocExists() {
+          return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+        }
+
+        function getUserRole() {
+          return userDocExists() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role : null;
+        }
+
+        function isAdmin() {
+          return isSignedIn() && getUserRole() == 'admin';
+        }
+
+        function isTeacher() {
+          return isSignedIn() && getUserRole() == 'teacher';
+        }
+
+        function isStudent() {
+          return isSignedIn() && getUserRole() == 'student';
+        }
+
+        function isTeacherOrAdmin() {
+          return isTeacher() || isAdmin();
+        }
+
+        function getUserStatus() {
+          return userDocExists() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('status', 'active') : 'active';
+        }
+
+        function isUserActive() {
+          return isSignedIn() && getUserStatus() != 'frozen';
+        }
+
+        function hasCurrentGdprConsent() {
+          return userDocExists() &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('gdprConsentVersion', '') == '2026-03-25';
+        }
+
+        function userSchool() {
+          return userDocExists()
+            ? (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('school', ''))
+            : '';
+        }
+
+        function assignmentExists(assignmentId) {
+          return exists(/databases/$(database)/documents/assignments/$(assignmentId));
+        }
+
+        function isAssignmentOwner(assignmentId) {
+          return assignmentExists(assignmentId)
+            && get(/databases/$(database)/documents/assignments/$(assignmentId)).data.createdBy == request.auth.uid;
+        }
+
+        function isAssignedToAssignment(assignmentId) {
+          return assignmentExists(assignmentId)
+            && get(/databases/$(database)/documents/assignments/$(assignmentId)).data.assignedTo.hasAny([request.auth.uid]);
+        }
+
+        function classExists(classId) {
+          return classId != '' &&
+            exists(/databases/$(database)/documents/classes/$(classId));
+        }
+
+        function classTeacherUid(classId) {
+          return classExists(classId)
+            ? get(/databases/$(database)/documents/classes/$(classId)).data.teacherUid
+            : '';
+        }
+
+        function userTeacherUid(userId) {
+          return exists(/databases/$(database)/documents/users/$(userId))
+            ? get(/databases/$(database)/documents/users/$(userId)).data.get('teacherUid', '')
+            : '';
+        }
+
+        function userClassId(userId) {
+          return exists(/databases/$(database)/documents/users/$(userId))
+            ? get(/databases/$(database)/documents/users/$(userId)).data.get('classId', '')
+            : '';
+        }
+
+        function userSchoolById(userId) {
+          return exists(/databases/$(database)/documents/users/$(userId))
+            ? get(/databases/$(database)/documents/users/$(userId)).data.get('school', '')
+            : '';
+        }
+
+        function canCreateOwnUserProfile(userId) {
+          return request.auth.uid == userId &&
+            request.resource.data.keys().hasOnly([
+              'name', 'displayName', 'firstName', 'lastName',
+              'email', 'role', 'school', 'approved',
+              'mobileNumber', 'assignedPrograms',
+              'emailVerified',
+              'createdAt', 'onboardingComplete'
+            ]) &&
+            request.resource.data.get('role', '') in ['student', 'teacher'] &&
+            request.resource.data.get('mobileNumber', '') is string &&
+            request.resource.data.get('assignedPrograms', []) is list &&
+            request.resource.data.get('emailVerified', false) == false &&
+            request.resource.data.get('approved', false) == false &&
+            request.resource.data.get('classId', '') == '' &&
+            request.resource.data.get('teacherUid', '') == '' &&
+            request.resource.data.get('teacherId', '') == '';
+        }
+
+        function hasValidSelfClassLink() {
+          return isStudent() &&
+            classExists(request.resource.data.get('classId', '')) &&
+            classTeacherUid(request.resource.data.get('classId', '')) == request.resource.data.get('teacherUid', '') &&
+            request.resource.data.get('teacherId', '') == request.resource.data.get('teacherUid', '') &&
+            (
+              !request.resource.data.diff(resource.data).affectedKeys().hasAny(['school']) ||
+              request.resource.data.get('school', '') == userSchoolById(request.resource.data.get('teacherUid', ''))
+            );
+        }
+
+        function canUpdateOwnUserProfile() {
+          return request.auth.uid == resource.id &&
+            isUserActive() &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'name', 'displayName', 'firstName', 'lastName',
+              'program', 'assignedPrograms', 'mobileNumber', 'emailVerified', 'emailVerifiedAt', 'specialization', 'onboardingComplete',
+              'gdprConsentAccepted', 'gdprConsentVersion',
+              'gdprConsentAcceptedAt', 'gdprConsentLocale',
+              'classId', 'teacherUid', 'teacherId', 'school'
+            ]) &&
+            (
+              !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                'classId', 'teacherUid', 'teacherId', 'school'
+              ]) ||
+              hasValidSelfClassLink()
+            );
+        }
+
+        function isClassOwner(classId) {
+          return isTeacher() && classTeacherUid(classId) == request.auth.uid;
+        }
+
+        function isStudentAssignedToClass(classId, studentId) {
+          return isStudent() &&
+            request.auth.uid == studentId &&
+            userClassId(request.auth.uid) == classId &&
+            userTeacherUid(request.auth.uid) == classTeacherUid(classId);
+        }
+
+        function matchesCurrentStudentAssignment() {
+          return request.resource.data.get('teacherUid', '') == userTeacherUid(request.auth.uid) &&
+            request.resource.data.get('classId', '') == userClassId(request.auth.uid);
+        }
+
+        // Schools collection - tillåt alla att läsa skolor (för registrering)
+        match /schools/{schoolId} {
+          allow read: if true;
+          allow create: if isAdmin() &&
+            request.resource.data.keys().hasOnly(['name', 'createdAt']) &&
+            request.resource.data.name is string &&
+            request.resource.data.name.size() > 0;
+          allow update: if isAdmin() &&
+            request.resource.data.keys().hasOnly(['name', 'createdAt']) &&
+            request.resource.data.name is string &&
+            request.resource.data.name.size() > 0;
+          allow delete: if isAdmin();
+        }
+
+        // Users collection
+        match /users/{userId} {
+          // Anyone authenticated can read any user (for name lookups, etc.)
+          allow read: if isSignedIn();
+
+          // Users can create their own profile during registration
+          // Users can write their own profile (only if active)
+          // Teachers and admins can write any user (including status field)
+          allow create: if canCreateOwnUserProfile(userId);
+          allow update: if isSignedIn() && (
+            canUpdateOwnUserProfile() || 
+            isAdmin()
+          );
+          allow delete: if isAdmin();
+        }
+
+        // Admin Notifications collection
+        match /adminNotifications/{notificationId} {
+          // Only admins can read notifications
+          allow read: if isAdmin();
+
+          // Anyone can create notifications (för nya lärarregistreringar)
+          allow create: if true;
+
+          // Only admins can update/delete notifications
+          allow update, delete: if isAdmin();
+        }
+
+        // Classes collection
+        match /classes/{classId} {
+          // Teachers and admins can read/write classes
+          allow read: if isSignedIn();
+          allow create: if isAdmin() ||
+            (isTeacher() && request.resource.data.teacherUid == request.auth.uid);
+          allow update, delete: if isAdmin() || isClassOwner(classId);
+
+          // Students subcollection
+          match /students/{studentId} {
+            allow read: if isSignedIn();
+            allow write: if isAdmin() ||
+              isClassOwner(classId) ||
+              isStudentAssignedToClass(classId, studentId);
+          }
+
+          // Student week overrides
+          match /studentWeekOverrides/{studentId} {
+            allow read: if isSignedIn();
+            allow write: if isAdmin() || isClassOwner(classId);
+          }
+        }
+
+        // ClassCodes collection (för klasskoder kopplade till klasser)
+        match /classCodes/{codeId} {
+          allow read: if isTeacherOrAdmin();
+          allow create: if isAdmin() ||
+            (isTeacher() && request.resource.data.teacherUid == request.auth.uid);
+          allow update, delete: if isAdmin() ||
+            (isTeacher() && resource.data.teacherUid == request.auth.uid);
+        }
+
+        // Timesheets collection
+        match /timesheets/{timesheetId} {
+          function isOwnTimesheetPath() {
+            return isSignedIn() && isStudent() &&
+              timesheetId.matches('^' + request.auth.uid + '_.*$');
+          }
+
+          // Students can only read their own timesheets.
+          // Teachers can read timesheets belonging to their students.
+          // Admins can read all.
+          allow read: if isSignedIn() && (
+            isOwnTimesheetPath() ||
+            request.auth.uid == resource.data.studentUid ||
+            request.auth.uid == resource.data.teacherUid ||
+            isAdmin()
+          );
+
+          // Students can create their own timesheets (if active).
+          // They cannot pre-set approved or locked to true on creation.
+          allow create: if isUserActive() && hasCurrentGdprConsent() &&
+            request.auth.uid == request.resource.data.studentUid &&
+            matchesCurrentStudentAssignment() &&
+            request.resource.data.get('approved', false) == false &&
+            request.resource.data.get('locked', false) == false;
+
+          // Students can update their own non-locked timesheets,
+          // but are NOT allowed to change the approved or locked fields.
+          // Teachers can update any of their students' timesheets (incl. approval).
+          // Admins can update any timesheet.
+          allow update: if isUserActive() && (
+            (
+              request.auth.uid == resource.data.get('studentUid', '') &&
+              hasCurrentGdprConsent() &&
+              resource.data.get('locked', false) != true &&
+              !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                'approved', 'locked', 'studentUid', 'teacherUid', 'classId'
+              ])
+            ) ||
+            request.auth.uid == resource.data.get('teacherUid', '') ||
+            isAdmin()
+          );
+
+          // Only teachers and admins can delete
+          allow delete: if isAdmin() ||
+            (isTeacher() && request.auth.uid == resource.data.get('teacherUid', ''));
+        }
+
+        // Assessments collection
+        match /assessments/{assessmentId} {
+          // Scope reads to the owning student, assigned teacher, or admin.
+          allow read: if isSignedIn() && (
+            isAdmin() ||
+            request.auth.uid == resource.data.get('studentUid', '') ||
+            request.auth.uid == resource.data.get('teacherUid', '')
+          );
+
+          // Students may only create their own placeholder assessment docs.
+          allow create: if isAdmin() ||
+            (
+              isTeacher() &&
+              request.resource.data.get('teacherUid', '') == request.auth.uid
+            ) ||
+            (
+              isStudent() &&
+              isUserActive() &&
+              request.auth.uid == request.resource.data.get('studentUid', '') &&
+              request.resource.data.get('teacherUid', '') == userTeacherUid(request.auth.uid) &&
+              request.resource.data.keys().hasOnly([
+                'timesheetId', 'studentUid', 'teacherUid', 'createdAt'
+              ])
+            );
+
+          allow update: if isAdmin() ||
+            (
+              isTeacher() &&
+              resource.data.get('teacherUid', '') == request.auth.uid &&
+              !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+                'studentUid', 'teacherUid', 'createdAt'
+              ])
+            );
+
+          allow delete: if isAdmin() ||
+            (isTeacher() && resource.data.get('teacherUid', '') == request.auth.uid);
+        }
+
+        // Messages collection
+        match /messages/{messageId} {
+          // Users can read messages sent to them or sent by them
+          allow read: if isSignedIn() && (
+            request.auth.uid == resource.data.to ||
+            request.auth.uid == resource.data.from ||
+            isAdmin()
+          );
+
+          // Teachers can create messages
+          // Students can create messages to their teacher
+          allow create: if isSignedIn() && (
+            isTeacherOrAdmin() ||
+            request.auth.uid == request.resource.data.from
+          );
+
+          // Only sender or admin can update/delete
+          allow update, delete: if isSignedIn() && (
+            request.auth.uid == resource.data.from ||
+            isAdmin()
+          );
+        }
+
+        // Compensation collection
+        match /compensation/{compensationId} {
+          // Anyone authenticated can read
+          allow read: if isSignedIn();
+
+          // Students can create their own compensation claims (if active)
+          allow create: if isUserActive() && hasCurrentGdprConsent() && 
+            request.auth.uid == request.resource.data.studentUid;
+
+          // Students can update their own (unless approved) - must be active
+          // Teachers can update any (for approval)
+          allow update: if isUserActive() && (
+            (request.auth.uid == resource.data.studentUid && 
+             hasCurrentGdprConsent() &&
+             resource.data.approved != true) ||
+            isTeacherOrAdmin()
+          );
+
+          // Only teachers and admins can delete
+          allow delete: if isTeacherOrAdmin();
+        }
+
+        // Invites collection (for student-teacher connection)
+        match /invites/{inviteCode} {
+          // Anyone can read invites (to validate codes)
+          allow read: if isSignedIn();
+
+          // Only teachers can create invites
+          allow create: if isTeacher() || isAdmin();
+
+          // Teachers can update/delete their own invites
+          allow update, delete: if isSignedIn() && (
+            request.auth.uid == resource.data.teacherUid ||
+            isAdmin()
+          );
+        }
+
+        // Assessment Requests collection (för bedömningsförfrågningar med QR-kod)
+        match /assessmentRequests/{requestId} {
+          // Endast inloggade användare med rätt roll får läsa direkt.
+          // Handledarflöde går via Cloud Function som validerar token server-side.
+          allow read: if isAdmin() ||
+            (isTeacher() && request.auth.uid == resource.data.get('teacherUid', '')) ||
+            (isSignedIn() && request.auth.uid == resource.data.studentUid);
+
+          // Elev kan skapa sin egen request med ett begränsat schema.
+          allow create: if isUserActive() && hasCurrentGdprConsent() &&
+            request.auth.uid == request.resource.data.studentUid &&
+            request.resource.data.get('teacherUid', '') == userTeacherUid(request.auth.uid) &&
+            request.resource.data.get('status', 'pending') == 'pending' &&
+            request.resource.data.keys().hasOnly([
+              'studentUid', 'studentName',
+              'timesheetIds', 'weeks',
+              'timesheetSummaries',
+              'totalHours', 'lunchCount', 'travelCount',
+              'teacherUid',
+              'status', 'createdAt', 'token', 'expiresAt',
+              'images',
+              'linkedCompanyName', 'studentCompanyName',
+              'studentSelfAssessment',
+              'assessmentTemplateSnapshot'
+            ]);
+
+          // Endast lärare/admin får uppdatera direkt i klient.
+          // Handledarens inskick sker via Cloud Function.
+          allow update: if isAdmin() ||
+            (isTeacher() && request.auth.uid == resource.data.get('teacherUid', ''));
+
+          // Only teachers and admins can delete
+          allow delete: if isAdmin() ||
+            (isTeacher() && request.auth.uid == resource.data.get('teacherUid', ''));
+        }
+
+        // Companies collection (för APL-företag)
+        match /companies/{companyId} {
+          // Teachers/admins can read all, students can read only their linked company
+          allow read: if isTeacherOrAdmin() || (
+            isStudent() && (
+              resource.data.get('studentId', '') == request.auth.uid ||
+              resource.data.get('studentIds', []).hasAny([request.auth.uid])
+            )
+          );
+
+          // Teachers can create companies
+          allow create: if isTeacher() || isAdmin();
+
+          // Teachers can update/delete their own companies, admins can update/delete any
+          allow update, delete: if isSignedIn() && (
+            request.auth.uid == resource.data.teacherUid ||
+            isAdmin()
+          );
+        }
+
+        // School contacts collection (kontakt skola)
+        match /schoolContacts/{contactId} {
+          // Teachers/admins can read, students only from their assigned teacher in same school
+          allow read: if isAdmin() ||
+            (isTeacher() && resource.data.get('school', '') == userSchool()) ||
+            (
+              isStudent() &&
+              resource.data.get('school', '') == userSchool() &&
+              resource.data.get('teacherUid', '') == userTeacherUid(request.auth.uid)
+            );
+
+          // Teachers/admins can create school contacts for their own school
+          allow create: if isSignedIn() && isTeacherOrAdmin() &&
+            request.resource.data.get('school', '') == userSchool() &&
+            request.resource.data.get('teacherUid', '') == request.auth.uid;
+
+          // Update/delete by admins or owning teacher
+          allow update, delete: if isSignedIn() && (
+            isAdmin() || resource.data.get('teacherUid', '') == request.auth.uid
+          );
+        }
+
+        // APL Documents collection (viktiga dokument för elever)
+        match /aplDocuments/{documentId} {
+          // Authenticated users can only read documents from their own school (and must be active)
+          allow read: if isUserActive()
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.school
+               == resource.data.school;
+
+          // Teachers and admins can create documents (must be active)
+          allow create: if isUserActive()
+            && isTeacherOrAdmin()
+            && request.resource.data.school
+               == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.school
+            && request.resource.data.teacherId == request.auth.uid;
+
+          // Teachers and admins can update/delete documents (must be active)
+          allow update, delete: if isUserActive() && isTeacherOrAdmin();
+        }
+
+        // App settings and shared catalogs
+        match /appSettings/{documentId} {
+          allow read: if isSignedIn() || documentId == 'programCatalog';
+          allow create, update, delete: if isAdmin();
+        }
+
+        // Teacher-specific timesheet templates
+        match /timesheetTemplates/{templateId} {
+          allow read: if isSignedIn() && (
+            isAdmin() ||
+            (isTeacher() && templateId.matches('^' + request.auth.uid + '__.*$')) ||
+            (
+              isStudent() &&
+              templateId.matches(
+                '^' +
+                get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teacherUid +
+                '__.*$'
+              )
+            )
+          );
+
+          allow create: if isSignedIn() && (
+            isAdmin() ||
+            (isTeacher() && request.resource.data.teacherUid == request.auth.uid)
+          );
+
+          allow update, delete: if isSignedIn() && (
+            isAdmin() ||
+            (isTeacher() && resource.data.teacherUid == request.auth.uid)
+          );
+        }
+
+        // Teacher-specific assessment template overrides
+        match /teacherAssessmentTemplates/{teacherUid} {
+          allow read: if isSignedIn() && (
+            isAdmin() ||
+            (isTeacher() && request.auth.uid == teacherUid) ||
+            (
+              isStudent() &&
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.teacherUid == teacherUid
+            )
+          );
+
+          allow create, update: if isSignedIn() && (
+            isAdmin() ||
+            (
+              isTeacher() &&
+              request.auth.uid == teacherUid &&
+              request.resource.data.teacherUid == request.auth.uid
+            )
+          );
+
+          allow delete: if isSignedIn() && (
+            isAdmin() ||
+            (isTeacher() && request.auth.uid == teacherUid)
+          );
+        }
+
+        // Admin-managed default timesheet templates per program/specialization
+        match /defaultTimesheetTemplates/{templateId} {
+          allow read: if isSignedIn();
+          allow create, update, delete: if isAdmin();
+        }
+
+        // Assignments collection (uppgifter)
+        match /assignments/{assignmentId} {
+          // Teachers who created the assignment can read/write it.
+          // Assigned students can read only their own assigned assignments.
+          // Use resource.data directly (not get()) so collection queries (list) work correctly.
+          allow read: if isUserActive() && (
+            resource.data.createdBy == request.auth.uid ||
+            isAdmin() ||
+            (isStudent() && resource.data.assignedTo.hasAny([request.auth.uid]))
+          );
+
+          allow create: if isUserActive() && isTeacher()
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.schoolId == userSchool();
+
+          allow update, delete: if isUserActive() && (
+            (isTeacher() && isAssignmentOwner(assignmentId)) ||
+            isAdmin()
+          );
+
+          // Student submissions for one assignment
+          match /submissions/{studentId} {
+            allow read: if isUserActive() && (
+              (isTeacher() && isAssignmentOwner(assignmentId)) ||
+              isAdmin() ||
+              (isStudent() && request.auth.uid == studentId && isAssignedToAssignment(assignmentId))
+            );
+
+            // Enforce one submission per student per assignment by document id = student uid.
+            allow create: if isUserActive()
+              && isStudent()
+              && request.auth.uid == studentId
+              && isAssignedToAssignment(assignmentId)
+              && !exists(/databases/$(database)/documents/assignments/$(assignmentId)/submissions/$(studentId));
+
+            // Student cannot overwrite after submit. Teacher/admin can review/update.
+            allow update, delete: if isUserActive() && (
+              (isTeacher() && isAssignmentOwner(assignmentId)) ||
+              isAdmin()
+            );
+          }
+
+          // Optional assignee state docs for badge/new tracking
+          match /assignees/{studentId} {
+            allow read: if isUserActive() && (
+              (isTeacher() && isAssignmentOwner(assignmentId)) ||
+              isAdmin() ||
+              (isStudent() && request.auth.uid == studentId && isAssignedToAssignment(assignmentId))
+            );
+
+            allow create, update: if isUserActive() && (
+              (isTeacher() && isAssignmentOwner(assignmentId)) ||
+              isAdmin() ||
+              (isStudent() && request.auth.uid == studentId && isAssignedToAssignment(assignmentId))
+            );
+
+            allow delete: if isUserActive() && (
+              (isTeacher() && isAssignmentOwner(assignmentId)) ||
+              isAdmin()
+            );
+          }
+        }
+
+        // Default deny everything else
+        match /{document=**} {
+          allow read, write: if false;
+        }
+      }
+    }

@@ -1,0 +1,1282 @@
+
+'use client';
+
+import React, { useEffect, useMemo, useState } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { httpsCallable } from 'firebase/functions';
+import { db, auth, functions } from '../../../lib/firebase';
+import WeekAccessManager from './WeekAccessManager';
+import { buildExportDatasetInBrowser } from './clientExportDataset';
+import { downloadClassPdf, downloadStudentPdf, downloadStudentPdfFull } from '@/shared/pdf-report';
+
+type Student = {
+  id: string;
+  email: string;
+  name: string;
+  classId: string;
+  className: string;
+  teacherUid?: string;
+  specialization: string;
+  status?: string;
+  timesheetCount?: number;
+  approvedTimesheets?: number;
+  totalHours?: number;
+  assessmentCount?: number;
+};
+
+type TeacherOption = {
+  id: string;
+  name: string;
+  email: string;
+  school: string;
+};
+
+type ProgramCatalogEntry = {
+  name: string;
+  specializations: string[];
+};
+
+type ExportScope = 'single' | 'class';
+
+function normalizeStringList(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (!text) continue;
+
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(text);
+  }
+
+  return normalized;
+}
+
+function parseProgramCatalog(rawPrograms: unknown): ProgramCatalogEntry[] {
+  if (!Array.isArray(rawPrograms)) return [];
+
+  return rawPrograms
+    .filter((entry): entry is Record<string, unknown> => !!entry && typeof entry === 'object')
+    .map((entry) => ({
+      name: String(entry.name ?? '').trim(),
+      specializations: normalizeStringList(entry.specializations),
+    }))
+    .filter((entry) => entry.name.length > 0);
+}
+
+export default function StudentsPage() {
+    // --- Klasshantering för lärare ---
+    const [newClassName, setNewClassName] = useState('');
+    const [creatingClass, setCreatingClass] = useState(false);
+    const [classError, setClassError] = useState<string | null>(null);
+    const [classCodes, setClassCodes] = useState<{ classId: string; code: string }[]>([]);
+    const [showClassMenu, setShowClassMenu] = useState(false);
+    const [qrClass, setQrClass] = useState<{ name: string; code: string; id: string } | null>(null);
+    const [deletingClassId, setDeletingClassId] = useState<string | null>(null);
+
+    // Skapa ny klass och generera kod
+    const handleCreateClass = async () => {
+      setClassError(null);
+      if (!newClassName.trim()) {
+        setClassError('Ange ett klassnamn.');
+        return;
+      }
+      setCreatingClass(true);
+      try {
+        // Use the same docId strategy as the Flutter app: `${teacherUid}_${className}`
+        const teacherUid = auth.currentUser?.uid || '';
+        const classId = `${teacherUid}_${newClassName.trim()}`;
+        const { setDoc, doc: docRef } = await import('firebase/firestore');
+        // Ensure createdAt and teacherUid exist, write with the exact doc id
+        await setDoc(docRef(db, 'classes', classId), {
+          name: newClassName.trim(),
+          teacherUid,
+          createdAt: new Date(),
+        }, { merge: true });
+
+        // Generera klasskod (slumpmässig 6-siffrig kod) and store as doc keyed by code
+        const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const { setDoc: setDoc2, doc: docRef2 } = await import('firebase/firestore');
+        await setDoc2(docRef2(db, 'classCodes', code), {
+          classId,
+          code,
+          createdAt: new Date(),
+          teacherUid,
+        }, { merge: true });
+
+        setNewClassName('');
+        await fetchClasses(auth.currentUser?.uid || '', userRole || undefined);
+        await fetchClassCodes();
+      } catch (err) {
+        setClassError('Kunde inte skapa klass.');
+      } finally {
+        setCreatingClass(false);
+      }
+    };
+
+    // Hämta klasskoder för lärarens klasser
+    const fetchClassCodes = async () => {
+      try {
+        const { getDocs, collection } = await import('firebase/firestore');
+        const codesSnapshot = await getDocs(collection(db, 'classCodes'));
+        const teacherUid = auth.currentUser?.uid;
+        const codes = codesSnapshot.docs
+          .filter((doc: any) => doc.data().teacherUid === teacherUid)
+          .map((doc: any) => ({ classId: doc.data().classId, code: doc.data().code }));
+        setClassCodes(codes);
+      } catch (err) {
+        setClassCodes([]);
+      }
+    };
+
+    // One-time migration: copy any classes that were created with auto-IDs
+    // to the Flutter-compatible docId `${teacherUid}_${className}` and update classCodes.
+    const handleMigrateClassesForTeacher = async () => {
+      if (!confirm('Utför migration av befintliga klasser till korrekt docId? Detta påverkar endast dina klasser.')) return;
+      try {
+        const teacherUid = auth.currentUser?.uid || '';
+        const { getDocs, collection, doc: docRef, getDoc, setDoc, updateDoc, deleteDoc, query, where } = await import('firebase/firestore');
+        // Fetch classes that have this teacherUid
+        const classesSnap = await getDocs(query(collection(db, 'classes'), where('teacherUid', '==', teacherUid)));
+        for (const c of classesSnap.docs) {
+          const oldId = c.id;
+          // If already matches pattern teacherUid_*, skip
+          if (oldId.startsWith(`${teacherUid}_`)) continue;
+          const data = c.data();
+          const name = (data.name || '').toString().trim();
+          if (!name) continue;
+          const newId = `${teacherUid}_${name}`;
+          // Copy to new doc if not exists
+          const newDocSnap = await getDoc(docRef(db, 'classes', newId));
+          if (!newDocSnap.exists()) {
+            await setDoc(docRef(db, 'classes', newId), { ...data, migratedFrom: oldId }, { merge: true });
+          }
+
+          // Migrate any classCodes that reference the oldId
+          const classCodesSnap = await getDocs(query(collection(db, 'classCodes'), where('classId', '==', oldId)));
+          for (const cc of classCodesSnap.docs) {
+            const ccData = cc.data();
+            const code = (ccData.code || '').toString();
+            if (!code) continue;
+            // Create/overwrite doc keyed by code with updated classId
+            await setDoc(docRef(db, 'classCodes', code), { ...ccData, classId: newId, teacherUid }, { merge: true });
+            // Delete old classCodes doc if its id isn't the code
+            if (cc.id !== code) {
+              await deleteDoc(docRef(db, 'classCodes', cc.id));
+            }
+          }
+
+          // Mark old class doc as migrated (do not delete automatically)
+          await updateDoc(docRef(db, 'classes', oldId), { migratedTo: newId });
+        }
+
+        // Refresh lists
+        await fetchClasses(auth.currentUser?.uid || '', userRole || undefined);
+        await fetchClassCodes();
+        alert('Migration slutförd (gamla dokument markeras som migrerade).');
+      } catch (e) {
+        console.error('Migration failed', e);
+        alert('Migration misslyckades. Se konsolen för detaljer.');
+      }
+    };
+
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [selectedSpecialization, setSelectedSpecialization] = useState<string>('');
+  const [savingSpecialization, setSavingSpecialization] = useState(false);
+  const [catalogPrograms, setCatalogPrograms] = useState<ProgramCatalogEntry[]>([]);
+  const [teacherAssignedPrograms, setTeacherAssignedPrograms] = useState<string[]>([]);
+  const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
+  const [statusChangingStudent, setStatusChangingStudent] = useState<{ student: Student; newStatus: string } | null>(null);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [studentForm, setStudentForm] = useState({ firstName: '', lastName: '', email: '', password: '', classId: '', teacherUid: '' });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [classes, setClasses] = useState<Array<{ id: string; name: string; teacherUid?: string }>>([]);
+  const [teachers, setTeachers] = useState<TeacherOption[]>([]);
+  const [selectedTeacherUid, setSelectedTeacherUid] = useState<string>('ALL');
+  const [selectedClassId, setSelectedClassId] = useState<string>('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [exportScope, setExportScope] = useState<ExportScope>('single');
+  const [exportStudentId, setExportStudentId] = useState('');
+  const [exportClassId, setExportClassId] = useState('');
+  const [isPdfExporting, setIsPdfExporting] = useState(false);
+  const [isPdfExportingFull, setIsPdfExportingFull] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportInfo, setExportInfo] = useState<string | null>(null);
+  const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
+  const [isCreateStudentPanelOpen, setIsCreateStudentPanelOpen] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
+
+    // Hämta klasskoder när klasser laddas
+    useEffect(() => {
+      if (userRole === 'teacher') {
+        fetchClassCodes();
+      }
+    }, [userRole, classes.length]);
+
+  const fallbackSpecializationOptions = useMemo(
+    () => ['Träarbetare', 'Murare', 'Målare', 'Plåtslagare', 'Elektriker', 'VVS', 'Anläggare'],
+    [],
+  );
+
+  const specializationOptions = useMemo(() => {
+    const allCatalogSpecializations = normalizeStringList(
+      catalogPrograms.flatMap((program) => program.specializations),
+    );
+
+    const sourceSpecializations =
+      allCatalogSpecializations.length > 0 ? allCatalogSpecializations : fallbackSpecializationOptions;
+
+    if (userRole !== 'teacher' || teacherAssignedPrograms.length === 0) {
+      return selectedSpecialization && !sourceSpecializations.includes(selectedSpecialization)
+        ? [selectedSpecialization, ...sourceSpecializations]
+        : sourceSpecializations;
+    }
+
+    const allowedProgramNames = new Set(teacherAssignedPrograms.map((name) => name.toLowerCase()));
+    const filteredSpecializations = normalizeStringList(
+      catalogPrograms
+        .filter((program) => allowedProgramNames.has(program.name.toLowerCase()))
+        .flatMap((program) => program.specializations),
+    );
+
+    const resolved = filteredSpecializations.length > 0 ? filteredSpecializations : sourceSpecializations;
+    return selectedSpecialization && !resolved.includes(selectedSpecialization)
+      ? [selectedSpecialization, ...resolved]
+      : resolved;
+  }, [
+    catalogPrograms,
+    fallbackSpecializationOptions,
+    selectedSpecialization,
+    teacherAssignedPrograms,
+    userRole,
+  ]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const role = userDoc.data()?.role || null;
+      setUserRole(role);
+
+      const assignedPrograms = role === 'teacher'
+        ? normalizeStringList(userDoc.data()?.assignedPrograms)
+        : [];
+      setTeacherAssignedPrograms(assignedPrograms);
+
+      const catalogDoc = await getDoc(doc(db, 'appSettings', 'programCatalog'));
+      setCatalogPrograms(
+        catalogDoc.exists() ? parseProgramCatalog(catalogDoc.data()?.programs) : [],
+      );
+
+      await fetchClasses(user.uid, role);
+      await fetchStudents(user.uid, role);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [router]);
+
+  const fetchClasses = async (currentUserId: string, role?: string) => {
+    try {
+      // If teacher, query Firestore for classes owned by this teacher to avoid showing foreign classes
+      let classesSnapshot: any;
+      if (role === 'teacher') {
+        const { query, where, collection } = await import('firebase/firestore');
+        classesSnapshot = await getDocs(query(collection(db, 'classes'), where('teacherUid', '==', currentUserId)));
+      } else {
+        classesSnapshot = await getDocs(collection(db, 'classes'));
+      }
+
+      // Exclude migrated and archived classes from normal class workflows.
+      const allDocs = classesSnapshot.docs.filter((d: any) => !d.data().migratedTo && d.data().archived !== true);
+
+      // Dev-only debug logs to help trace unexpected classes (doc.id, name, teacherUid)
+      if (process.env.NODE_ENV !== 'production') {
+        for (const d of allDocs) {
+          const dd = d.data();
+          console.log('CLASS LIST DEBUG:', { id: d.id, name: dd?.name || null, teacherUid: dd?.teacherUid || null });
+        }
+      }
+
+      const classesData = allDocs.map((doc: any) => ({
+        id: doc.id,
+        name: doc.data().name || 'Okänd klass',
+        teacherUid: (doc.data().teacherUid || '').toString(),
+      }));
+      setClasses(classesData);
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+    }
+  };
+
+  const fetchStudents = async (currentUserId: string, role?: string) => {
+    try {
+      const usersSnapshot = await getDocs(collection(db, 'users'));
+      // Only fetch classes owned by teacher when role === 'teacher'
+      let classesSnapshot: any;
+      if (role === 'teacher') {
+        const { query, where, collection } = await import('firebase/firestore');
+        classesSnapshot = await getDocs(query(collection(db, 'classes'), where('teacherUid', '==', currentUserId)));
+      } else {
+        classesSnapshot = await getDocs(collection(db, 'classes'));
+      }
+      // Dev logs for class snapshots
+      if (process.env.NODE_ENV !== 'production') {
+        for (const d of classesSnapshot.docs) {
+          const dd = d.data();
+          console.log('CLASS SNAPSHOT DEBUG:', { id: d.id, name: dd?.name || null, teacherUid: dd?.teacherUid || null });
+        }
+      }
+      const isTeacher = role === 'teacher';
+      const classIds = isTeacher
+        ? new Set(classesSnapshot.docs
+            .filter((doc: any) => !doc.data().migratedTo && doc.data().archived !== true)
+            .map((doc: any) => doc.id))
+        : new Set(classesSnapshot.docs.filter((doc: any) => doc.data().archived !== true).map((doc: any) => doc.id));
+      
+      const studentUsers = usersSnapshot.docs
+        .filter((doc: any) => doc.data().role === 'student')
+        .filter((doc: any) => {
+          if (!isTeacher) return true;
+          const data = doc.data();
+          const classId = (data.classId || '').toString();
+          const teacherUid = (data.teacherUid || '').toString();
+          return teacherUid === currentUserId || (classId && classIds.has(classId));
+        })
+        .map((doc: any) => {
+          const classId = doc.data().classId;
+          const classDoc = classesSnapshot.docs.find((c: any) => c.id === classId);
+          return {
+            id: doc.id,
+            email: doc.data().email || '',
+            name: doc.data().displayName || doc.data().email || 'Okänd',
+            classId: classId,
+            className: classDoc ? classDoc.data().name : 'Ingen klass',
+            teacherUid: (doc.data().teacherUid || '').toString(),
+            specialization: doc.data().specialization || '',
+            status: doc.data().status || 'active',
+          };
+        });
+
+      if (role === 'admin') {
+        const teacherUsers = usersSnapshot.docs
+          .filter((doc: any) => doc.data().role === 'teacher')
+          .map((doc: any) => ({
+            id: doc.id,
+            name: (doc.data().displayName || doc.data().name || doc.data().email || 'Okänd lärare').toString(),
+            email: (doc.data().email || '').toString(),
+            school: (doc.data().school || '').toString().trim() || 'Okänd skola',
+          }))
+          .sort((a: TeacherOption, b: TeacherOption) => {
+            const schoolCompare = a.school.localeCompare(b.school, 'sv');
+            if (schoolCompare !== 0) return schoolCompare;
+            return a.name.localeCompare(b.name, 'sv');
+          });
+        setTeachers(teacherUsers);
+      } else {
+        setTeachers([]);
+      }
+
+      // Load stats collections defensively so a single permission error does not block student visibility.
+      let timesheetsDocs: any[] = [];
+      let assessmentDocs: any[] = [];
+      try {
+        if (isTeacher) {
+          const { query, where, collection } = await import('firebase/firestore');
+          const teacherTimesheetsSnapshot = await getDocs(
+            query(collection(db, 'timesheets'), where('teacherUid', '==', currentUserId))
+          );
+          timesheetsDocs = teacherTimesheetsSnapshot.docs;
+        } else {
+          const timesheetsSnapshot = await getDocs(collection(db, 'timesheets'));
+          timesheetsDocs = timesheetsSnapshot.docs;
+        }
+      } catch (error) {
+        console.warn('Could not fetch timesheets stats, continuing without them:', error);
+      }
+      try {
+        const assessmentsSnapshot = await getDocs(collection(db, 'assessmentRequests'));
+        assessmentDocs = assessmentsSnapshot.docs;
+      } catch (error) {
+        console.warn('Could not fetch assessment stats, continuing without them:', error);
+      }
+      const studentIds = new Set(studentUsers.map(student => student.id));
+      const filteredTimesheets = isTeacher
+        ? timesheetsDocs.filter(doc => studentIds.has((doc.data().studentUid || '').toString()))
+        : timesheetsDocs;
+      const filteredAssessments = isTeacher
+        ? assessmentDocs.filter(doc => {
+            const studentUid = (doc.data().studentUid || '').toString();
+            return studentIds.has(studentUid);
+          })
+        : assessmentDocs;
+
+      const studentsWithStats = studentUsers.map(student => {
+        const studentTimesheets = filteredTimesheets.filter(
+          doc => doc.data().studentUid === student.id
+        );
+
+        const approvedTimesheets = studentTimesheets.filter(
+          doc => doc.data().approved === true
+        );
+
+        let totalHours = 0;
+        approvedTimesheets.forEach(timesheet => {
+          const entries = timesheet.data().entries || {};
+          Object.values(entries).forEach((dayEntries: any) => {
+            if (dayEntries && typeof dayEntries === 'object') {
+              Object.values(dayEntries).forEach((hours: any) => {
+                totalHours += Number(hours) || 0;
+              });
+            }
+          });
+        });
+
+        // Antal godkända bedömningar = antal godkända tidkort
+        const assessmentCount = approvedTimesheets.length;
+
+        return {
+          ...student,
+          timesheetCount: studentTimesheets.length,
+          approvedTimesheets: approvedTimesheets.length,
+          totalHours,
+          assessmentCount,
+        };
+      });
+
+      setStudents(studentsWithStats);
+    } catch (error) {
+      console.error('Error fetching students:', error);
+    }
+  };
+
+  const handleDeleteStudent = async (student: Student) => {
+    if (!confirm(`Är du säker på att du vill ta bort ${student.name} helt från systemet? Detta kan inte ångras.`)) {
+      return;
+    }
+
+    try {
+      setDeletingStudent(student);
+      // Anropa Cloud Function för att ta bort användaren
+      const deleteUserCallable = httpsCallable(functions, 'deleteUser');
+      await deleteUserCallable({ uid: student.id });
+      // Uppdatera listan
+      await fetchStudents(auth.currentUser?.uid || '', userRole || undefined);
+      setDeletingStudent(null);
+    } catch (error) {
+      console.error('Error deleting student:', error);
+      alert('Fel vid borttagning av elev');
+      setDeletingStudent(null);
+    }
+  };
+
+  const handleSetUserStatus = async (student: Student, status: 'active' | 'frozen') => {
+    const action = status === 'frozen' ? 'frysa' : 'aktivera';
+    if (!confirm(`Är du säker på att du vill ${action} ${student.name}?`)) {
+      return;
+    }
+
+    try {
+      setStatusChangingStudent({ student, newStatus: status });
+      const setUserStatusCallable = httpsCallable(functions, 'setUserStatus');
+      await setUserStatusCallable({ uid: student.id, status });
+      await fetchStudents(auth.currentUser?.uid || '', userRole || undefined);
+      setStatusChangingStudent(null);
+      alert(`Elevens status har uppdaterats!`);
+    } catch (error: any) {
+      console.error('Error setting user status:', error);
+      alert(error?.message || `Fel vid ${action} av elev`);
+      setStatusChangingStudent(null);
+    }
+  };
+
+  const handleCreateStudent = async () => {
+    setFormError(null);
+    if (!studentForm.firstName || !studentForm.lastName || !studentForm.email || !studentForm.password) {
+      setFormError('Fyll i förnamn, efternamn, e-post och lösenord.');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      const createUser = httpsCallable(functions, 'createUser');
+      await createUser({
+        role: 'student',
+        firstName: studentForm.firstName,
+        lastName: studentForm.lastName,
+        email: studentForm.email,
+        password: studentForm.password,
+        classId: studentForm.classId,
+        teacherUid: studentForm.teacherUid,
+      });
+      setStudentForm({ firstName: '', lastName: '', email: '', password: '', classId: '', teacherUid: '' });
+      await fetchStudents(auth.currentUser?.uid || '', userRole || undefined);
+      alert('Elev skapad!');
+    } catch (error: any) {
+      setFormError(error?.message || 'Fel vid skapande av elev.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const availableClasses = useMemo(() => {
+    const scopedClasses = userRole === 'admin'
+      ? (selectedTeacherUid === 'ALL'
+          ? classes
+          : classes.filter((cls) => (cls.teacherUid || '') === selectedTeacherUid))
+      : classes;
+
+    return [...scopedClasses].sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+  }, [classes, selectedTeacherUid, userRole]);
+
+  const adminTeacherOverview = useMemo(() => {
+    if (userRole !== 'admin') {
+      return null;
+    }
+
+    if (selectedTeacherUid === 'ALL') {
+      return {
+        teacherName: 'Alla lärare',
+        studentCount: students.length,
+        classCount: classes.length,
+      };
+    }
+
+    const selectedTeacher = teachers.find((teacher) => teacher.id === selectedTeacherUid);
+    return {
+      teacherName: selectedTeacher?.name || 'Vald lärare',
+      studentCount: students.filter((student) => (student.teacherUid || '') === selectedTeacherUid).length,
+      classCount: classes.filter((cls) => (cls.teacherUid || '') === selectedTeacherUid).length,
+    };
+  }, [classes, selectedTeacherUid, students, teachers, userRole]);
+
+  const teacherGroups = useMemo(() => {
+    const groupMap = new Map<string, TeacherOption[]>();
+
+    for (const teacher of teachers) {
+      const school = teacher.school || 'Okänd skola';
+      const current = groupMap.get(school) || [];
+      current.push(teacher);
+      groupMap.set(school, current);
+    }
+
+    return Array.from(groupMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], 'sv'))
+      .map(([school, teacherList]) => ({
+        school,
+        teachers: [...teacherList].sort((a, b) => a.name.localeCompare(b.name, 'sv')),
+      }));
+  }, [teachers]);
+
+  useEffect(() => {
+    if (userRole !== 'admin') {
+      return;
+    }
+
+    if (selectedClassId === 'ALL') {
+      return;
+    }
+
+    const classStillAvailable = availableClasses.some((cls) => cls.id === selectedClassId);
+    if (!classStillAvailable) {
+      setSelectedClassId('ALL');
+    }
+  }, [availableClasses, selectedClassId, userRole]);
+
+  useEffect(() => {
+    if (userRole !== 'admin') {
+      return;
+    }
+
+    setStudentForm((prev) => ({
+      ...prev,
+      classId: '',
+    }));
+  }, [selectedTeacherUid, userRole]);
+
+  const filteredStudents = students
+    .filter(s => {
+      if (userRole === 'admin' && selectedTeacherUid !== 'ALL') {
+        if ((s.teacherUid || '') !== selectedTeacherUid) {
+          return false;
+        }
+      }
+
+      // Klassfilter
+      if (selectedClassId !== 'ALL' && s.classId !== selectedClassId) {
+        return false;
+      }
+      // Sökfilter
+      if (!searchTerm) return true;
+      return (
+        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (s.className && s.className.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+    });
+
+  useEffect(() => {
+    if (selectedClassId !== 'ALL') {
+      setExportClassId(selectedClassId);
+    }
+  }, [selectedClassId]);
+
+  useEffect(() => {
+    if (!exportClassId && classes.length > 0) {
+      setExportClassId(availableClasses[0]?.id || '');
+    }
+  }, [availableClasses, classes.length, exportClassId]);
+
+  const isTeacherOrAdmin = userRole === 'teacher' || userRole === 'admin';
+
+  const createBrowserExportOptions = (currentUserUid: string) => ({
+    db,
+    role: userRole as 'teacher' | 'admin',
+    currentUserUid,
+    scope: exportScope,
+    selectedStudentId: exportStudentId,
+    selectedStudentIds: [],
+    selectedClassId: exportClassId,
+    students: students.map((student) => ({
+      id: student.id,
+      name: student.name,
+      email: student.email,
+      classId: student.classId,
+      className: student.className,
+      specialization: student.specialization,
+      status: student.status,
+    })),
+  });
+
+  const handleExportPdf = async () => {
+    try {
+      setExportError(null);
+      setExportInfo(null);
+
+      const activeUser = auth.currentUser;
+      if (!activeUser) {
+        setExportError('Du måste vara inloggad för att exportera.');
+        return;
+      }
+
+      if (!isTeacherOrAdmin) {
+        setExportError('Endast lärare eller admin kan exportera elevdata.');
+        return;
+      }
+
+      if (exportScope === 'single' && !exportStudentId) {
+        setExportError('Välj en elev innan export.');
+        return;
+      }
+
+      if (exportScope === 'class' && !exportClassId) {
+        setExportError('Välj en klass innan export.');
+        return;
+      }
+
+      setIsPdfExporting(true);
+
+      const dataset = await buildExportDatasetInBrowser(createBrowserExportOptions(activeUser.uid));
+
+      if (exportScope === 'single') {
+        const student = dataset.students[0];
+        if (!student) {
+          throw new Error('Kunde inte hitta elev för PDF-export.');
+        }
+        await downloadStudentPdf(student, dataset.generatedAt);
+      } else {
+        const selectedClassName = classes.find((classItem) => classItem.id === exportClassId)?.name;
+        await downloadClassPdf(dataset, selectedClassName);
+      }
+
+      setExportInfo('PDF-export klar.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'PDF-export misslyckades.';
+      setExportError(message);
+    } finally {
+      setIsPdfExporting(false);
+    }
+  };
+
+  const handleExportPdfFull = async () => {
+    try {
+      setExportError(null);
+      setExportInfo(null);
+
+      const activeUser = auth.currentUser;
+      if (!activeUser) {
+        setExportError('Du måste vara inloggad för att exportera.');
+        return;
+      }
+
+      if (!isTeacherOrAdmin) {
+        setExportError('Endast lärare eller admin kan exportera elevdata.');
+        return;
+      }
+
+      if (exportScope !== 'single' || !exportStudentId) {
+        setExportError('Fullständig PDF fungerar för en specifik elev. Välj urval: En specifik elev.');
+        return;
+      }
+
+      setIsPdfExportingFull(true);
+
+      const dataset = await buildExportDatasetInBrowser(createBrowserExportOptions(activeUser.uid));
+      const student = dataset.students[0];
+      if (!student) {
+        throw new Error('Kunde inte hitta elev för fullständig PDF-export.');
+      }
+
+      await downloadStudentPdfFull(student, dataset.generatedAt);
+      setExportInfo('Fullständig PDF-export klar.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Fullständig PDF-export misslyckades.';
+      setExportError(message);
+    } finally {
+      setIsPdfExportingFull(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <p>Laddar elever...</p>
+      </div>
+    );
+  }
+
+  // Returnera endast innehållet för elever (utan sidomeny och main-wrapper)
+  return (
+    <>
+      <div className="flex items-center gap-4 mb-8">
+        <button
+          onClick={() => router.push('/dashboard')}
+          className="text-orange-600 hover:text-orange-700 font-medium"
+        >
+          ← Tillbaka
+        </button>
+        <h1 className="text-2xl font-bold text-gray-900">Elever</h1>
+      </div>
+
+      {/* Klasshantering tas bort från Elever-sidan; hanteras i /dashboard/klasser */}
+            {/* QR-kod/modal för klass */}
+            {qrClass && (
+              <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg shadow-lg p-8 max-w-xs w-full relative">
+                  <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-700" onClick={() => setQrClass(null)}>&times;</button>
+                  <h4 className="text-lg font-semibold mb-2">{qrClass.name}</h4>
+                  <div className="mb-2">
+                    <span className="text-xs bg-orange-100 text-orange-700 rounded px-2 py-1">Kod: {qrClass.code}</span>
+                  </div>
+                  {/* QR-kod (använd extern tjänst, t.ex. goqr.me) */}
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(window.location.origin + '/join-class/' + qrClass.code)}`}
+                    alt="QR-kod"
+                    className="mx-auto mb-2"
+                  />
+                  <div className="text-xs break-all mb-2">Länk: <a href={`/join-class/${qrClass.code}`} className="text-blue-600 underline" target="_blank" rel="noopener noreferrer">{window.location.origin + '/join-class/' + qrClass.code}</a></div>
+                </div>
+              </div>
+            )}
+      {/* Admin-only: teacher filter above class filter */}
+      <div className="mb-6 space-y-4">
+        {userRole === 'admin' && (
+          <div>
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              Välj lärare
+            </label>
+            <select
+              value={selectedTeacherUid}
+              onChange={(e) => {
+                setSelectedTeacherUid(e.target.value);
+                setSelectedClassId('ALL');
+              }}
+              className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+            >
+              <option value="ALL">Alla lärare</option>
+              {teacherGroups.map((group) => (
+                <optgroup key={group.school} label={group.school}>
+                  {group.teachers.map((teacher) => (
+                    <option key={teacher.id} value={teacher.id}>
+                      {teacher.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            {adminTeacherOverview && (
+              <p className="mt-2 text-sm text-gray-600">
+                {adminTeacherOverview.teacherName}: {adminTeacherOverview.studentCount} elever, {adminTeacherOverview.classCount} klasser
+              </p>
+            )}
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Välj klass
+          </label>
+          <select
+            value={selectedClassId}
+            onChange={(e) => setSelectedClassId(e.target.value)}
+            className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+          >
+            <option value="ALL">Alla klasser</option>
+            {availableClasses.map(cls => (
+              <option key={cls.id} value={cls.id}>
+                {cls.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="mb-8 rounded-lg border border-orange-100 bg-white shadow-sm">
+        <button
+          type="button"
+          onClick={() => setIsExportPanelOpen((prev) => !prev)}
+          className="flex w-full items-center justify-between px-6 py-4 text-left"
+        >
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Exportera elevdata (PDF)</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Exporten skapar PDF-rapporter med sammanställning, aktiviteter, statistik och diagram.
+            </p>
+          </div>
+          <span className="ml-4 text-sm font-medium text-orange-700">{isExportPanelOpen ? 'Dolj' : 'Visa'}</span>
+        </button>
+
+        {isExportPanelOpen && (
+          <div className="border-t border-orange-100 px-6 pb-6 pt-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Urval</label>
+                <select
+                  value={exportScope}
+                  onChange={(event) => setExportScope(event.target.value as ExportScope)}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                >
+                  <option value="single">En specifik elev</option>
+                  <option value="class">En hel klass</option>
+                </select>
+              </div>
+
+              {exportScope === 'single' && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Elev</label>
+                  <select
+                    value={exportStudentId}
+                    onChange={(event) => setExportStudentId(event.target.value)}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  >
+                    <option value="">Välj elev</option>
+                    {filteredStudents.map((student) => (
+                      <option key={student.id} value={student.id}>
+                        {student.name} ({student.className || 'Ingen klass'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {exportScope === 'class' && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Klass</label>
+                  <select
+                    value={exportClassId}
+                    onChange={(event) => setExportClassId(event.target.value)}
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  >
+                    <option value="">Välj klass</option>
+                    {availableClasses.map((classItem) => (
+                      <option key={classItem.id} value={classItem.id}>
+                        {classItem.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {exportError && (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {exportError}
+              </div>
+            )}
+
+            {exportInfo && (
+              <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+                {exportInfo}
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-col items-start gap-3 md:flex-row">
+              <button
+                onClick={handleExportPdf}
+                disabled={isPdfExporting}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+              >
+                {isPdfExporting ? 'Genererar PDF...' : 'Exportera till PDF'}
+              </button>
+              <button
+                onClick={handleExportPdfFull}
+                disabled={isPdfExportingFull || exportScope !== 'single' || !exportStudentId}
+                className="rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 font-semibold text-orange-800 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
+                type="button"
+              >
+                {isPdfExportingFull ? 'Genererar fullständig PDF...' : 'Exportera till PDF - Fullständig'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Admin: Lägg till elev formulär */}
+      {userRole === 'admin' && (
+        <div className="mb-8 rounded-lg bg-white shadow">
+          <button
+            type="button"
+            onClick={() => setIsCreateStudentPanelOpen((prev) => !prev)}
+            className="flex w-full items-center justify-between px-6 py-4 text-left"
+          >
+            <h2 className="text-xl font-bold text-gray-900">Lägg till elev</h2>
+            <span className="ml-4 text-sm font-medium text-orange-700">{isCreateStudentPanelOpen ? 'Dolj' : 'Visa'}</span>
+          </button>
+
+          {isCreateStudentPanelOpen && (
+            <div className="border-t border-slate-100 px-6 pb-6 pt-4">
+              <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <input
+                  value={studentForm.firstName}
+                  onChange={(e) => setStudentForm({ ...studentForm, firstName: e.target.value })}
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Förnamn"
+                  autoComplete="off"
+                />
+                <input
+                  value={studentForm.lastName}
+                  onChange={(e) => setStudentForm({ ...studentForm, lastName: e.target.value })}
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Efternamn"
+                  autoComplete="off"
+                />
+                <input
+                  value={studentForm.email}
+                  onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="E-post"
+                  autoComplete="off"
+                  type="email"
+                />
+                <input
+                  value={studentForm.password}
+                  onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  placeholder="Lösenord"
+                  type="password"
+                  autoComplete="new-password"
+                />
+                <select
+                  value={studentForm.classId}
+                  onChange={(e) => setStudentForm({ ...studentForm, classId: e.target.value })}
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                >
+                  <option value="">Valfri klass</option>
+                  {availableClasses.map((cls) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={studentForm.teacherUid}
+                  onChange={(e) => {
+                    const nextTeacherUid = e.target.value;
+                    setStudentForm({ ...studentForm, teacherUid: nextTeacherUid, classId: '' });
+                    if (userRole === 'admin') {
+                      setSelectedTeacherUid(nextTeacherUid || 'ALL');
+                      setSelectedClassId('ALL');
+                    }
+                  }}
+                  className="border border-gray-300 rounded-lg px-3 py-2"
+                >
+                  <option value="">Valfri lärare</option>
+                  {teacherGroups.map((group) => (
+                    <optgroup key={group.school} label={group.school}>
+                      {group.teachers.map((teacher) => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {teacher.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              {formError && (
+                <p className="mb-4 text-sm text-red-600">{formError}</p>
+              )}
+              <button
+                onClick={handleCreateStudent}
+                disabled={creating}
+                className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition disabled:opacity-60"
+              >
+                Skapa elev
+              </button>
+            </div>
+          )}
+        </div>
+      )}      {/* Search */}
+      <div className="mb-6">
+        <input
+          type="text"
+          placeholder="Sök elev (namn, email, klass)..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+        />
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className="bg-white p-4 rounded-lg shadow">
+          <p className="text-sm text-gray-600">
+            {selectedClassId === 'ALL' ? 'Totalt antal elever' : 'Elever i vald klass'}
+          </p>
+          <p className="text-2xl font-bold text-blue-600">{filteredStudents.length}</p>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow">
+          <p className="text-sm text-gray-600">Total arbetstid</p>
+          <p className="text-2xl font-bold text-green-600">
+            {filteredStudents.reduce((sum, s) => sum + (s.totalHours ?? 0), 0)}h
+          </p>
+        </div>
+      </div>
+
+      {/* Students Table */}
+      <div className="overflow-hidden rounded-lg bg-white shadow">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Namn
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Klass
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Tidkort
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Timmar
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Bedömningar
+              </th>
+              {userRole === 'teacher' && (
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Yrkesutgång
+                </th>
+              )}
+              {userRole === 'teacher' && (
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Åtgärder
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {filteredStudents.map(student => (
+              <tr 
+                key={student.id} 
+                onClick={() => router.push(`/dashboard/students/${student.id}`)}
+                className="hover:bg-orange-50 cursor-pointer transition"
+              >
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm font-medium text-gray-900">{student.name}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm text-gray-500">{student.className || '-'}</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm text-gray-900">
+                    {student.approvedTimesheets}/{student.timesheetCount}
+                    <span className="text-xs text-gray-500 ml-1">godkända</span>
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm text-gray-900">{student.totalHours}h</div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm text-gray-900">{student.assessmentCount}</div>
+                </td>
+                {userRole === 'teacher' && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-700">
+                        {student.specialization || '-'}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingStudent(student);
+                          setSelectedSpecialization(student.specialization || '');
+                        }}
+                        className="text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        Ändra
+                      </button>
+                    </div>
+                  </td>
+                )}
+                {userRole === 'teacher' && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteStudent(student);
+                      }}
+                      disabled={deletingStudent?.id === student.id}
+                      className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-60"
+                    >
+                      {deletingStudent?.id === student.id ? 'Tar bort...' : 'Ta bort'}
+                    </button>
+                  </td>
+                )}
+                {userRole === 'admin' && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      {student.status && (
+                        <span className={`text-xs font-medium px-2 py-1 rounded ${student.status === 'frozen' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                          {student.status === 'frozen' ? 'Fryst' : 'Aktiv'}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                )}
+                {userRole === 'admin' && (
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      {student.status !== 'frozen' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSetUserStatus(student, 'frozen');
+                          }}
+                          disabled={statusChangingStudent?.student.id === student.id}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-60"
+                        >
+                          Frysa
+                        </button>
+                      )}
+                      {student.status === 'frozen' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSetUserStatus(student, 'active');
+                          }}
+                          disabled={statusChangingStudent?.student.id === student.id}
+                          className="text-green-600 hover:text-green-800 text-sm font-medium disabled:opacity-60"
+                        >
+                          Aktivera
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteStudent(student);
+                        }}
+                        disabled={deletingStudent?.id === student.id}
+                        className="text-gray-600 hover:text-gray-800 text-sm font-medium disabled:opacity-60"
+                      >
+                        Ta bort
+                      </button>
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+          </table>
+        </div>
+
+        {filteredStudents.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-500">
+              {searchTerm ? 'Inga elever matchade sökningen' : 'Inga elever hittades'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {editingStudent && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow max-w-md w-full p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Ändra yrkesutgång</h2>
+            <p className="text-sm text-gray-600 mb-4">{editingStudent.name}</p>
+            <select
+              value={selectedSpecialization}
+              onChange={(e) => setSelectedSpecialization(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4"
+            >
+              <option value="">Välj yrkesutgång</option>
+              {specializationOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setEditingStudent(null)}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+              >
+                Avbryt
+              </button>
+              <button
+                onClick={async () => {
+                  if (!selectedSpecialization) return;
+                  try {
+                    setSavingSpecialization(true);
+                    const updateSpecialization = httpsCallable(functions, 'updateStudentSpecialization');
+                    await updateSpecialization({
+                      uid: editingStudent.id,
+                      specialization: selectedSpecialization,
+                    });
+                    setEditingStudent(null);
+                    await fetchStudents(auth.currentUser?.uid || '', userRole || undefined);
+                  } catch (error) {
+                    console.error('Error updating specialization:', error);
+                  } finally {
+                    setSavingSpecialization(false);
+                  }
+                }}
+                disabled={savingSpecialization}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-60"
+              >
+                Spara
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+  // Lägg till veckohantering UI
+  // Om du vill visa den överst på sidan:
+  // export default function StudentsPage() { ... return (<div><WeekAccessManager /> ... </div>); }
