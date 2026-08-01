@@ -138,6 +138,44 @@ test('teacher can mark own email as verified but cannot self-approve', async () 
   );
 });
 
+test('admin notification create requires verified teacher or admin', async () => {
+  await clearFirestore();
+  await seedDocuments([
+    {
+      path: 'users/teacher-1',
+      data: {
+        role: 'teacher',
+        status: 'active',
+      },
+    },
+  ]);
+
+  const unverifiedTeacherDb = testEnv
+    .authenticatedContext('teacher-1', { email_verified: false })
+    .firestore();
+  const verifiedTeacherDb = testEnv
+    .authenticatedContext('teacher-1', { email_verified: true })
+    .firestore();
+
+  await assertFails(
+    setDoc(docRef(unverifiedTeacherDb, 'adminNotifications/new-teacher-1'), {
+      type: 'newTeacher',
+      teacherId: 'teacher-1',
+      createdAt: new Date('2026-08-01T09:05:00Z'),
+      resolved: false,
+    }),
+  );
+
+  await assertSucceeds(
+    setDoc(docRef(verifiedTeacherDb, 'adminNotifications/new-teacher-2'), {
+      type: 'newTeacher',
+      teacherId: 'teacher-1',
+      createdAt: new Date('2026-08-01T09:06:00Z'),
+      resolved: false,
+    }),
+  );
+});
+
 test('student can join a real class but cannot forge teacher linkage', async () => {
   await clearFirestore();
   await seedDocuments([
