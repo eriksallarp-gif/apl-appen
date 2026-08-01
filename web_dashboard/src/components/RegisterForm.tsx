@@ -185,6 +185,9 @@ export default function RegisterForm() {
 
     setLoading(true);
 
+    let createdUserUid = '';
+    let userProfileCreated = false;
+
     try {
       const email = form.email.trim().toLowerCase();
       const mobileNumber = form.mobileNumber.trim();
@@ -194,6 +197,7 @@ export default function RegisterForm() {
 
       const credential = await createUserWithEmailAndPassword(auth, email, form.password);
       const uid = credential.user.uid;
+      createdUserUid = uid;
 
       await updateProfile(credential.user, { displayName: trimmedFullName });
 
@@ -203,6 +207,8 @@ export default function RegisterForm() {
         verificationErrorMessage = mapVerificationError(verificationError);
         console.error('Verification email error:', verificationError);
       }
+
+      await credential.user.getIdToken(true);
 
       await setDoc(doc(db, 'users', uid), {
         name: trimmedFullName,
@@ -218,6 +224,7 @@ export default function RegisterForm() {
         approved: false,
         createdAt: serverTimestamp(),
       });
+      userProfileCreated = true;
 
       await signOut(auth);
 
@@ -234,6 +241,14 @@ export default function RegisterForm() {
         'Ditt lärarkonto har skapats men väntar på e-postverifiering och godkännande från en administratör. Kontrollera inkorg och skräppost.',
       );
     } catch (submitError) {
+      if (createdUserUid && !userProfileCreated && auth.currentUser?.uid === createdUserUid) {
+        try {
+          await auth.currentUser.delete();
+        } catch (cleanupError) {
+          console.error('Register cleanup error:', cleanupError);
+        }
+      }
+
       setError(mapAuthError(submitError));
       console.error('Register error:', submitError);
     } finally {

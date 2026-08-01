@@ -78,6 +78,66 @@ test('student cannot promote own role', async () => {
   );
 });
 
+test('teacher can create own pending profile with web registration fields', async () => {
+  await clearFirestore();
+
+  const db = testEnv.authenticatedContext('teacher-1').firestore();
+
+  await assertSucceeds(
+    setDoc(docRef(db, 'users/teacher-1'), {
+      name: 'Ada Lovelace',
+      displayName: 'Ada Lovelace',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      email: 'ada@example.com',
+      emailVerified: false,
+      mobileNumber: '0701234567',
+      role: 'teacher',
+      school: 'Yrkesgymnasiet',
+      assignedPrograms: ['El- och energiprogrammet'],
+      approved: false,
+      createdAt: new Date('2026-08-01T09:00:00Z'),
+    }),
+  );
+});
+
+test('teacher can mark own email as verified but cannot self-approve', async () => {
+  await clearFirestore();
+  await seedDocuments([
+    {
+      path: 'users/teacher-1',
+      data: {
+        name: 'Ada Lovelace',
+        displayName: 'Ada Lovelace',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        email: 'ada@example.com',
+        emailVerified: false,
+        role: 'teacher',
+        school: 'Yrkesgymnasiet',
+        assignedPrograms: ['El- och energiprogrammet'],
+        approved: false,
+        createdAt: new Date('2026-08-01T09:00:00Z'),
+      },
+    },
+  ]);
+
+  const db = testEnv.authenticatedContext('teacher-1').firestore();
+
+  await assertSucceeds(
+    updateDoc(docRef(db, 'users/teacher-1'), {
+      emailVerified: true,
+      emailVerifiedAt: new Date('2026-08-01T09:05:00Z'),
+    }),
+  );
+
+  await assertFails(
+    updateDoc(docRef(db, 'users/teacher-1'), {
+      approved: true,
+    }),
+  );
+});
+
 test('student can join a real class but cannot forge teacher linkage', async () => {
   await clearFirestore();
   await seedDocuments([
