@@ -7,6 +7,10 @@
           return request.auth != null;
         }
 
+        function isEmailVerified() {
+          return isSignedIn() && request.auth.token.email_verified == true;
+        }
+
         function userDocExists() {
           return exists(/databases/$(database)/documents/users/$(request.auth.uid));
         }
@@ -123,8 +127,8 @@
             );
         }
 
-        function canUpdateOwnUserProfile() {
-          return request.auth.uid == resource.id &&
+        function canUpdateOwnUserProfile(userId) {
+          return request.auth.uid == userId &&
             isUserActive() &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'name', 'displayName', 'firstName', 'lastName',
@@ -181,7 +185,7 @@
           // Teachers and admins can write any user (including status field)
           allow create: if canCreateOwnUserProfile(userId);
           allow update: if isSignedIn() && (
-            canUpdateOwnUserProfile() || 
+            canUpdateOwnUserProfile(userId) ||
             isAdmin()
           );
           allow delete: if isAdmin();
@@ -192,8 +196,8 @@
           // Only admins can read notifications
           allow read: if isAdmin();
 
-          // Anyone can create notifications (för nya lärarregistreringar)
-          allow create: if true;
+          // Verified teachers/admins can create notifications (för nya lärarregistreringar)
+          allow create: if isTeacherOrAdmin() && isEmailVerified();
 
           // Only admins can update/delete notifications
           allow update, delete: if isAdmin();
