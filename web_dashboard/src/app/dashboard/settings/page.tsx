@@ -9,6 +9,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import PageHeader from "@/components/PageHeader";
 
 type TeacherSettingsForm = {
   firstName: string;
@@ -144,19 +145,23 @@ export default function SettingsPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold mb-8 text-orange-600">Inställningar</h1>
+      <PageHeader
+        eyebrow="Konto"
+        title="Inställningar"
+        subtitle="Hantera dina kontouppgifter och uppdatera lösenordet för inloggning."
+      />
 
-      <form className="space-y-8" autoComplete="on">
-        <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+      <form className="space-y-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#141414] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]" autoComplete="on">
+        <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900 dark:border-orange-500/30 dark:bg-orange-500/12 dark:text-orange-200">
           För att ändra mobilnummer, e-post, skola eller program kontaktar du support på support@aplappen.com.
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Namn</label>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">Namn</label>
           <input
             type="text"
             value={form.firstName}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2 text-gray-500 focus:border-transparent focus:ring-2 focus:ring-orange-500 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-zinc-500"
             placeholder="Förnamn"
             autoComplete="given-name"
             disabled
@@ -164,11 +169,11 @@ export default function SettingsPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Efternamn</label>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">Efternamn</label>
           <input
             type="text"
             value={form.lastName}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2 text-gray-500 focus:border-transparent focus:ring-2 focus:ring-orange-500 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-zinc-500"
             placeholder="Efternamn"
             autoComplete="family-name"
             disabled
@@ -176,11 +181,11 @@ export default function SettingsPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">E-post</label>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">E-post</label>
           <input
             type="email"
             value={form.email}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2 text-gray-500 focus:border-transparent focus:ring-2 focus:ring-orange-500 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-zinc-500"
             placeholder="din@email.se"
             disabled
             autoComplete="email"
@@ -188,11 +193,11 @@ export default function SettingsPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Mobilnummer</label>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">Mobilnummer</label>
           <input
             type="tel"
             value={form.mobileNumber}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2 text-gray-500 focus:border-transparent focus:ring-2 focus:ring-orange-500 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-zinc-500"
             placeholder="070-123 45 67"
             autoComplete="tel"
             disabled
@@ -200,11 +205,11 @@ export default function SettingsPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Skola</label>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">Skola</label>
           <input
             type="text"
             value={form.school}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2 text-gray-500 focus:border-transparent focus:ring-2 focus:ring-orange-500 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-zinc-500"
             placeholder="Din skola"
             disabled
             autoComplete="organization"
@@ -212,11 +217,11 @@ export default function SettingsPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Program</label>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">Program</label>
           <input
             type="text"
             value={form.program}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-2 text-gray-500 focus:border-transparent focus:ring-2 focus:ring-orange-500 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-zinc-500"
             placeholder="Ditt program"
             autoComplete="organization-title"
             disabled
@@ -224,12 +229,12 @@ export default function SettingsPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Nuvarande lösenord</label>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">Nuvarande lösenord</label>
           <input
             type="password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            className="w-full rounded-xl border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-orange-500 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-zinc-100"
             placeholder="Nuvarande lösenord"
             autoComplete="current-password"
             disabled={loadingProfile || saving}
@@ -237,12 +242,12 @@ export default function SettingsPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Nytt lösenord</label>
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">Nytt lösenord</label>
           <input
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+            className="w-full rounded-xl border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-orange-500 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-zinc-100"
             placeholder="Nytt lösenord"
             autoComplete="new-password"
             disabled={loadingProfile || saving}
@@ -251,7 +256,7 @@ export default function SettingsPage() {
 
         <button
           type="button"
-          className="w-full bg-orange-600 text-white rounded-lg py-2 font-semibold hover:bg-orange-700 transition disabled:cursor-not-allowed disabled:opacity-60"
+          className="w-full rounded-xl bg-orange-600 py-2 font-semibold text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
           onClick={handleSave}
           disabled={loadingProfile || saving}
         >

@@ -2,8 +2,66 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --apl-primary: 234 88 12;
+  --apl-secondary: 15 23 42;
+  --apl-background: 248 250 252;
+  --apl-surface: 255 255 255;
+  --apl-border: 226 232 240;
+  --apl-text: 15 23 42;
+  --apl-muted: 100 116 139;
+}
+
+.dark {
+  --apl-primary: 251 146 60;
+  --apl-secondary: 228 228 231;
+  --apl-background: 9 9 9;
+  --apl-surface: 17 17 17;
+  --apl-border: 39 39 42;
+  --apl-text: 255 255 255;
+  --apl-muted: 113 113 122;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply min-h-screen bg-slate-50 text-slate-900 antialiased dark:bg-[#090909] dark:text-white;
+    background-image:
+      radial-gradient(circle at top right, rgba(251, 146, 60, 0.16), transparent 34%),
+      radial-gradient(circle at 0% 40%, rgba(251, 146, 60, 0.08), transparent 28%);
+    background-attachment: fixed;
+  }
+
+  .dark body {
+    background-image:
+      radial-gradient(circle at top right, rgba(249, 115, 22, 0.08), transparent 40%),
+      #090909;
+  }
+
+  input,
+  select,
+  textarea {
+    @apply text-slate-900 dark:text-slate-100;
+  }
+}
+
 /* Anpassad scrollbar för en snyggare upplevelse */
 @layer utilities {
+  .apl-shell-card {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#141414] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)];
+  }
+
+  .apl-focus {
+    @apply focus:outline-none focus:ring-2 focus:ring-orange-300;
+  }
+
   /* Dölj scrollbar helt för mobil horisontell scroll */
   .scrollbar-hide {
     -ms-overflow-style: none;
@@ -21,10 +79,72 @@
     background: transparent;
   }
   .overflow-y-auto::-webkit-scrollbar-thumb {
-    background: rgba(251, 146, 60, 0.3);
+    background: rgba(148, 163, 184, 0.45);
     border-radius: 3px;
   }
   .overflow-y-auto::-webkit-scrollbar-thumb:hover {
-    background: rgba(251, 146, 60, 0.5);
+    background: rgba(148, 163, 184, 0.65);
+  }
+
+  /* Compatibility layer: improve dark mode coverage for legacy utility usage */
+  .dark .bg-white {
+    background-color: rgb(20 20 20 / 1) !important;
+  }
+
+  .dark .bg-gray-50,
+  .dark .bg-slate-50 {
+    background-color: rgb(17 17 17 / 1) !important;
+  }
+
+  .dark .text-gray-900,
+  .dark .text-slate-900 {
+    color: rgb(255 255 255 / 1) !important;
+  }
+
+  .dark .text-gray-700,
+  .dark .text-gray-600,
+  .dark .text-slate-700,
+  .dark .text-slate-600 {
+    color: rgb(161 161 170 / 1) !important;
+  }
+
+  .dark .text-gray-500,
+  .dark .text-slate-500 {
+    color: rgb(113 113 122 / 1) !important;
+  }
+
+  .dark .border-gray-100,
+  .dark .border-gray-200,
+  .dark .border-gray-300,
+  .dark .border-slate-100,
+  .dark .border-slate-200,
+  .dark .border-slate-300 {
+    border-color: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .dark .hover\:bg-gray-50:hover,
+  .dark .hover\:bg-slate-50:hover {
+    background-color: rgb(24 24 27 / 1) !important;
+  }
+
+  /* Global override: selected orange states should stay subtle in dark mode */
+  .dark .bg-orange-50,
+  .dark .bg-orange-50\/40,
+  .dark .bg-orange-50\/50,
+  .dark .bg-orange-100 {
+    background-color: rgb(34 34 36 / 1) !important;
+  }
+
+  .dark .hover\:bg-orange-50:hover,
+  .dark .hover\:bg-orange-100:hover {
+    background-color: rgb(42 42 45 / 1) !important;
+  }
+
+  .dark .border-orange-100,
+  .dark .border-orange-200,
+  .dark .ring-orange-100,
+  .dark .ring-orange-200 {
+    border-color: rgba(255, 255, 255, 0.14) !important;
+    --tw-ring-color: rgba(255, 255, 255, 0.14) !important;
   }
 }

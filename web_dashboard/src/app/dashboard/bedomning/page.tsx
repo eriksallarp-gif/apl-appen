@@ -7,6 +7,7 @@ import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firest
 import { ChevronDown, ChevronUp, ClipboardList, EyeOff, Plus, RotateCcw, Save, Trash2 } from 'lucide-react';
 
 import { auth, db } from '@/lib/firebase';
+import PageHeader from '@/components/PageHeader';
 import {
   AssessmentTemplateSnapshot,
   SelfAssessmentField,
@@ -539,49 +540,50 @@ export default function AssessmentTemplatesPage() {
 
   if (loading || (!isAdmin && !isTeacher)) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center text-gray-500">
-        Laddar bedömningsmall...
+      <div className="flex min-h-[40vh] items-center justify-center text-slate-500 dark:text-slate-400">
+        <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-[#141414]">Laddar bedömningsmall...</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-8">
-      <section className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Bedömning</h1>
-          <p className="mt-2 max-w-3xl text-gray-600">
-            {isAdmin
-              ? 'Här styr du vilka frågor som ska ingå i elevens självskattning och vilka kriterier handledaren ska betygsätta. Ändringar påverkar nya bedömningsförfrågningar och sparas som snapshots i varje begäran.'
-              : 'Här ser du adminens standardmall och kan dölja frågor eller lägga till egna för just dina elever. Ändringarna används av elevappen när dina elever skapar en ny bedömning.'}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={resetDefaults}
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-lg border border-orange-200 px-4 py-2 font-medium text-orange-700 transition hover:bg-orange-50 disabled:opacity-50"
-          >
-            <RotateCcw className="h-4 w-4" />
-            {isAdmin ? 'Återställ standard' : 'Återställ adminmall'}
-          </button>
-          <button
-            onClick={saveTemplate}
-            disabled={saving}
-            className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-5 py-2.5 font-semibold text-white transition hover:bg-orange-700 disabled:opacity-50"
-          >
-            <Save className="h-4 w-4" />
-            Spara
-          </button>
-        </div>
-      </section>
+      <PageHeader
+        eyebrow="Bedömning"
+        title="Bedömningsmall"
+        subtitle={
+          isAdmin
+            ? 'Här styr du vilka frågor som ska ingå i elevens självskattning och vilka kriterier handledaren ska betygsätta. Ändringar påverkar nya bedömningsförfrågningar och sparas som snapshots i varje begäran.'
+            : 'Här ser du adminens standardmall och kan dölja frågor eller lägga till egna för just dina elever. Ändringarna används av elevappen när dina elever skapar en ny bedömning.'
+        }
+        actions={(
+          <>
+            <button
+              onClick={resetDefaults}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-4 py-2 font-medium text-orange-700 transition hover:bg-orange-50 disabled:opacity-50 dark:border-orange-500/40 dark:bg-[#141414] dark:text-orange-300 dark:hover:bg-orange-500/12"
+            >
+              <RotateCcw className="h-4 w-4" />
+              {isAdmin ? 'Återställ standard' : 'Återställ adminmall'}
+            </button>
+            <button
+              onClick={saveTemplate}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-5 py-2.5 font-semibold text-white transition hover:bg-orange-700 disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              Spara
+            </button>
+          </>
+        )}
+      />
 
       {(message || error) && (
         <div
           className={`rounded-xl border px-4 py-3 text-sm ${
             error
-              ? 'border-red-200 bg-red-50 text-red-700'
-              : 'border-green-200 bg-green-50 text-green-700'
+              ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200'
+              : 'border-green-200 bg-green-50 text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-200'
           }`}
         >
           {error || message}
@@ -589,50 +591,50 @@ export default function AssessmentTemplatesPage() {
       )}
 
       {isTeacher && (
-        <section className="rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-orange-100 p-6 shadow-sm">
+        <section className="rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 via-white to-orange-100 p-6 shadow-sm dark:border-orange-500/30 dark:from-orange-500/10 dark:via-[#141414] dark:to-[#111111] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-500">Din aktiva mall</p>
-              <h2 className="mt-2 text-2xl font-semibold text-gray-900">Förhandsvisning för dina elever</h2>
-              <p className="mt-2 max-w-3xl text-sm text-gray-600">
+              <h2 className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">Förhandsvisning för dina elever</h2>
+              <p className="mt-2 max-w-3xl text-sm text-gray-600 dark:text-zinc-300">
                 {teacherPreview.selfAssessmentFields.length} frågor i självskattningen och {teacherPreview.supervisorCriteria.length} kriterier i handledarbedömningen visas just nu för elever som är kopplade till dig.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-xl bg-white px-4 py-3 ring-1 ring-orange-100">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Dolda frågor</p>
-                <p className="mt-2 text-2xl font-semibold text-gray-900">{teacherOverrides.hiddenSelfAssessmentFieldKeys.length}</p>
+              <div className="rounded-xl bg-white px-4 py-3 ring-1 ring-orange-100 dark:bg-[#141414] dark:ring-orange-500/20">
+                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-zinc-500">Dolda frågor</p>
+                <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{teacherOverrides.hiddenSelfAssessmentFieldKeys.length}</p>
               </div>
-              <div className="rounded-xl bg-white px-4 py-3 ring-1 ring-orange-100">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Egna frågor</p>
-                <p className="mt-2 text-2xl font-semibold text-gray-900">{teacherOverrides.additionalSelfAssessmentFields.length}</p>
+              <div className="rounded-xl bg-white px-4 py-3 ring-1 ring-orange-100 dark:bg-[#141414] dark:ring-orange-500/20">
+                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-zinc-500">Egna frågor</p>
+                <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{teacherOverrides.additionalSelfAssessmentFields.length}</p>
               </div>
-              <div className="rounded-xl bg-white px-4 py-3 ring-1 ring-orange-100">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Dolda kriterier</p>
-                <p className="mt-2 text-2xl font-semibold text-gray-900">{teacherOverrides.hiddenSupervisorCriteriaKeys.length}</p>
+              <div className="rounded-xl bg-white px-4 py-3 ring-1 ring-orange-100 dark:bg-[#141414] dark:ring-orange-500/20">
+                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-zinc-500">Dolda kriterier</p>
+                <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{teacherOverrides.hiddenSupervisorCriteriaKeys.length}</p>
               </div>
-              <div className="rounded-xl bg-white px-4 py-3 ring-1 ring-orange-100">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Egna kriterier</p>
-                <p className="mt-2 text-2xl font-semibold text-gray-900">{teacherOverrides.additionalSupervisorCriteria.length}</p>
+              <div className="rounded-xl bg-white px-4 py-3 ring-1 ring-orange-100 dark:bg-[#141414] dark:ring-orange-500/20">
+                <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-zinc-500">Egna kriterier</p>
+                <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{teacherOverrides.additionalSupervisorCriteria.length}</p>
               </div>
             </div>
           </div>
         </section>
       )}
 
-      <section className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <section className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-white/10 dark:bg-[#141414] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
         <div>
-          <p className="text-sm font-semibold text-gray-900">Visa innehåll</p>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Visa innehåll</p>
+          <p className="text-sm text-gray-600 dark:text-zinc-400">
             Välj om du vill fokusera på självskattning, handledarbedömning eller båda samtidigt.
           </p>
         </div>
-        <label className="flex min-w-[220px] flex-col gap-2 text-sm font-medium text-gray-700 sm:items-end">
+        <label className="flex min-w-[220px] flex-col gap-2 text-sm font-medium text-gray-700 sm:items-end dark:text-zinc-200">
           <span className="sr-only">Välj vad som ska visas</span>
           <select
             value={viewMode}
             onChange={(e) => setViewMode(e.target.value as AssessmentViewMode)}
-            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200 sm:max-w-[240px]"
+            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200 sm:max-w-[240px] dark:border-white/10 dark:bg-[#1A1A1A] dark:text-white"
           >
             <option value="both">Visa båda</option>
             <option value="self">Endast självskattning</option>
@@ -643,7 +645,7 @@ export default function AssessmentTemplatesPage() {
 
       <section className={`grid gap-8 ${showSelfAssessment && showSupervisorAssessment ? 'xl:grid-cols-2' : 'max-w-4xl'}`}>
         {showSelfAssessment && (
-        <article className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <article className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#141414] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
           <div className="mb-6 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
@@ -676,7 +678,7 @@ export default function AssessmentTemplatesPage() {
                 <div key={field.key} className="rounded-xl border border-gray-200 shadow-sm">
                   <button
                     onClick={() => toggleItemExpansion(field.key)}
-                    className="w-full p-4 text-left transition hover:bg-gray-50"
+                    className="w-full p-4 text-left transition hover:bg-gray-50 dark:hover:bg-[#181818]"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
@@ -793,7 +795,7 @@ export default function AssessmentTemplatesPage() {
                 <div key={field.key} className="rounded-xl border border-gray-200 shadow-sm">
                   <button
                     onClick={() => toggleItemExpansion(field.key)}
-                    className="w-full p-4 text-left transition hover:bg-gray-50"
+                    className="w-full p-4 text-left transition hover:bg-gray-50 dark:hover:bg-[#181818]"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
@@ -806,7 +808,7 @@ export default function AssessmentTemplatesPage() {
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-semibold text-gray-700">Fråga {index + 1}</p>
                             {isTeacherField && (
-                              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700 ring-1 ring-blue-200">
+                              <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs text-orange-700 ring-1 ring-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:ring-orange-500/30">
                                 Egen
                               </span>
                             )}
@@ -940,7 +942,7 @@ export default function AssessmentTemplatesPage() {
         )}
 
         {showSupervisorAssessment && (
-        <article className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <article className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#141414] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
           <div className="mb-6 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
@@ -973,7 +975,7 @@ export default function AssessmentTemplatesPage() {
                 <div key={criterion.key} className="rounded-xl border border-gray-200 shadow-sm">
                   <button
                     onClick={() => toggleItemExpansion(criterion.key)}
-                    className="w-full p-4 text-left transition hover:bg-gray-50"
+                    className="w-full p-4 text-left transition hover:bg-gray-50 dark:hover:bg-[#181818]"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
@@ -1059,7 +1061,7 @@ export default function AssessmentTemplatesPage() {
                 <div key={criterion.key} className="rounded-xl border border-gray-200 shadow-sm">
                   <button
                     onClick={() => toggleItemExpansion(criterion.key)}
-                    className="w-full p-4 text-left transition hover:bg-gray-50"
+                    className="w-full p-4 text-left transition hover:bg-gray-50 dark:hover:bg-[#181818]"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
@@ -1072,7 +1074,7 @@ export default function AssessmentTemplatesPage() {
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-semibold text-gray-700">Kriterium {index + 1}</p>
                             {isTeacherCriterion && (
-                              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs text-blue-700 ring-1 ring-blue-200">
+                              <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs text-orange-700 ring-1 ring-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:ring-orange-500/30">
                                 Egen
                               </span>
                             )}

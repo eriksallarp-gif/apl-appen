@@ -17,8 +17,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="sv">
-      <body className={inter.className}>
+    <html lang="sv" suppressHydrationWarning>
+      <body className={`${inter.className} bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100`}>
         {/* ChunkLoadError reload component */}
         <ChunkErrorReload />
         {children}

@@ -233,7 +233,7 @@ export default function ClassesPage() {
                   <div className="text-xl font-semibold mb-1">{cls.name}</div>
                   <div className="text-sm text-gray-500 mb-3">Klasskod</div>
                   <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                    <div className="max-w-full break-all font-mono text-sm bg-gray-100 px-3 py-1 rounded-lg">{classCode || 'Ingen kod'}</div>
+                    <div className="max-w-full break-all rounded-lg bg-gray-100 px-3 py-1 font-mono text-sm dark:border dark:border-white/15 dark:bg-[#222224] dark:text-zinc-200">{classCode || 'Ingen kod'}</div>
                     {classCode && (
                       <button aria-label={`Kopiera ${classCode}`} onClick={() => copyCode(classCode)} className="text-sm text-gray-600 hover:text-gray-800">Kopiera</button>
                     )}

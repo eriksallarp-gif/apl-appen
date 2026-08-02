@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
-import { usePathname } from 'next/navigation';
 import { Briefcase, GraduationCap, School, Users } from 'lucide-react';
+import PageHeader from '@/components/PageHeader';
+import StatCard from '@/components/StatCard';
 
 interface Stats {
   totalStudents: number;
@@ -72,7 +73,6 @@ export default function DashboardPage() {
   const [rawData, setRawData] = useState<RawData | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const pathname = usePathname();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -281,52 +281,31 @@ export default function DashboardPage() {
     applyClassFilter(selectedClassId, students, rawData);
   }, [selectedClassId, rawData, students]);
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    router.push('/login');
-  };
-
   const hasPendingTeachers = stats.pendingTeachers > 0;
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white text-slate-700">
-        <p>Laddar...</p>
+      <div className="flex min-h-[50vh] items-center justify-center text-slate-700 dark:text-slate-300">
+        <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">Laddar...</p>
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-white text-slate-900">
-      {/* Dekorativa bakgrundselement */}
-      <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute -top-24 right-[-10%] h-[420px] w-[420px] rounded-full bg-orange-200/35 blur-3xl" />
-        <div className="absolute top-[35%] left-[-10%] h-[360px] w-[360px] rounded-full bg-orange-100/60 blur-3xl" />
-      </div>
+    <main className="min-h-[calc(100vh-7rem)] text-slate-900 dark:text-slate-100">
+      <section className="space-y-6">
+        <PageHeader
+          eyebrow="Dashboard"
+          title="Översikt"
+          subtitle={
+            userRole === 'admin'
+              ? 'Här kan du hantera elever, lärare och skolor.'
+              : 'Här kan du se en översikt på dina klasser, elever och deras bedömningar.'
+          }
+        />
 
-      <section className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* Header sektion */}
-        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:mb-8 sm:p-6">
-          <p className="text-sm font-medium text-orange-700">Dashboard</p>
-          <h1 className="mt-1 text-xl font-semibold tracking-tight text-slate-900 sm:text-2xl">Översikt</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            {userRole === 'admin' 
-              ? 'Här kan du hantera elever, lärare och skolor.' 
-              : 'Här kan du se en översikt på dina klasser, elever och deras bedömningar.'}
-          </p>
-        </div>
-
-        {/* Statistikkort - anpassat för olika skärmstorlekar */}
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:mb-10">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-            <div className="mb-2 flex items-center gap-3">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
-                <GraduationCap className="h-5 w-5 text-orange-600" />
-              </span>
-              <span className="text-sm font-semibold text-slate-900 sm:text-base">Elever</span>
-            </div>
-            <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalStudents}</div>
-          </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <StatCard icon={GraduationCap} label="Elever" value={stats.totalStudents} />
 
           {userRole === 'admin' ? (
             <button
@@ -334,8 +313,8 @@ export default function DashboardPage() {
               onClick={() => router.push('/dashboard/admin?section=pending')}
               className={`rounded-2xl border p-5 text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-orange-300 sm:p-6 ${
                 hasPendingTeachers
-                  ? 'border-orange-300 bg-orange-50/40 hover:border-orange-400 hover:shadow-md'
-                  : 'border-slate-200 bg-white hover:border-orange-300 hover:shadow-md'
+                  ? 'border-orange-300 bg-orange-50/40 hover:border-orange-400 hover:shadow-md dark:border-orange-500/40 dark:bg-orange-500/10'
+                  : 'border-slate-200 bg-white hover:border-orange-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-orange-500/50'
               }`}
               aria-label="Öppna väntande lärare"
             >
@@ -344,56 +323,42 @@ export default function DashboardPage() {
                   <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
                     <Users className="h-5 w-5 text-orange-600" />
                   </span>
-                  <span className="text-sm font-semibold text-slate-900 sm:text-base">Lärare</span>
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 sm:text-base">Lärare</span>
                 </div>
                 {hasPendingTeachers && (
-                  <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800 ring-1 ring-orange-200">
+                  <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800 ring-1 ring-orange-200 dark:bg-orange-500/20 dark:text-orange-200 dark:ring-orange-500/40">
                     Kräver åtgärd
                   </span>
                 )}
               </div>
-              <div className="text-2xl font-bold tracking-tight text-slate-900">{typeof stats.totalTeachers === 'number' ? stats.totalTeachers : '—'}</div>
-              <p className={`mt-2 text-xs ${hasPendingTeachers ? 'text-orange-800 font-medium' : 'text-slate-600'}`}>
+              <div className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{typeof stats.totalTeachers === 'number' ? stats.totalTeachers : '—'}</div>
+              <p className={`mt-2 text-xs ${hasPendingTeachers ? 'font-medium text-orange-800 dark:text-orange-200' : 'text-slate-600 dark:text-slate-400'}`}>
                 Väntande: {stats.pendingTeachers}
               </p>
               {hasPendingTeachers && (
-                <p className="mt-1 text-xs text-orange-700">Tryck för att hantera väntande lärarregistreringar.</p>
+                <p className="mt-1 text-xs text-orange-700 dark:text-orange-300">Tryck för att hantera väntande lärarregistreringar.</p>
               )}
             </button>
           ) : (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-              <div className="mb-2 flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
-                  <School className="h-5 w-5 text-orange-600" />
-                </span>
-                <span className="text-sm font-semibold text-slate-900 sm:text-base">Klasser</span>
-              </div>
-              <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalClasses}</div>
-            </div>
+            <StatCard icon={School} label="Klasser" value={stats.totalClasses} />
           )}
 
           {userRole === 'teacher' && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:col-span-2 lg:col-span-1 sm:p-6">
-              <div className="mb-2 flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
-                  <Briefcase className="h-5 w-5 text-orange-600" />
-                </span>
-                <span className="text-sm font-semibold text-slate-900 sm:text-base">Yrkesutgångar</span>
-              </div>
-              <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalSpecializations}</div>
-            </div>
+            <StatCard
+              icon={Briefcase}
+              label="Yrkesutgångar"
+              value={stats.totalSpecializations}
+              className="sm:col-span-2 lg:col-span-1"
+            />
           )}
 
           {userRole === 'admin' && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:col-span-2 sm:p-6 lg:col-span-1">
-              <div className="mb-2 flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
-                  <School className="h-5 w-5 text-orange-600" />
-                </span>
-                <span className="text-sm font-semibold text-slate-900 sm:text-base">Skolor</span>
-              </div>
-              <div className="text-2xl font-bold tracking-tight text-slate-900">{stats.totalSchools ?? 0}</div>
-            </div>
+            <StatCard
+              icon={School}
+              label="Skolor"
+              value={stats.totalSchools ?? 0}
+              className="sm:col-span-2 lg:col-span-1"
+            />
           )}
         </div>
       </section>

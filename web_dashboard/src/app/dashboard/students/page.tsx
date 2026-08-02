@@ -10,6 +10,7 @@ import { db, auth, functions } from '../../../lib/firebase';
 import WeekAccessManager from './WeekAccessManager';
 import { buildExportDatasetInBrowser } from './clientExportDataset';
 import { downloadClassPdf, downloadStudentPdf, downloadStudentPdfFull } from '@/shared/pdf-report';
+import PageHeader from '@/components/PageHeader';
 
 type Student = {
   id: string;
@@ -752,8 +753,8 @@ export default function StudentsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <p>Laddar elever...</p>
+      <div className="flex min-h-[50vh] items-center justify-center text-slate-500 dark:text-zinc-400">
+        <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-[#141414]">Laddar elever...</p>
       </div>
     );
   }
@@ -761,22 +762,26 @@ export default function StudentsPage() {
   // Returnera endast innehållet för elever (utan sidomeny och main-wrapper)
   return (
     <>
-      <div className="flex items-center gap-4 mb-8">
-        <button
-          onClick={() => router.push('/dashboard')}
-          className="text-orange-600 hover:text-orange-700 font-medium"
-        >
-          ← Tillbaka
-        </button>
-        <h1 className="text-2xl font-bold text-gray-900">Elever</h1>
-      </div>
+      <PageHeader
+        eyebrow="Elever"
+        title="Elevöversikt"
+        subtitle="Hantera elever, filtrera per klass och exportera rapporter utan att lämna sidan."
+        actions={(
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="rounded-xl border border-orange-200 bg-white px-4 py-2 text-sm font-medium text-orange-700 transition hover:bg-orange-50 dark:border-orange-500/40 dark:bg-[#141414] dark:text-orange-300 dark:hover:bg-orange-500/12"
+          >
+            ← Tillbaka
+          </button>
+        )}
+      />
 
       {/* Klasshantering tas bort från Elever-sidan; hanteras i /dashboard/klasser */}
             {/* QR-kod/modal för klass */}
             {qrClass && (
-              <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg shadow-lg p-8 max-w-xs w-full relative">
-                  <button className="absolute top-2 right-2 text-gray-400 hover:text-gray-700" onClick={() => setQrClass(null)}>&times;</button>
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+                <div className="relative w-full max-w-xs rounded-2xl border border-slate-200 bg-white p-8 shadow-xl dark:border-white/10 dark:bg-[#141414]">
+                  <button className="absolute right-3 top-3 text-gray-400 hover:text-gray-700 dark:hover:text-zinc-200" onClick={() => setQrClass(null)}>&times;</button>
                   <h4 className="text-lg font-semibold mb-2">{qrClass.name}</h4>
                   <div className="mb-2">
                     <span className="text-xs bg-orange-100 text-orange-700 rounded px-2 py-1">Kod: {qrClass.code}</span>
@@ -787,15 +792,15 @@ export default function StudentsPage() {
                     alt="QR-kod"
                     className="mx-auto mb-2"
                   />
-                  <div className="text-xs break-all mb-2">Länk: <a href={`/join-class/${qrClass.code}`} className="text-blue-600 underline" target="_blank" rel="noopener noreferrer">{window.location.origin + '/join-class/' + qrClass.code}</a></div>
+                  <div className="text-xs break-all mb-2">Länk: <a href={`/join-class/${qrClass.code}`} className="text-orange-600 underline" target="_blank" rel="noopener noreferrer">{window.location.origin + '/join-class/' + qrClass.code}</a></div>
                 </div>
               </div>
             )}
       {/* Admin-only: teacher filter above class filter */}
-      <div className="mb-6 space-y-4">
+      <div className="mb-6 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-[#141414] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
         {userRole === 'admin' && (
           <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
+            <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">
               Välj lärare
             </label>
             <select
@@ -804,7 +809,7 @@ export default function StudentsPage() {
                 setSelectedTeacherUid(e.target.value);
                 setSelectedClassId('ALL');
               }}
-              className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+              className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-orange-500 md:w-96 dark:border-white/10 dark:bg-[#1A1A1A]"
             >
               <option value="ALL">Alla lärare</option>
               {teacherGroups.map((group) => (
@@ -818,7 +823,7 @@ export default function StudentsPage() {
               ))}
             </select>
             {adminTeacherOverview && (
-              <p className="mt-2 text-sm text-gray-600">
+              <p className="mt-2 text-sm text-gray-600 dark:text-zinc-400">
                 {adminTeacherOverview.teacherName}: {adminTeacherOverview.studentCount} elever, {adminTeacherOverview.classCount} klasser
               </p>
             )}
@@ -826,13 +831,13 @@ export default function StudentsPage() {
         )}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">
             Välj klass
           </label>
           <select
             value={selectedClassId}
             onChange={(e) => setSelectedClassId(e.target.value)}
-            className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-white"
+            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-orange-500 md:w-96 dark:border-white/10 dark:bg-[#1A1A1A]"
           >
             <option value="ALL">Alla klasser</option>
             {availableClasses.map(cls => (
@@ -844,15 +849,15 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      <div className="mb-8 rounded-lg border border-orange-100 bg-white shadow-sm">
+      <div className="mb-8 rounded-2xl border border-orange-100 bg-white shadow-sm dark:border-orange-500/20 dark:bg-[#141414] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
         <button
           type="button"
           onClick={() => setIsExportPanelOpen((prev) => !prev)}
           className="flex w-full items-center justify-between px-6 py-4 text-left"
         >
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Exportera elevdata (PDF)</h2>
-            <p className="mt-1 text-sm text-gray-600">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Exportera elevdata (PDF)</h2>
+            <p className="mt-1 text-sm text-gray-600 dark:text-zinc-400">
               Exporten skapar PDF-rapporter med sammanställning, aktiviteter, statistik och diagram.
             </p>
           </div>
@@ -860,14 +865,14 @@ export default function StudentsPage() {
         </button>
 
         {isExportPanelOpen && (
-          <div className="border-t border-orange-100 px-6 pb-6 pt-4">
+          <div className="border-t border-orange-100 px-6 pb-6 pt-4 dark:border-orange-500/20">
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Urval</label>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-zinc-300">Urval</label>
                 <select
                   value={exportScope}
                   onChange={(event) => setExportScope(event.target.value as ExportScope)}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                  className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 dark:border-white/10 dark:bg-[#1A1A1A]"
                 >
                   <option value="single">En specifik elev</option>
                   <option value="class">En hel klass</option>
@@ -876,11 +881,11 @@ export default function StudentsPage() {
 
               {exportScope === 'single' && (
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Elev</label>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-zinc-300">Elev</label>
                   <select
                     value={exportStudentId}
                     onChange={(event) => setExportStudentId(event.target.value)}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 dark:border-white/10 dark:bg-[#1A1A1A]"
                   >
                     <option value="">Välj elev</option>
                     {filteredStudents.map((student) => (
@@ -894,11 +899,11 @@ export default function StudentsPage() {
 
               {exportScope === 'class' && (
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Klass</label>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-zinc-300">Klass</label>
                   <select
                     value={exportClassId}
                     onChange={(event) => setExportClassId(event.target.value)}
-                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2"
+                    className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 dark:border-white/10 dark:bg-[#1A1A1A]"
                   >
                     <option value="">Välj klass</option>
                     {availableClasses.map((classItem) => (
@@ -927,7 +932,7 @@ export default function StudentsPage() {
               <button
                 onClick={handleExportPdf}
                 disabled={isPdfExporting}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-zinc-100 dark:hover:bg-[#181818]"
                 type="button"
               >
                 {isPdfExporting ? 'Genererar PDF...' : 'Exportera till PDF'}
@@ -935,7 +940,7 @@ export default function StudentsPage() {
               <button
                 onClick={handleExportPdfFull}
                 disabled={isPdfExportingFull || exportScope !== 'single' || !exportStudentId}
-                className="rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 font-semibold text-orange-800 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl border border-orange-300 bg-orange-50 px-4 py-2 font-semibold text-orange-800 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-orange-500/40 dark:bg-orange-500/12 dark:text-orange-300"
                 type="button"
               >
                 {isPdfExportingFull ? 'Genererar fullständig PDF...' : 'Exportera till PDF - Fullständig'}
@@ -947,37 +952,37 @@ export default function StudentsPage() {
 
       {/* Admin: Lägg till elev formulär */}
       {userRole === 'admin' && (
-        <div className="mb-8 rounded-lg bg-white shadow">
+        <div className="mb-8 rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#141414] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
           <button
             type="button"
             onClick={() => setIsCreateStudentPanelOpen((prev) => !prev)}
             className="flex w-full items-center justify-between px-6 py-4 text-left"
           >
-            <h2 className="text-xl font-bold text-gray-900">Lägg till elev</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Lägg till elev</h2>
             <span className="ml-4 text-sm font-medium text-orange-700">{isCreateStudentPanelOpen ? 'Dolj' : 'Visa'}</span>
           </button>
 
           {isCreateStudentPanelOpen && (
-            <div className="border-t border-slate-100 px-6 pb-6 pt-4">
+            <div className="border-t border-slate-100 px-6 pb-6 pt-4 dark:border-white/10">
               <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <input
                   value={studentForm.firstName}
                   onChange={(e) => setStudentForm({ ...studentForm, firstName: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  className="rounded-xl border border-gray-300 px-3 py-2 dark:border-white/10 dark:bg-[#1A1A1A]"
                   placeholder="Förnamn"
                   autoComplete="off"
                 />
                 <input
                   value={studentForm.lastName}
                   onChange={(e) => setStudentForm({ ...studentForm, lastName: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  className="rounded-xl border border-gray-300 px-3 py-2 dark:border-white/10 dark:bg-[#1A1A1A]"
                   placeholder="Efternamn"
                   autoComplete="off"
                 />
                 <input
                   value={studentForm.email}
                   onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  className="rounded-xl border border-gray-300 px-3 py-2 dark:border-white/10 dark:bg-[#1A1A1A]"
                   placeholder="E-post"
                   autoComplete="off"
                   type="email"
@@ -985,7 +990,7 @@ export default function StudentsPage() {
                 <input
                   value={studentForm.password}
                   onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  className="rounded-xl border border-gray-300 px-3 py-2 dark:border-white/10 dark:bg-[#1A1A1A]"
                   placeholder="Lösenord"
                   type="password"
                   autoComplete="new-password"
@@ -993,7 +998,7 @@ export default function StudentsPage() {
                 <select
                   value={studentForm.classId}
                   onChange={(e) => setStudentForm({ ...studentForm, classId: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  className="rounded-xl border border-gray-300 px-3 py-2 dark:border-white/10 dark:bg-[#1A1A1A]"
                 >
                   <option value="">Valfri klass</option>
                   {availableClasses.map((cls) => (
@@ -1012,7 +1017,7 @@ export default function StudentsPage() {
                       setSelectedClassId('ALL');
                     }
                   }}
-                  className="border border-gray-300 rounded-lg px-3 py-2"
+                  className="rounded-xl border border-gray-300 px-3 py-2 dark:border-white/10 dark:bg-[#1A1A1A]"
                 >
                   <option value="">Valfri lärare</option>
                   {teacherGroups.map((group) => (
@@ -1046,31 +1051,31 @@ export default function StudentsPage() {
           placeholder="Sök elev (namn, email, klass)..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full md:w-96 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+          className="w-full rounded-xl border border-gray-300 px-4 py-2 focus:border-transparent focus:ring-2 focus:ring-orange-500 md:w-96 dark:border-white/10 dark:bg-[#1A1A1A]"
         />
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow">
-          <p className="text-sm text-gray-600">
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#141414]">
+          <p className="text-sm text-gray-600 dark:text-zinc-400">
             {selectedClassId === 'ALL' ? 'Totalt antal elever' : 'Elever i vald klass'}
           </p>
-          <p className="text-2xl font-bold text-blue-600">{filteredStudents.length}</p>
+          <p className="text-2xl font-bold text-orange-600">{filteredStudents.length}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow">
-          <p className="text-sm text-gray-600">Total arbetstid</p>
-          <p className="text-2xl font-bold text-green-600">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#141414]">
+          <p className="text-sm text-gray-600 dark:text-zinc-400">Total arbetstid</p>
+          <p className="text-2xl font-bold text-green-600 dark:text-green-400">
             {filteredStudents.reduce((sum, s) => sum + (s.totalHours ?? 0), 0)}h
           </p>
         </div>
       </div>
 
       {/* Students Table */}
-      <div className="overflow-hidden rounded-lg bg-white shadow">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#141414] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+          <table className="w-full min-w-[900px] divide-y divide-gray-200 dark:divide-white/10">
+          <thead className="bg-gray-50 dark:bg-[#111111]">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Namn
@@ -1099,12 +1104,12 @@ export default function StudentsPage() {
               )}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="divide-y divide-gray-200 bg-white dark:divide-white/10 dark:bg-[#141414]">
             {filteredStudents.map(student => (
               <tr 
                 key={student.id} 
                 onClick={() => router.push(`/dashboard/students/${student.id}`)}
-                className="hover:bg-orange-50 cursor-pointer transition"
+                className="cursor-pointer transition hover:bg-orange-50 dark:hover:bg-orange-500/8"
               >
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900">{student.name}</div>
@@ -1136,7 +1141,7 @@ export default function StudentsPage() {
                           setEditingStudent(student);
                           setSelectedSpecialization(student.specialization || '');
                         }}
-                        className="text-blue-600 hover:text-blue-800 text-sm"
+                        className="text-orange-600 hover:text-orange-700 text-sm"
                       >
                         Ändra
                       </button>
@@ -1216,7 +1221,7 @@ export default function StudentsPage() {
 
         {filteredStudents.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-gray-500">
+            <p className="text-gray-500 dark:text-zinc-500">
               {searchTerm ? 'Inga elever matchade sökningen' : 'Inga elever hittades'}
             </p>
           </div>
@@ -1224,14 +1229,14 @@ export default function StudentsPage() {
       </div>
 
       {editingStudent && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg shadow max-w-md w-full p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-[#141414]">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Ändra yrkesutgång</h2>
-            <p className="text-sm text-gray-600 mb-4">{editingStudent.name}</p>
+            <p className="mb-4 text-sm text-gray-600 dark:text-zinc-400">{editingStudent.name}</p>
             <select
               value={selectedSpecialization}
               onChange={(e) => setSelectedSpecialization(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 mb-4"
+              className="mb-4 w-full rounded-xl border border-gray-300 px-3 py-2 dark:border-white/10 dark:bg-[#1A1A1A]"
             >
               <option value="">Välj yrkesutgång</option>
               {specializationOptions.map((option) => (

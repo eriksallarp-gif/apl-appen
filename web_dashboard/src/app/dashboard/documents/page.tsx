@@ -20,6 +20,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { usePathname } from 'next/navigation';
 import { Building2, School, ShieldCheck, Calendar, AlertTriangle, HardHat, Paperclip, FileText } from 'lucide-react';
 import sharedCategories from '@/lib/aplDocumentCategories.json';
+import PageHeader from '@/components/PageHeader';
 
 interface AplDocument {
   id: string;
@@ -381,35 +382,34 @@ export default function DocumentsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex min-h-[50vh] items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Laddar...</p>
+          <div className="mx-auto h-12 w-12 animate-spin rounded-full border-b-2 border-orange-600"></div>
+          <p className="mt-4 text-gray-600 dark:text-zinc-400">Laddar...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">APL-dokument</h1>
-          <p className="text-gray-600 mt-2">
-            Hantera viktiga dokument som delas med eleverna
-            </p>
-          </div>
+    <main className="w-full px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+      <PageHeader
+        eyebrow="Dokument"
+        title="APL-dokument"
+        subtitle="Hantera viktiga dokument och kontaktunderlag som delas med eleverna."
+        actions={(
           <button
             onClick={() => setShowUploadModal(true)}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-orange-700 sm:w-auto"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-orange-700 sm:w-auto"
           >
             <span className="text-xl">+</span>
             Ladda upp dokument
           </button>
-        </div>
+        )}
+      />
 
         {/* Category overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-5">
           {CATEGORIES.map(cat => {
             const documentCount = documents.filter(d => d.category === cat.id).length;
             const isContactCategory = cat.id === 'kontakt_foretag' || cat.id === 'kontakt_skola';
@@ -433,14 +433,14 @@ export default function DocumentsPage() {
                       : `/dashboard/documents/${cat.id}`,
                   )
                 }
-                className="bg-white p-6 rounded-lg border-2 border-gray-200 text-left transition-all hover:border-orange-300"
+                className="rounded-2xl border border-slate-200 bg-white p-6 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-orange-300 dark:border-white/10 dark:bg-[#141414] dark:hover:border-orange-500/40"
               >
-                <div className="mb-2 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100">
+                <div className="mb-2 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 ring-1 ring-orange-100 dark:bg-orange-500/12 dark:ring-orange-500/25">
                   <IconComponent className="h-5 w-5 text-orange-600" />
                 </div>
-                <h3 className="font-semibold text-gray-900">{cat.displayName}</h3>
+                <h3 className="font-semibold text-gray-900 dark:text-white">{cat.displayName}</h3>
                 {isContactCategory ? (
-                  <div className="mt-1 text-sm text-gray-600">
+                  <div className="mt-1 text-sm text-gray-600 dark:text-zinc-400">
                     <p>
                       {categoryCount} {categoryCount === 1 ? 'kontakt' : 'kontakter'}
                     </p>
@@ -449,7 +449,7 @@ export default function DocumentsPage() {
                     </p>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-600 mt-1">
+                  <p className="mt-1 text-sm text-gray-600 dark:text-zinc-400">
                     {documentCount} {documentCount === 1 ? 'dokument' : 'dokument'}
                   </p>
                 )}
@@ -459,18 +459,18 @@ export default function DocumentsPage() {
         </div>
 
         {/* Documents list */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-[#141414] dark:shadow-[0_10px_30px_rgba(0,0,0,0.35)]">
+          <div className="border-b border-gray-200 p-6 dark:border-white/10">
             <button
               type="button"
               onClick={() => setIsDocumentsExpanded((current) => !current)}
               className="flex w-full items-center justify-between text-left"
               aria-expanded={isDocumentsExpanded}
             >
-              <h2 className="text-xl font-semibold text-gray-900">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
                 Alla dokument ({documents.length})
               </h2>
-              <span className="text-sm font-medium text-gray-500">
+              <span className="text-sm font-medium text-gray-500 dark:text-zinc-400">
                 {isDocumentsExpanded ? '▲ Dölj' : '▼ Visa'}
               </span>
             </button>
@@ -479,31 +479,31 @@ export default function DocumentsPage() {
           {isDocumentsExpanded && documents.length === 0 ? (
             <div className="p-12 text-center">
               <div className="text-6xl mb-4">📁</div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
                 Inga dokument ännu
               </h3>
-              <p className="text-gray-600 mb-6">
+              <p className="mb-6 text-gray-600 dark:text-zinc-400">
                 Ladda upp ditt första dokument för att komma igång
               </p>
               <button
                 onClick={() => setShowUploadModal(true)}
-                className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                className="rounded-xl bg-orange-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-orange-700"
               >
                 Ladda upp dokument
               </button>
             </div>
           ) : isDocumentsExpanded ? (
-            <div className="divide-y divide-gray-200">
+            <div className="divide-y divide-gray-200 dark:divide-white/10">
               {documents.map(doc => (
-                <div key={doc.id} className="p-6 hover:bg-gray-50 transition-colors">
+                <div key={doc.id} className="p-6 transition-colors hover:bg-gray-50 dark:hover:bg-[#181818]">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-start gap-4 flex-1">
                       <div className="text-4xl">{getFileIcon(doc.fileType)}</div>
                       <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 text-lg">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                           {doc.title}
                         </h3>
-                        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-600 sm:gap-3">
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-600 dark:text-zinc-400 sm:gap-3">
                           <span className="flex items-center gap-1.5">
                             {(() => {
                               const IconComponent = getCategoryIcon(doc.category);
@@ -521,13 +521,13 @@ export default function DocumentsPage() {
                         href={doc.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="rounded-lg px-3 py-2 font-medium text-blue-600 transition-colors hover:bg-blue-50 sm:px-4"
+                        className="rounded-xl px-3 py-2 font-medium text-orange-700 transition-colors hover:bg-orange-50 dark:text-orange-300 dark:hover:bg-orange-500/12 sm:px-4"
                       >
                         Öppna
                       </a>
                       <button
                         onClick={() => handleDelete(doc)}
-                        className="rounded-lg px-3 py-2 font-medium text-red-600 transition-colors hover:bg-red-50 sm:px-4"
+                        className="rounded-xl px-3 py-2 font-medium text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-500/10 sm:px-4"
                       >
                         Radera
                       </button>
@@ -541,34 +541,34 @@ export default function DocumentsPage() {
 
         {/* Upload Modal */}
         {showUploadModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg max-w-2xl w-full p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-8 shadow-xl dark:border-white/10 dark:bg-[#141414]">
+              <h2 className="mb-6 text-2xl font-bold text-gray-900 dark:text-white">
                 Ladda upp dokument
               </h2>
               
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">
                     Dokumenttitel *
                   </label>
                   <input
                     type="text"
                     value={documentTitle}
                     onChange={(e) => setDocumentTitle(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-orange-500 dark:border-white/10 dark:bg-[#1A1A1A]"
                     placeholder="T.ex. Försäkringsinformation 2025"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">
                     Kategori *
                   </label>
                   <select
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-orange-500 dark:border-white/10 dark:bg-[#1A1A1A]"
                   >
                     <option value="">Välj kategori...</option>
                     {CATEGORIES.map(cat => (
@@ -580,24 +580,24 @@ export default function DocumentsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-zinc-300">
                     Fil *
                   </label>
                   <input
                     type="file"
                     onChange={handleFileSelect}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 focus:border-transparent focus:ring-2 focus:ring-orange-500 dark:border-white/10 dark:bg-[#1A1A1A]"
                     accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
                   />
                   {selectedFile && (
-                    <p className="mt-2 text-sm text-gray-600">
+                    <p className="mt-2 text-sm text-gray-600 dark:text-zinc-400">
                       Vald fil: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
                     </p>
                   )}
                 </div>
               </div>
 
-              <div className="flex gap-4 mt-8">
+              <div className="mt-8 flex gap-4">
                 <button
                   onClick={() => {
                     setShowUploadModal(false);
@@ -606,14 +606,14 @@ export default function DocumentsPage() {
                     setSelectedCategory('');
                   }}
                   disabled={uploading}
-                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold transition-colors disabled:opacity-50"
+                  className="flex-1 rounded-xl border border-gray-300 px-6 py-3 font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-[#181818]"
                 >
                   Avbryt
                 </button>
                 <button
                   onClick={handleUpload}
                   disabled={uploading || !selectedFile || !selectedCategory || !documentTitle.trim()}
-                  className="flex-1 px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 rounded-xl bg-orange-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {uploading ? 'Laddar upp...' : 'Ladda upp'}
                 </button>

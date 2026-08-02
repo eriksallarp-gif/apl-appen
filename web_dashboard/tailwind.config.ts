@@ -1,6 +1,9 @@
 import type { Config } from 'tailwindcss'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const themeTokens = require('./data/config/colors.js');
 
 const config: Config = {
+  darkMode: 'class',
   content: [
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -9,10 +12,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primary: '#9E2A2B',
-        secondary: '#FF9500',
-        'primary-dark': '#FF6B00',
-        'primary-light': '#FFB84D',
+        primary: themeTokens.light.primary,
+        secondary: themeTokens.light.secondary,
+        background: themeTokens.light.background,
+        surface: themeTokens.light.surface,
+        border: themeTokens.light.border,
+        text: themeTokens.light.text,
+        muted: themeTokens.light.muted,
+        success: themeTokens.light.success,
+        warning: themeTokens.light.warning,
+        error: themeTokens.light.error,
+        'primary-dark': themeTokens.dark.primary,
+        'surface-dark': themeTokens.dark.surface,
+        'text-dark': themeTokens.dark.text,
       },
     },
   },

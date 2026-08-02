@@ -1,15 +1,21 @@
 "use client";
 
 import React from 'react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { auth } from '@/lib/firebase';
-import Header from '@/components/Header';
+import { signOut } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
+import Sidebar from '@/components/Sidebar';
+import Topbar from '@/components/Topbar';
 import { Home, Users, Calendar, School, Clock, ClipboardCheck, ListTodo, FileText, Settings, UserCog, Layers } from 'lucide-react';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [userRole, setUserRole] = React.useState<string | null>(null);
+  const [userEmail, setUserEmail] = React.useState('');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = React.useState(false);
+
   React.useEffect(() => {
     // Get user role from Firestore
     import('firebase/auth').then(({ onAuthStateChanged }) => {
@@ -17,9 +23,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         import('firebase/firestore').then(({ doc, getDoc }) => {
           onAuthStateChanged(auth, async (user) => {
             if (user) {
+              setUserEmail(user.email || '');
               const userDoc = await getDoc(doc(db, 'users', user.uid));
               setUserRole(userDoc.exists() ? userDoc.data().role : null);
             } else {
+              setUserEmail('');
               setUserRole(null);
             }
           });
@@ -30,6 +38,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const isAdmin = userRole === 'admin';
   const isTeacher = userRole === 'teacher';
+  const roleLabel = isAdmin ? 'Admin' : 'Lärare';
 
   // Menystruktur: visa rätt länkar beroende på roll
   const menuItems = isAdmin
@@ -63,64 +72,45 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         { href: '/dashboard/settings', label: 'Inställningar', icon: Settings, match: (p: string) => p === '/dashboard/settings' || p.startsWith('/dashboard/settings/') },
       ];
 
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      router.push('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  React.useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [pathname]);
+
   if (!userRole) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p>Laddar meny...</p>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+        <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">Laddar meny...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <Header />
-      {/* Mobil horisontell meny - förbättrad scroll */}
-      <div className="sticky top-16 z-30 border-b border-orange-100 bg-white/95 backdrop-blur lg:hidden">
-        <nav className="scrollbar-hide flex items-center gap-2 overflow-x-auto px-4 py-3">
-          {menuItems.map((item) => {
-            const active = item.match(pathname);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition ${item.bold ? 'font-semibold' : 'font-medium'} ${active ? 'bg-orange-100 text-orange-700 ring-1 ring-orange-300' : 'bg-white text-gray-600 ring-1 ring-orange-100 hover:bg-orange-50'}`}
-              >
-                <Icon className="h-4 w-4 flex-shrink-0" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      </div>
+    <div className="min-h-screen bg-transparent text-slate-900 dark:text-slate-100">
+      <Sidebar
+        pathname={pathname}
+        menuItems={menuItems}
+        roleLabel={roleLabel}
+        open={mobileSidebarOpen}
+        onClose={() => setMobileSidebarOpen(false)}
+      />
 
-      {/* Desktop sidebar - nu med scrollbar om innehållet inte får plats */}
-      <aside className="fixed left-0 top-16 hidden h-[calc(100vh-4rem)] w-56 flex-col overflow-y-auto border-r border-orange-100/50 bg-gradient-to-br from-orange-50 to-white px-6 py-8 lg:flex">
-        <div className="mb-8 flex-shrink-0">
-          <h1 className="text-2xl font-bold text-orange-600">APL-appen</h1>
-          <p className="text-xs text-orange-400 mt-1">{isAdmin ? 'Admin' : 'Lärare'}</p>
-        </div>
-        <nav className="flex-1 space-y-1 pb-6">
-          {menuItems.map(item => {
-            const active = item.match(pathname);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition ${item.bold ? 'font-semibold' : 'font-medium'} ${active ? 'bg-orange-100/60 text-orange-600 ring-2 ring-orange-400' : 'text-gray-600 hover:bg-orange-50'}`}
-              >
-                <Icon className="h-5 w-5 flex-shrink-0" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      </aside>
+      <div className="lg:pl-[280px]">
+        <Topbar
+          userEmail={userEmail}
+          onLogout={handleLogout}
+          onOpenSidebar={() => setMobileSidebarOpen(true)}
+        />
 
-      {/* Huvudinnehåll - anpassat för olika skärmstorlekar */}
-      <div className="mt-16 lg:pl-56">
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <main className="w-full px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
           {children}
         </main>
       </div>
