@@ -191,7 +191,14 @@ function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
-function normalizeAssessmentCriteria(assessmentData: Record<string, unknown>): PdfAssessmentCriterion[] {
+function normalizeAssessmentCriteria(
+  assessmentData: Record<string, unknown>,
+  assessmentTemplateSnapshot: Record<string, unknown>,
+): PdfAssessmentCriterion[] {
+  const templateCriteria = Array.isArray(assessmentTemplateSnapshot.supervisorCriteria)
+    ? assessmentTemplateSnapshot.supervisorCriteria
+    : [];
+
   return Object.entries(assessmentData)
     .map(([key, value]) => {
       const row = asRecord(value);
@@ -200,6 +207,14 @@ function normalizeAssessmentCriteria(assessmentData: Record<string, unknown>): P
         return null;
       }
 
+      const templateCriterion = templateCriteria.find((criterion) => {
+        const candidate = asRecord(criterion);
+        return String(candidate.key || '').trim() === key;
+      });
+      const templateVisibleToStudent = templateCriterion
+        ? asRecord(templateCriterion).visibleToStudent
+        : undefined;
+
       const ratingRaw = Number(row.rating);
 
       return {
@@ -207,6 +222,7 @@ function normalizeAssessmentCriteria(assessmentData: Record<string, unknown>): P
         label: resolveText([row.label], key),
         rating: Number.isFinite(ratingRaw) ? ratingRaw : null,
         comment: resolveText([row.comment], ''),
+        visibleToStudent: templateVisibleToStudent !== false,
       };
     })
     .filter((row): row is PdfAssessmentCriterion => Boolean(row));
@@ -228,10 +244,14 @@ function normalizeStudentSelfAssessment(
     });
 
     const templateLabel = templateField ? asRecord(templateField).label : undefined;
+    const templateVisibleToSupervisor = templateField
+      ? asRecord(templateField).visibleToSupervisor
+      : undefined;
     return {
       key,
       label: resolveText([templateLabel], key),
       value: String(value ?? '').trim(),
+      visibleToSupervisor: templateVisibleToSupervisor !== false,
     };
   });
 }
@@ -447,7 +467,7 @@ async function loadStudentRecord(options: {
     const weekStart = resolveAssessmentWeekStart(data, assessmentData, submittedAt);
     const lunchApproved = Number(data.lunchApproved ?? data.lunchCount ?? assessmentData.lunchApproved ?? 0) || 0;
     const travelApproved = Number(data.travelApproved ?? data.travelCount ?? assessmentData.travelApproved ?? 0) || 0;
-    const criteria = normalizeAssessmentCriteria(assessmentData);
+    const criteria = normalizeAssessmentCriteria(assessmentData, assessmentTemplateSnapshot);
     const studentSelfAssessment = normalizeStudentSelfAssessment(data.studentSelfAssessment, assessmentTemplateSnapshot);
     const imageComments = normalizeImageComments(data.imageComments);
     const images = normalizeAssessmentImages(data.images ?? assessmentData.images);

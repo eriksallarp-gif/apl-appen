@@ -36,9 +36,12 @@ describe('assessment template merge', () => {
           label: 'Vad vill du träna mer på?',
           placeholder: 'Beskriv nästa steg',
           inputType: 'text',
+          visibleToSupervisor: true,
         },
       ],
-      additionalSupervisorCriteria: [{ key: '', label: 'Yrkesstolthet' }],
+      additionalSupervisorCriteria: [
+        { key: '', label: 'Yrkesstolthet', visibleToStudent: true },
+      ],
     });
 
     const merged = mergeAssessmentTemplateSnapshot(
@@ -72,6 +75,7 @@ describe('assessment template merge', () => {
           label: 'Vad gjorde du mest av?',
           placeholder: '',
           inputType: 'text',
+          visibleToSupervisor: true,
         },
       ],
     });
@@ -99,12 +103,14 @@ describe('assessment template merge', () => {
           label: 'Vad vill du utveckla vidare?',
           placeholder: 'Beskriv nästa steg',
           inputType: 'text',
+          visibleToSupervisor: true,
         },
       ],
       additionalSupervisorCriteria: [
         {
           key: 'teacher_criterion',
           label: 'Ansvarstagande',
+          visibleToStudent: true,
         },
       ],
     });

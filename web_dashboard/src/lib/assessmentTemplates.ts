@@ -5,11 +5,13 @@ export interface SelfAssessmentField {
   label: string;
   placeholder: string;
   inputType: SelfAssessmentFieldType;
+  visibleToSupervisor: boolean;
 }
 
 export interface SupervisorCriterion {
   key: string;
   label: string;
+  visibleToStudent: boolean;
 }
 
 export interface AssessmentTemplateSnapshot {
@@ -33,38 +35,43 @@ export const defaultAssessmentTemplateSnapshot: AssessmentTemplateSnapshot = {
       label: 'Vad har du fått göra?',
       placeholder: 'Beskriv de arbetsuppgifter du utförde...',
       inputType: 'text',
+      visibleToSupervisor: true,
     },
     {
       key: 'whatWasPositive',
       label: 'Vad har varit positivt med APLen?',
       placeholder: 'Vad har varit bra? Vad har du lärt dig?',
       inputType: 'text',
+      visibleToSupervisor: true,
     },
     {
       key: 'whatCouldBeBetter',
       label: 'Vad skulle kunnat vara bättre?',
       placeholder: 'Vad var utmanande? Vad skulle kunna förbättras?',
       inputType: 'text',
+      visibleToSupervisor: true,
     },
     {
       key: 'whatCouldYouDoDifferently',
       label: 'Vad kunde du som elev gjort annorlunda?',
       placeholder: 'Hur kunde du bidragit mer? Vad kan du förbättra till nästa gång?',
       inputType: 'text',
+      visibleToSupervisor: true,
     },
     {
       key: 'overallRating',
       label: 'Vilket betyg för din APL-period? (1-10)',
       placeholder: '1=mindre bra, 10=fantastiskt',
       inputType: 'number',
+      visibleToSupervisor: true,
     },
   ],
   supervisorCriteria: [
-    { key: 'engagement', label: 'Engagemang' },
-    { key: 'initiative', label: 'Initiativtagande' },
-    { key: 'collaboration', label: 'Samarbetsförmåga' },
-    { key: 'problemSolving', label: 'Problemlösning' },
-    { key: 'workQuality', label: 'Kvalitet på arbete' },
+    { key: 'engagement', label: 'Engagemang', visibleToStudent: true },
+    { key: 'initiative', label: 'Initiativtagande', visibleToStudent: true },
+    { key: 'collaboration', label: 'Samarbetsförmåga', visibleToStudent: true },
+    { key: 'problemSolving', label: 'Problemlösning', visibleToStudent: true },
+    { key: 'workQuality', label: 'Kvalitet på arbete', visibleToStudent: true },
   ],
 };
 
@@ -129,6 +136,7 @@ function sanitizeSelfAssessmentFields(rawFields: unknown): SelfAssessmentField[]
             label,
             placeholder: String(field.placeholder ?? '').trim(),
             inputType,
+            visibleToSupervisor: field.visibleToSupervisor !== false,
           } satisfies SelfAssessmentField;
         })
         .filter((field): field is SelfAssessmentField => field !== null)
@@ -151,6 +159,7 @@ function sanitizeSupervisorCriteria(rawCriteria: unknown): SupervisorCriterion[]
           return {
             key,
             label,
+            visibleToStudent: criterion.visibleToStudent !== false,
           } satisfies SupervisorCriterion;
         })
         .filter((criterion): criterion is SupervisorCriterion => criterion !== null)
@@ -265,6 +274,7 @@ export function mergeAssessmentTemplateSnapshot(
       label: field.label,
       placeholder: field.placeholder,
       inputType: field.inputType,
+      visibleToSupervisor: field.visibleToSupervisor !== false,
     });
   }
 
@@ -284,7 +294,11 @@ export function mergeAssessmentTemplateSnapshot(
 
   for (const criterion of overrides.additionalSupervisorCriteria) {
     const key = ensureUniqueKey(sanitizeKeyPart(criterion.key) || 'criterion', usedCriteriaKeys);
-    supervisorCriteria.push({ key, label: criterion.label });
+    supervisorCriteria.push({
+      key,
+      label: criterion.label,
+      visibleToStudent: criterion.visibleToStudent !== false,
+    });
   }
 
   const orderedSupervisorCriteria = orderItemsByKeys(
@@ -337,4 +351,20 @@ export function getAssessmentCriterionLabel(
     defaultAssessmentTemplateSnapshot.supervisorCriteria.find((criterion) => criterion.key === key)?.label ||
     key
   );
+}
+
+export function shouldShowSelfAssessmentFieldForSupervisor(
+  snapshot: AssessmentTemplateSnapshot | null | undefined,
+  key: string,
+): boolean {
+  const field = snapshot?.selfAssessmentFields.find((entry) => entry.key === key);
+  return field ? field.visibleToSupervisor !== false : true;
+}
+
+export function shouldShowSupervisorCriterionForStudent(
+  snapshot: AssessmentTemplateSnapshot | null | undefined,
+  key: string,
+): boolean {
+  const criterion = snapshot?.supervisorCriteria.find((entry) => entry.key === key);
+  return criterion ? criterion.visibleToStudent !== false : true;
 }

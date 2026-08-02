@@ -89,6 +89,42 @@ List<Map<String, dynamic>> _buildTimesheetSummaries(
   return summaries;
 }
 
+Future<String> _findLinkedCompanyNameForStudent(String studentUid) async {
+  final companiesRef = FirebaseFirestore.instance.collection('companies');
+
+  try {
+    final byStudentId = await companiesRef
+        .where('studentId', isEqualTo: studentUid)
+        .limit(1)
+        .get();
+
+    if (byStudentId.docs.isNotEmpty) {
+      final data = byStudentId.docs.first.data();
+      final companyName = (data['name'] ?? '').toString().trim();
+      if (companyName.isNotEmpty) return companyName;
+    }
+  } catch (_) {
+    // Ignore and continue with fallback query.
+  }
+
+  try {
+    final byStudentIds = await companiesRef
+        .where('studentIds', arrayContains: studentUid)
+        .limit(1)
+        .get();
+
+    if (byStudentIds.docs.isNotEmpty) {
+      final data = byStudentIds.docs.first.data();
+      final companyName = (data['name'] ?? '').toString().trim();
+      if (companyName.isNotEmpty) return companyName;
+    }
+  } catch (_) {
+    // Ignore and return empty value below.
+  }
+
+  return '';
+}
+
 class BedomningScreen extends StatefulWidget {
   const BedomningScreen({super.key});
 
@@ -787,22 +823,10 @@ class _CreateAssessmentTabState extends State<_CreateAssessmentTab> {
         throw Exception('Kunde inte hitta elevens kopplade lärare.');
       }
 
-      // Hämta elevens kopplade företag (om det finns)
-      String linkedCompanyName = '';
-      try {
-        final linkedCompanySnapshot = await FirebaseFirestore.instance
-            .collection('companies')
-            .where('studentId', isEqualTo: user.uid)
-            .limit(1)
-            .get();
-
-        if (linkedCompanySnapshot.docs.isNotEmpty) {
-          final companyData = linkedCompanySnapshot.docs.first.data();
-          linkedCompanyName = (companyData['name'] ?? '').toString().trim();
-        }
-      } catch (_) {
-        linkedCompanyName = '';
-      }
+      // Hämta elevens kopplade företag (stöder både studentId och studentIds)
+      final linkedCompanyName = await _findLinkedCompanyNameForStudent(
+        user.uid,
+      );
 
       // Ladda upp bilder till Firebase Storage
       final List<Map<String, dynamic>> uploadedImages = [];

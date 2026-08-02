@@ -278,38 +278,43 @@ const DEFAULT_ASSESSMENT_TEMPLATES = {
       label: 'Vad har du f├Ñtt g├Âra?',
       placeholder: 'Beskriv de arbetsuppgifter du utf├Ârde...',
       inputType: 'text',
+      visibleToSupervisor: true,
     },
     {
       key: 'whatWasPositive',
       label: 'Vad har varit positivt med APLen?',
       placeholder: 'Vad har varit bra? Vad har du l├ñrt dig?',
       inputType: 'text',
+      visibleToSupervisor: true,
     },
     {
       key: 'whatCouldBeBetter',
       label: 'Vad skulle kunnat vara b├ñttre?',
       placeholder: 'Vad var utmanande? Vad skulle kunna f├Ârb├ñttras?',
       inputType: 'text',
+      visibleToSupervisor: true,
     },
     {
       key: 'whatCouldYouDoDifferently',
       label: 'Vad kunde du som elev gjort annorlunda?',
       placeholder: 'Hur kunde du bidragit mer? Vad kan du f├Ârb├ñttra till n├ñsta g├Ñng?',
       inputType: 'text',
+      visibleToSupervisor: true,
     },
     {
       key: 'overallRating',
       label: 'Vilket betyg f├Âr din APL-period? (1-10)',
       placeholder: '1=mindre bra, 10=fantastiskt',
       inputType: 'number',
+      visibleToSupervisor: true,
     },
   ],
   supervisorCriteria: [
-    { key: 'engagement', label: 'Engagemang' },
-    { key: 'initiative', label: 'Initiativtagande' },
-    { key: 'collaboration', label: 'Samarbetsf├Ârm├Ñga' },
-    { key: 'problemSolving', label: 'Probleml├Âsning' },
-    { key: 'workQuality', label: 'Kvalitet p├Ñ arbete' },
+    { key: 'engagement', label: 'Engagemang', visibleToStudent: true },
+    { key: 'initiative', label: 'Initiativtagande', visibleToStudent: true },
+    { key: 'collaboration', label: 'Samarbetsf├Ârm├Ñga', visibleToStudent: true },
+    { key: 'problemSolving', label: 'Probleml├Âsning', visibleToStudent: true },
+    { key: 'workQuality', label: 'Kvalitet p├Ñ arbete', visibleToStudent: true },
   ],
 };
 
@@ -349,6 +354,7 @@ function sanitizeAssessmentTemplateSnapshot(raw) {
           label,
           placeholder: toSafeString(field.placeholder),
           inputType: toSafeString(field.inputType) === 'number' ? 'number' : 'text',
+          visibleToSupervisor: field.visibleToSupervisor !== false,
         };
       })
       .filter(Boolean)
@@ -363,7 +369,11 @@ function sanitizeAssessmentTemplateSnapshot(raw) {
         if (!label) return null;
         const requestedKey = sanitizeTemplateKey(criterion.key, sanitizeTemplateKey(label, 'criterion'));
         const key = ensureUniqueTemplateKey(requestedKey, usedCriteriaKeys, 'criterion');
-        return { key, label };
+        return {
+          key,
+          label,
+          visibleToStudent: criterion.visibleToStudent !== false,
+        };
       })
       .filter(Boolean)
     : [];

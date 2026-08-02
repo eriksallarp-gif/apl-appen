@@ -715,6 +715,9 @@ class _SupervisorAssessmentPageState extends State<SupervisorAssessmentPage> {
         in _assessmentTemplateConfig.selfAssessmentFields.asMap().entries) {
       final index = entry.key;
       final field = entry.value;
+      if (!shouldShowSelfAssessmentFieldForSupervisor(_assessmentTemplateConfig, field.key)) {
+        continue;
+      }
       final answer = selfAssessment[field.key] as String? ?? '';
       if (answer.isNotEmpty) {
         cards.add(

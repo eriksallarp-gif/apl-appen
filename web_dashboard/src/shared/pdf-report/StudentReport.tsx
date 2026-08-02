@@ -591,9 +591,10 @@ function FullAssessmentDetailsTable({ student }: { student: PdfStudent }) {
 
             if (assessment.criteria.length > 0) {
               assessment.criteria.forEach((criterion) => {
+                const hiddenForStudentSuffix = criterion.visibleToStudent ? '' : ' [Dold för elev]';
                 rows.push({
                   type: 'Kriterium',
-                  title: `${criterion.label} (${criterion.rating ?? '-'} / 5)`,
+                  title: `${criterion.label}${hiddenForStudentSuffix} (${criterion.rating ?? '-'} / 5)`,
                   value: criterion.comment || '-',
                 });
               });
@@ -601,9 +602,10 @@ function FullAssessmentDetailsTable({ student }: { student: PdfStudent }) {
 
             if (assessment.studentSelfAssessment.length > 0) {
               assessment.studentSelfAssessment.forEach((field) => {
+                const hiddenForSupervisorSuffix = field.visibleToSupervisor ? '' : ' [Dold för handledare]';
                 rows.push({
                   type: 'Elevsvar',
-                  title: field.label,
+                  title: `${field.label}${hiddenForSupervisorSuffix}`,
                   value: field.value || '-',
                 });
               });

@@ -243,7 +243,13 @@ export default function AssessmentTemplatesPage() {
         ...current,
         selfAssessmentFields: [
           ...current.selfAssessmentFields,
-          { key, label: 'Ny fråga', placeholder: '', inputType: 'text' },
+          {
+            key,
+            label: 'Ny fråga',
+            placeholder: '',
+            inputType: 'text',
+            visibleToSupervisor: true,
+          },
         ],
       };
     });
@@ -257,7 +263,10 @@ export default function AssessmentTemplatesPage() {
       );
       return {
         ...current,
-        supervisorCriteria: [...current.supervisorCriteria, { key, label: 'Nytt kriterium' }],
+        supervisorCriteria: [
+          ...current.supervisorCriteria,
+          { key, label: 'Nytt kriterium', visibleToStudent: true },
+        ],
       };
     });
   };
@@ -333,7 +342,13 @@ export default function AssessmentTemplatesPage() {
         ],
         additionalSelfAssessmentFields: [
           ...current.additionalSelfAssessmentFields,
-          { key, label: 'Ny fråga', placeholder: '', inputType: 'text' },
+          {
+            key,
+            label: 'Ny fråga',
+            placeholder: '',
+            inputType: 'text',
+            visibleToSupervisor: true,
+          },
         ],
       };
     });
@@ -354,7 +369,7 @@ export default function AssessmentTemplatesPage() {
         ],
         additionalSupervisorCriteria: [
           ...current.additionalSupervisorCriteria,
-          { key, label: 'Nytt kriterium' },
+          { key, label: 'Nytt kriterium', visibleToStudent: true },
         ],
       };
     });
@@ -747,6 +762,21 @@ export default function AssessmentTemplatesPage() {
                         <option value="number">Siffra</option>
                       </select>
                     </label>
+
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={field.visibleToSupervisor !== false}
+                        onChange={(e) =>
+                          handleSelfFieldChange(field.key, {
+                            visibleToSupervisor: e.target.checked,
+                          })
+                        }
+                        disabled={!isAdmin}
+                        className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                      />
+                      Visa frågan för handledaren vid bedömning
+                    </label>
                       </div>
                     </div>
                   )}
@@ -883,6 +913,22 @@ export default function AssessmentTemplatesPage() {
                         <option value="number">Siffra</option>
                       </select>
                     </label>
+
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={field.visibleToSupervisor !== false}
+                        onChange={(e) => {
+                          if (!isTeacherField) return;
+                          handleTeacherSelfFieldChange(field.key, {
+                            visibleToSupervisor: e.target.checked,
+                          });
+                        }}
+                        disabled={!isTeacherField}
+                        className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                      />
+                      Visa frågan för handledaren vid bedömning
+                    </label>
                       </div>
                     </div>
                   )}
@@ -983,6 +1029,21 @@ export default function AssessmentTemplatesPage() {
                           className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
                         />
                       </label>
+
+                      <label className={`mt-3 flex items-center gap-2 text-sm font-medium text-gray-700 ${!isAdmin && hidden ? 'opacity-50' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={criterion.visibleToStudent !== false}
+                          onChange={(e) =>
+                            handleCriterionChange(criterion.key, {
+                              visibleToStudent: e.target.checked,
+                            })
+                          }
+                          disabled={!isAdmin}
+                          className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                        />
+                        Visa kriteriet för eleven i statistik
+                      </label>
                     </div>
                   )}
                 </div>
@@ -1081,6 +1142,22 @@ export default function AssessmentTemplatesPage() {
                           disabled={!isTeacherCriterion}
                           className="mt-1 w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
                         />
+                      </label>
+
+                      <label className={`mt-3 flex items-center gap-2 text-sm font-medium text-gray-700 ${!isTeacherCriterion && hidden ? 'opacity-50' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={criterion.visibleToStudent !== false}
+                          onChange={(e) => {
+                            if (!isTeacherCriterion) return;
+                            handleTeacherCriterionChange(criterion.key, {
+                              visibleToStudent: e.target.checked,
+                            });
+                          }}
+                          disabled={!isTeacherCriterion}
+                          className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                        />
+                        Visa kriteriet för eleven i statistik
                       </label>
                     </div>
                   )}

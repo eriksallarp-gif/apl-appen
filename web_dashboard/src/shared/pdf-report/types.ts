@@ -16,12 +16,14 @@ export type PdfAssessmentCriterion = {
   label: string;
   rating: number | null;
   comment: string;
+  visibleToStudent: boolean;
 };
 
 export type PdfAssessmentSelfField = {
   key: string;
   label: string;
   value: string;
+  visibleToSupervisor: boolean;
 };
 
 export type PdfAssessmentImage = {

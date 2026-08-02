@@ -7,12 +7,14 @@ class SelfAssessmentField {
   final String label;
   final String placeholder;
   final String inputType;
+  final bool visibleToSupervisor;
 
   const SelfAssessmentField({
     required this.key,
     required this.label,
     this.placeholder = '',
     this.inputType = 'text',
+    this.visibleToSupervisor = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -20,16 +22,26 @@ class SelfAssessmentField {
     'label': label,
     'placeholder': placeholder,
     'inputType': inputType,
+    'visibleToSupervisor': visibleToSupervisor,
   };
 }
 
 class SupervisorCriterion {
   final String key;
   final String label;
+  final bool visibleToStudent;
 
-  const SupervisorCriterion({required this.key, required this.label});
+  const SupervisorCriterion({
+    required this.key,
+    required this.label,
+    this.visibleToStudent = true,
+  });
 
-  Map<String, dynamic> toJson() => {'key': key, 'label': label};
+  Map<String, dynamic> toJson() => {
+    'key': key,
+    'label': label,
+    'visibleToStudent': visibleToStudent,
+  };
 }
 
 class AssessmentTemplateConfig {
@@ -96,36 +108,61 @@ const defaultAssessmentTemplateConfig = AssessmentTemplateConfig(
       key: 'whatDidYouDo',
       label: 'Vad har du fått göra?',
       placeholder: 'Beskriv de arbetsuppgifter du utförde...',
+      visibleToSupervisor: true,
     ),
     SelfAssessmentField(
       key: 'whatWasPositive',
       label: 'Vad har varit positivt med APLen?',
       placeholder: 'Vad har varit bra? Vad har du lärt dig?',
+      visibleToSupervisor: true,
     ),
     SelfAssessmentField(
       key: 'whatCouldBeBetter',
       label: 'Vad skulle kunnat vara bättre?',
       placeholder: 'Vad var utmanande? Vad skulle kunna förbättras?',
+      visibleToSupervisor: true,
     ),
     SelfAssessmentField(
       key: 'whatCouldYouDoDifferently',
       label: 'Vad kunde du som elev gjort annorlunda?',
       placeholder:
           'Hur kunde du bidragit mer? Vad kan du förbättra till nästa gång?',
+      visibleToSupervisor: true,
     ),
     SelfAssessmentField(
       key: 'overallRating',
       label: 'Vilket betyg för din APL-period? (1-10)',
       placeholder: '1=mindre bra, 10=fantastiskt',
       inputType: 'number',
+      visibleToSupervisor: true,
     ),
   ],
   supervisorCriteria: [
-    SupervisorCriterion(key: 'engagement', label: 'Engagemang'),
-    SupervisorCriterion(key: 'initiative', label: 'Initiativtagande'),
-    SupervisorCriterion(key: 'collaboration', label: 'Samarbetsförmåga'),
-    SupervisorCriterion(key: 'problemSolving', label: 'Problemlösning'),
-    SupervisorCriterion(key: 'workQuality', label: 'Kvalitet på arbete'),
+    SupervisorCriterion(
+      key: 'engagement',
+      label: 'Engagemang',
+      visibleToStudent: true,
+    ),
+    SupervisorCriterion(
+      key: 'initiative',
+      label: 'Initiativtagande',
+      visibleToStudent: true,
+    ),
+    SupervisorCriterion(
+      key: 'collaboration',
+      label: 'Samarbetsförmåga',
+      visibleToStudent: true,
+    ),
+    SupervisorCriterion(
+      key: 'problemSolving',
+      label: 'Problemlösning',
+      visibleToStudent: true,
+    ),
+    SupervisorCriterion(
+      key: 'workQuality',
+      label: 'Kvalitet på arbete',
+      visibleToStudent: true,
+    ),
   ],
 );
 
@@ -187,6 +224,7 @@ List<SelfAssessmentField> _sanitizeSelfAssessmentFields(dynamic rawFields) {
           inputType: (entry['inputType'] ?? 'text').toString() == 'number'
               ? 'number'
               : 'text',
+          visibleToSupervisor: entry['visibleToSupervisor'] != false,
         ),
       );
     }
@@ -213,7 +251,13 @@ List<SupervisorCriterion> _sanitizeSupervisorCriteria(dynamic rawCriteria) {
         'criterion',
       );
 
-      supervisorCriteria.add(SupervisorCriterion(key: key, label: label));
+      supervisorCriteria.add(
+        SupervisorCriterion(
+          key: key,
+          label: label,
+          visibleToStudent: entry['visibleToStudent'] != false,
+        ),
+      );
     }
   }
 
@@ -369,6 +413,7 @@ AssessmentTemplateConfig mergeAssessmentTemplateConfig(
         label: field.label,
         placeholder: field.placeholder,
         inputType: field.inputType,
+          visibleToSupervisor: field.visibleToSupervisor,
       ),
     );
   }
@@ -398,7 +443,11 @@ AssessmentTemplateConfig mergeAssessmentTemplateConfig(
       'criterion',
     );
     supervisorCriteria.add(
-      SupervisorCriterion(key: mergedKey, label: criterion.label),
+      SupervisorCriterion(
+        key: mergedKey,
+        label: criterion.label,
+        visibleToStudent: criterion.visibleToStudent,
+      ),
     );
   }
 
@@ -508,4 +557,30 @@ String getAssessmentCriterionLabel(
     if (criterion.key == key) return criterion.label;
   }
   return key;
+}
+
+bool shouldShowSelfAssessmentFieldForSupervisor(
+  AssessmentTemplateConfig? config,
+  String key,
+) {
+  final source = config ?? defaultAssessmentTemplateConfig;
+  for (final field in source.selfAssessmentFields) {
+    if (field.key == key) {
+      return field.visibleToSupervisor;
+    }
+  }
+  return true;
+}
+
+bool shouldShowSupervisorCriterionForStudent(
+  AssessmentTemplateConfig? config,
+  String key,
+) {
+  final source = config ?? defaultAssessmentTemplateConfig;
+  for (final criterion in source.supervisorCriteria) {
+    if (criterion.key == key) {
+      return criterion.visibleToStudent;
+    }
+  }
+  return true;
 }

@@ -617,6 +617,31 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
     final averageRating = data['averageRating'] as String? ?? '0';
     final imageComments =
         (data['imageComments'] as Map?)?.cast<String, dynamic>() ?? {};
+    final visibleAssessmentEntries = assessmentData == null
+        ? const <MapEntry<String, dynamic>>[]
+        : assessmentData.entries.where((entry) {
+            if (entry.value is! Map) return true;
+            return shouldShowSupervisorCriterionForStudent(
+              templateConfig,
+              entry.key,
+            );
+          }).toList();
+    final visibleCriterionRatings = visibleAssessmentEntries
+        .where((entry) => entry.value is Map)
+        .map((entry) {
+          final value = entry.value as Map;
+          final ratingValue = value['rating'];
+          if (ratingValue is num) return ratingValue.toDouble();
+          return double.tryParse(ratingValue?.toString() ?? '');
+        })
+        .whereType<double>()
+        .where((rating) => rating > 0)
+        .toList();
+    final visibleAverageRating = visibleCriterionRatings.isEmpty
+        ? averageRating
+        : (visibleCriterionRatings.reduce((a, b) => a + b) /
+              visibleCriterionRatings.length)
+            .toStringAsFixed(1);
 
     showDialog(
       context: context,
@@ -633,7 +658,7 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                averageRating,
+                visibleAverageRating,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Colors.orange.shade700,
@@ -767,7 +792,10 @@ class _ErsattningScreenState extends State<ErsattningScreen> {
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-                ...assessmentData.entries.map((entry) {
+                if (visibleAssessmentEntries.isEmpty)
+                  const Text('Inga bedömningskriterier visas för eleven')
+                else
+                  ...visibleAssessmentEntries.map((entry) {
                   if (entry.value is Map) {
                     final assessment = entry.value as Map<String, dynamic>;
                     final rating = assessment['rating'] ?? 0;
