@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
@@ -92,6 +92,7 @@ export default function AssessmentTemplatesPage() {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<AssessmentViewMode>('both');
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const hideSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const toggleItemExpansion = (key: string) => {
     setExpandedItems((current) => {
@@ -141,6 +142,41 @@ export default function AssessmentTemplatesPage() {
   );
   const showSelfAssessment = viewMode === 'both' || viewMode === 'self';
   const showSupervisorAssessment = viewMode === 'both' || viewMode === 'supervisor';
+
+  const queueTeacherOverridesSave = (nextOverrides: TeacherAssessmentTemplateOverrides) => {
+    if (!isTeacher || !teacherTemplateRef || !userId) {
+      return;
+    }
+
+    const sanitized = sanitizeTeacherAssessmentTemplateOverrides(nextOverrides);
+
+    hideSaveQueueRef.current = hideSaveQueueRef.current
+      .then(async () => {
+        try {
+          if (!hasTeacherAssessmentOverrides(sanitized)) {
+            await deleteDoc(teacherTemplateRef);
+            return;
+          }
+
+          await setDoc(
+            teacherTemplateRef,
+            {
+              teacherUid: userId,
+              ...sanitized,
+              updatedAt: serverTimestamp(),
+              updatedBy: userId,
+            },
+            { merge: true },
+          );
+        } catch (saveError) {
+          console.error('Error auto-saving teacher assessment overrides:', saveError);
+          setError('Kunde inte spara dolda fält automatiskt. Klicka på Spara och försök igen.');
+        }
+      })
+      .catch(() => {
+        // Keep queue alive even if a previous task failed.
+      });
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -287,21 +323,31 @@ export default function AssessmentTemplatesPage() {
   };
 
   const toggleHiddenSelfField = (fieldKey: string) => {
-    setTeacherOverrides((current) => ({
-      ...current,
-      hiddenSelfAssessmentFieldKeys: current.hiddenSelfAssessmentFieldKeys.includes(fieldKey)
-        ? current.hiddenSelfAssessmentFieldKeys.filter((key) => key !== fieldKey)
-        : [...current.hiddenSelfAssessmentFieldKeys, fieldKey],
-    }));
+    setTeacherOverrides((current) => {
+      const next: TeacherAssessmentTemplateOverrides = {
+        ...current,
+        hiddenSelfAssessmentFieldKeys: current.hiddenSelfAssessmentFieldKeys.includes(fieldKey)
+          ? current.hiddenSelfAssessmentFieldKeys.filter((key) => key !== fieldKey)
+          : [...current.hiddenSelfAssessmentFieldKeys, fieldKey],
+      };
+
+      queueTeacherOverridesSave(next);
+      return next;
+    });
   };
 
   const toggleHiddenCriterion = (criterionKey: string) => {
-    setTeacherOverrides((current) => ({
-      ...current,
-      hiddenSupervisorCriteriaKeys: current.hiddenSupervisorCriteriaKeys.includes(criterionKey)
-        ? current.hiddenSupervisorCriteriaKeys.filter((key) => key !== criterionKey)
-        : [...current.hiddenSupervisorCriteriaKeys, criterionKey],
-    }));
+    setTeacherOverrides((current) => {
+      const next: TeacherAssessmentTemplateOverrides = {
+        ...current,
+        hiddenSupervisorCriteriaKeys: current.hiddenSupervisorCriteriaKeys.includes(criterionKey)
+          ? current.hiddenSupervisorCriteriaKeys.filter((key) => key !== criterionKey)
+          : [...current.hiddenSupervisorCriteriaKeys, criterionKey],
+      };
+
+      queueTeacherOverridesSave(next);
+      return next;
+    });
   };
 
   const handleTeacherSelfFieldChange = (

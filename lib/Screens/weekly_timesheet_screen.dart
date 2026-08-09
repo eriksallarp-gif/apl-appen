@@ -188,6 +188,38 @@ String _buildDefaultTimesheetTemplateId(
   return '${normalizedProgram}__${normalizedSpecialization}';
 }
 
+List<(String?, String?)> _buildTemplateLookupCandidates(
+  String? program,
+  String? specialization,
+) {
+  final programValue = (program ?? '').trim();
+  final specializationValue = (specialization ?? '').trim();
+  final inferredProgram = inferProgramFromSpecialization(specializationValue);
+
+  final candidates = <(String?, String?)>[];
+  final seen = <String>{};
+
+  void addCandidate(String? candidateProgram, String? candidateSpecialization) {
+    final normalizedProgram = (candidateProgram ?? '').trim();
+    final normalizedSpecialization = (candidateSpecialization ?? '').trim();
+    final key = '$normalizedProgram::$normalizedSpecialization';
+    if (seen.contains(key)) return;
+    seen.add(key);
+    candidates.add((
+      normalizedProgram.isEmpty ? null : normalizedProgram,
+      normalizedSpecialization.isEmpty ? null : normalizedSpecialization,
+    ));
+  }
+
+  addCandidate(programValue, specializationValue);
+  addCandidate(inferredProgram, specializationValue);
+  addCandidate(programValue, null);
+  addCandidate(inferredProgram, null);
+  addCandidate(null, specializationValue);
+
+  return candidates;
+}
+
 List<Map<String, dynamic>>? _parseStoredActivityTemplate(dynamic rawGroups) {
   if (rawGroups is! List) return null;
 
@@ -236,44 +268,61 @@ Future<List<Map<String, dynamic>>?> loadTeacherActivityTemplate({
   String? program,
   String? specialization,
 }) async {
-  try {
-    final templateId = _buildTimesheetTemplateId(
-      teacherUid,
-      program,
-      specialization,
-    );
+  for (final candidate in _buildTemplateLookupCandidates(program, specialization)) {
+    try {
+      final templateId = _buildTimesheetTemplateId(
+        teacherUid,
+        candidate.$1,
+        candidate.$2,
+      );
 
-    final doc = await FirebaseFirestore.instance
-        .collection('timesheetTemplates')
-        .doc(templateId)
-        .get();
+      final doc = await FirebaseFirestore.instance
+          .collection('timesheetTemplates')
+          .doc(templateId)
+          .get();
 
-    if (!doc.exists) return null;
+      if (!doc.exists) continue;
 
-    return _parseStoredActivityTemplate(doc.data()?['groups']);
-  } catch (_) {
-    return null;
+      final parsed = _parseStoredActivityTemplate(doc.data()?['groups']);
+      if (parsed != null) {
+        return parsed;
+      }
+    } catch (_) {
+      // Try next candidate.
+    }
   }
+
+  return null;
 }
 
 Future<List<Map<String, dynamic>>?> loadDefaultActivityTemplate({
   String? program,
   String? specialization,
 }) async {
-  try {
-    final templateId = _buildDefaultTimesheetTemplateId(program, specialization);
+  for (final candidate in _buildTemplateLookupCandidates(program, specialization)) {
+    try {
+      final templateId = _buildDefaultTimesheetTemplateId(
+        candidate.$1,
+        candidate.$2,
+      );
 
-    final doc = await FirebaseFirestore.instance
-        .collection('defaultTimesheetTemplates')
-        .doc(templateId)
-        .get();
+      final doc = await FirebaseFirestore.instance
+          .collection('defaultTimesheetTemplates')
+          .doc(templateId)
+          .get();
 
-    if (!doc.exists) return null;
+      if (!doc.exists) continue;
 
-    return _parseStoredActivityTemplate(doc.data()?['groups']);
-  } catch (_) {
-    return null;
+      final parsed = _parseStoredActivityTemplate(doc.data()?['groups']);
+      if (parsed != null) {
+        return parsed;
+      }
+    } catch (_) {
+      // Try next candidate.
+    }
   }
+
+  return null;
 }
 
 List<Map<String, dynamic>> getActivityTemplate(
@@ -492,26 +541,43 @@ class _WeeklyTimesheetScreenState extends State<WeeklyTimesheetScreen> {
   Future<void> _initializeTemplate() async {
     if (_controllersInitialized) return;
 
-    String? specialization = widget.specialization;
+    String? specialization = widget.specialization?.trim();
     String? program;
+    var templateTeacherUid = widget.teacherUid.trim();
 
-    if (specialization == null) {
-      try {
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(widget.studentUid)
-            .get();
-        specialization = userDoc.data()?['specialization'] as String?;
-        program =
-            (userDoc.data()?['program'] as String?) ??
-            inferProgramFromSpecialization(specialization);
-      } catch (e) {
-        print('Kunde inte hämta specialisering: $e');
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.studentUid)
+          .get();
+
+      final userSpecialization =
+          (userDoc.data()?['specialization'] as String?)?.trim();
+      final userProgram = (userDoc.data()?['program'] as String?)?.trim();
+      final linkedTeacherUid =
+          (userDoc.data()?['teacherUid'] as String?)?.trim() ?? '';
+
+      if (linkedTeacherUid.isNotEmpty) {
+        templateTeacherUid = linkedTeacherUid;
+      }
+
+      if ((specialization ?? '').isEmpty) {
+        specialization = userSpecialization;
+      }
+
+      program = userProgram;
+      if ((program ?? '').isEmpty) {
+        program = inferProgramFromSpecialization(specialization);
+      }
+    } catch (e) {
+      debugPrint('Kunde inte hämta elevens program/specialisering: $e');
+      if ((program ?? '').isEmpty) {
+        program = inferProgramFromSpecialization(specialization);
       }
     }
 
     final customTemplate = await loadTeacherActivityTemplate(
-      teacherUid: widget.teacherUid,
+      teacherUid: templateTeacherUid,
       program: program,
       specialization: specialization,
     );
