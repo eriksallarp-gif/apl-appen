@@ -68,6 +68,67 @@ interface ApprovedAssignment {
   mediaUrls?: string[];
 }
 
+type AssessmentCriterionValue = {
+  label?: string;
+  rating?: number | string;
+  comment?: string;
+};
+
+function getOrderedCriterionEntries(assessment: Assessment): Array<{
+  key: string;
+  label: string;
+  ratingText: string;
+  commentText: string;
+}> {
+  const data = (assessment.assessmentData || {}) as Record<string, AssessmentCriterionValue>;
+  const orderedKeysFromSnapshot = (assessment.assessmentTemplateSnapshot?.supervisorCriteria || []).map((c) => c.key);
+  const orderedKeys = [
+    ...orderedKeysFromSnapshot,
+    ...Object.keys(data).filter((key) => !orderedKeysFromSnapshot.includes(key)),
+  ];
+
+  return orderedKeys
+    .map((key) => {
+      const value = data[key];
+      if (!value) return null;
+
+      const ratingRaw = value?.rating;
+      const ratingText = ratingRaw === undefined || ratingRaw === null || String(ratingRaw).trim() === ''
+        ? '-'
+        : `${ratingRaw}/5`;
+
+      return {
+        key,
+        label: getAssessmentCriterionLabel(assessment.assessmentTemplateSnapshot, key, value),
+        ratingText,
+        commentText: (value?.comment || '').toString().trim(),
+      };
+    })
+    .filter((entry): entry is { key: string; label: string; ratingText: string; commentText: string } => entry !== null);
+}
+
+function getOrderedSelfAssessmentEntries(assessment: Assessment): Array<{
+  key: string;
+  label: string;
+  valueText: string;
+}> {
+  const values = (assessment.studentSelfAssessment || {}) as Record<string, string>;
+  const orderedKeysFromSnapshot = (assessment.assessmentTemplateSnapshot?.selfAssessmentFields || []).map((field) => field.key);
+  const orderedKeys = [
+    ...orderedKeysFromSnapshot,
+    ...Object.keys(values).filter((key) => !orderedKeysFromSnapshot.includes(key)),
+  ];
+
+  return orderedKeys.map((key) => {
+    const rawValue = (values[key] || '').toString().trim();
+    return {
+      key,
+      label: getSelfAssessmentLabel(assessment.assessmentTemplateSnapshot, key),
+      valueText: rawValue.length > 0 ? rawValue : 'Ej besvarad',
+    };
+  });
+}
+
 // Helper function to get week number from date string
 
 function getMediaType(url: string): 'image' | 'video' | 'other' {
@@ -842,12 +903,15 @@ export default function StudentDetailPage() {
                                 <div className="text-sm mb-6">
                                   <p className="font-semibold mb-3 text-slate-700">Bedömningskriterier:</p>
                                   <div className="space-y-2">
-                                    {Object.entries(assessment.assessmentData).map(([key, value]: [string, any]) => (
-                                      <div key={key} className="flex justify-between py-2 px-3 rounded-lg bg-white/50 border border-slate-200/50">
-                                        <span className="text-slate-700">
-                                          {getAssessmentCriterionLabel(assessment.assessmentTemplateSnapshot, key, value)}
-                                        </span>
-                                        <span className="font-semibold text-purple-600">{value.rating}/5</span>
+                                    {getOrderedCriterionEntries(assessment).map((criterion) => (
+                                      <div key={criterion.key} className="py-2 px-3 rounded-lg bg-white/50 border border-slate-200/50">
+                                        <div className="flex justify-between">
+                                          <span className="text-slate-700">{criterion.label}</span>
+                                          <span className="font-semibold text-purple-600">{criterion.ratingText}</span>
+                                        </div>
+                                        <p className="mt-1 text-xs text-slate-500">
+                                          Kommentar: {criterion.commentText || 'Ingen kommentar'}
+                                        </p>
                                       </div>
                                     ))}
                                   </div>
@@ -883,13 +947,11 @@ export default function StudentDetailPage() {
                               {assessment.studentSelfAssessment && (
                                 <div className="mt-6 space-y-2">
                                   <h3 className="font-semibold text-lg">Elevens självskattning</h3>
-                                  {Object.entries(assessment.studentSelfAssessment)
-                                    .filter(([, value]) => (value || '').toString().trim().length > 0)
-                                    .map(([key, value]) => (
-                                      <p key={key}>
-                                        <strong>{getSelfAssessmentLabel(assessment.assessmentTemplateSnapshot, key)}:</strong> {value}
-                                      </p>
-                                    ))}
+                                  {getOrderedSelfAssessmentEntries(assessment).map((entry) => (
+                                    <p key={entry.key}>
+                                      <strong>{entry.label}:</strong> {entry.valueText}
+                                    </p>
+                                  ))}
                                 </div>
                               )}
                               {assessment.attachments && assessment.attachments.length > 0 && (
