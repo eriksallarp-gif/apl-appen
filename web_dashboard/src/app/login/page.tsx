@@ -4,8 +4,34 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { auth, db } from '@/lib/firebase';
-import { sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
+import { ActionCodeSettings, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+
+function createEmailVerificationToken(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function buildEmailVerificationSettings(token: string): ActionCodeSettings {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.apl-appen.com';
+
+  return {
+    url: `${origin}/verify-email?token=${encodeURIComponent(token)}`,
+    handleCodeInApp: false,
+  };
+}
+
+function buildPasswordResetSettings(): ActionCodeSettings {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://www.apl-appen.com';
+
+  return {
+    url: `${origin}/login`,
+    handleCodeInApp: false,
+  };
+}
 
 function mapVerificationError(error: unknown): string {
   const authError = error as { code?: string; message?: string };
@@ -26,6 +52,10 @@ function mapPasswordResetError(error: unknown): string {
   switch (authError?.code) {
     case 'auth/invalid-email':
       return 'Ange en giltig e-postadress.';
+    case 'auth/missing-continue-uri':
+    case 'auth/invalid-continue-uri':
+    case 'auth/unauthorized-continue-uri':
+      return 'Länken för lösenordsåterställning kunde inte skapas. Kontrollera att webbplatsens domän är godkänd i Firebase Authentication.';
     case 'auth/too-many-requests':
       return 'För många försök. Vänta en stund och försök igen.';
     case 'auth/network-request-failed':
@@ -89,7 +119,15 @@ export default function LoginPage() {
         let verificationMessage = 'Du måste verifiera din e-post först. Ett nytt verifieringsmejl har skickats. Kontrollera även skräppost.';
 
         try {
-          await sendEmailVerification(user);
+          let emailVerificationToken = (userData.emailVerificationToken || '').toString().trim();
+          if (!emailVerificationToken) {
+            emailVerificationToken = createEmailVerificationToken();
+            await updateDoc(doc(db, 'users', user.uid), {
+              emailVerificationToken,
+            });
+          }
+
+          await sendEmailVerification(user, buildEmailVerificationSettings(emailVerificationToken));
         } catch (verificationError) {
           console.error('Resend verification error:', verificationError);
           verificationMessage = `Du måste verifiera din e-post först, men verifieringsmejlet kunde inte skickas automatiskt. ${mapVerificationError(verificationError)}`;
@@ -137,7 +175,7 @@ export default function LoginPage() {
 
     setIsSendingReset(true);
     try {
-      await sendPasswordResetEmail(auth, trimmedEmail);
+      await sendPasswordResetEmail(auth, trimmedEmail, buildPasswordResetSettings());
       setResetSuccess('Om adressen finns registrerad har vi skickat en återställningslänk till din e-post. Kontrollera även skräppost.');
     } catch (resetErr) {
       setResetError(mapPasswordResetError(resetErr));
