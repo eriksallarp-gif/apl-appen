@@ -548,14 +548,14 @@ export default function StudentDetailPage() {
   // För aktiv markering
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
   return (
-    <div className="min-h-screen bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="min-h-screen bg-white text-slate-900 dark:bg-zinc-950 dark:text-zinc-100">
       <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
         {/* Student Info Card */}
-        <div className="rounded-3xl border border-blue-100/50 bg-white/70 p-8 shadow-lg shadow-blue-100/30 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
+        <div className="mb-12 rounded-3xl border border-blue-100/50 bg-white/70 p-8 shadow-lg shadow-blue-100/30 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none">
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">{student.name}</h1>
-              <div className="hidden space-y-2 text-slate-600 dark:text-slate-300 sm:block">
+              <div className="hidden space-y-2 text-slate-600 dark:text-zinc-300 sm:block">
                 <p className="text-sm">📧 {student.email}</p>
                 <p className="text-sm">🎓 {student.className}</p>
                 <p className="text-sm">🔨 Yrkesutgång: {student.specialization}</p>
@@ -565,74 +565,74 @@ export default function StudentDetailPage() {
         </div>
 
         {/* Stats Cards - Now Clickable */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-4">
           <button
             onClick={() => setSelectedView(selectedView === 'hours' ? null : 'hours')}
-            className={`rounded-2xl border-2 bg-gradient-to-br from-green-50 to-emerald-50/30 p-8 text-left transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-green-100/40 dark:from-slate-900 dark:to-slate-800 dark:hover:shadow-none ${
-              selectedView === 'hours' ? 'ring-2 ring-green-400 border-green-300 dark:border-green-500' : 'border-green-200/50 dark:border-slate-800'
+            className={`rounded-2xl border-2 bg-gradient-to-br from-green-50 to-emerald-50/30 p-8 text-left transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-green-100/40 dark:from-zinc-900 dark:to-zinc-900 dark:hover:shadow-none ${
+              selectedView === 'hours' ? 'ring-2 ring-green-400 border-green-300 dark:border-green-500' : 'border-green-200/50 dark:border-zinc-800'
             }`}
           >
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Totala arbetstimmar</p>
+            <p className="text-sm font-medium text-slate-600 dark:text-zinc-300">Totala arbetstimmar</p>
             <p className="text-4xl font-bold text-green-600 mt-3">{totalHours}h</p>
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Klicka för cirkeldiagram</p>
+            <p className="mt-3 text-xs text-slate-500 dark:text-zinc-400">Klicka för cirkeldiagram</p>
           </button>
 
           <button
             onClick={() => setSelectedView(selectedView === 'timesheets' ? null : 'timesheets')}
-            className={`rounded-2xl border-2 bg-gradient-to-br from-blue-50 to-sky-50/30 p-8 text-left transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-blue-100/40 dark:from-slate-900 dark:to-slate-800 dark:hover:shadow-none ${
-              selectedView === 'timesheets' ? 'ring-2 ring-blue-400 border-blue-300 dark:border-blue-500' : 'border-blue-200/50 dark:border-slate-800'
+            className={`rounded-2xl border-2 bg-gradient-to-br from-blue-50 to-sky-50/30 p-8 text-left transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-blue-100/40 dark:from-zinc-900 dark:to-zinc-900 dark:hover:shadow-none ${
+              selectedView === 'timesheets' ? 'ring-2 ring-blue-400 border-blue-300 dark:border-blue-500' : 'border-blue-200/50 dark:border-zinc-800'
             }`}
           >
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Godkända tidkort</p>
+            <p className="text-sm font-medium text-slate-600 dark:text-zinc-300">Godkända tidkort</p>
             <p className="text-4xl font-bold text-blue-600 mt-3">{approvedTimesheets}/{timesheets.length}</p>
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Klicka för detaljer</p>
+            <p className="mt-3 text-xs text-slate-500 dark:text-zinc-400">Klicka för detaljer</p>
           </button>
 
           <button
             onClick={() => setSelectedView(selectedView === 'assessments' ? null : 'assessments')}
-            className={`rounded-2xl border-2 bg-gradient-to-br from-purple-50 to-violet-50/30 p-8 text-left transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-100/40 dark:from-slate-900 dark:to-slate-800 dark:hover:shadow-none ${
-              selectedView === 'assessments' ? 'ring-2 ring-purple-400 border-purple-300 dark:border-purple-500' : 'border-purple-200/50 dark:border-slate-800'
+            className={`rounded-2xl border-2 bg-gradient-to-br from-purple-50 to-violet-50/30 p-8 text-left transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-purple-100/40 dark:from-zinc-900 dark:to-zinc-900 dark:hover:shadow-none ${
+              selectedView === 'assessments' ? 'ring-2 ring-purple-400 border-purple-300 dark:border-purple-500' : 'border-purple-200/50 dark:border-zinc-800'
             }`}
           >
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Bedömningar</p>
+            <p className="text-sm font-medium text-slate-600 dark:text-zinc-300">Bedömningar</p>
             <p className="text-4xl font-bold text-purple-600 mt-3">{submittedAssessments}</p>
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Klicka för detaljer</p>
+            <p className="mt-3 text-xs text-slate-500 dark:text-zinc-400">Klicka för detaljer</p>
           </button>
 
           <button
             onClick={() => setSelectedView(selectedView === 'compensations' ? null : 'compensations')}
-            className={`rounded-2xl border-2 bg-gradient-to-br from-amber-50 to-orange-50/30 p-8 text-left transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-amber-100/40 dark:from-slate-900 dark:to-slate-800 dark:hover:shadow-none ${
-              selectedView === 'compensations' ? 'ring-2 ring-amber-400 border-amber-300 dark:border-amber-500' : 'border-amber-200/50 dark:border-slate-800'
+            className={`rounded-2xl border-2 bg-gradient-to-br from-amber-50 to-orange-50/30 p-8 text-left transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-amber-100/40 dark:from-zinc-900 dark:to-zinc-900 dark:hover:shadow-none ${
+              selectedView === 'compensations' ? 'ring-2 ring-amber-400 border-amber-300 dark:border-amber-500' : 'border-amber-200/50 dark:border-zinc-800'
             }`}
           >
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Ersättningar</p>
+            <p className="text-sm font-medium text-slate-600 dark:text-zinc-300">Ersättningar</p>
             <p className="text-2xl font-bold text-amber-600 mt-3">
               {approvedAssessments.reduce((sum, a) => sum + (a.lunchApproved || 0), 0)} luncher • {approvedAssessments.reduce((sum, a) => sum + (a.travelApproved || 0), 0)} km
             </p>
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Klicka för detaljer</p>
+            <p className="mt-3 text-xs text-slate-500 dark:text-zinc-400">Klicka för detaljer</p>
           </button>
 
           <button
             onClick={() => setSelectedView(selectedView === 'assignments' ? null : 'assignments')}
-            className={`rounded-2xl border-2 bg-gradient-to-br from-indigo-50 to-blue-50/30 p-8 text-left transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-indigo-100/40 dark:from-slate-900 dark:to-slate-800 dark:hover:shadow-none ${
-              selectedView === 'assignments' ? 'ring-2 ring-indigo-400 border-indigo-300 dark:border-indigo-500' : 'border-indigo-200/50 dark:border-slate-800'
+            className={`rounded-2xl border-2 bg-gradient-to-br from-indigo-50 to-blue-50/30 p-8 text-left transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-indigo-100/40 dark:from-zinc-900 dark:to-zinc-900 dark:hover:shadow-none ${
+              selectedView === 'assignments' ? 'ring-2 ring-indigo-400 border-indigo-300 dark:border-indigo-500' : 'border-indigo-200/50 dark:border-zinc-800'
             }`}
           >
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-300">Godkända uppgifter</p>
+            <p className="text-sm font-medium text-slate-600 dark:text-zinc-300">Godkända uppgifter</p>
             <p className="text-4xl font-bold text-indigo-600 mt-3">{approvedAssignments.length}</p>
-            <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Klicka för detaljer</p>
+            <p className="mt-3 text-xs text-slate-500 dark:text-zinc-400">Klicka för detaljer</p>
           </button>
         </div>
 
         {/* Content Area Based on Selected Card */}
         {selectedView && (
-          <div className="mb-8 rounded-3xl border border-blue-100/50 bg-white/70 p-8 shadow-lg shadow-blue-100/30 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80 dark:shadow-none">
+          <div className="mb-8 rounded-3xl border border-blue-100/50 bg-white/70 p-8 shadow-lg shadow-blue-100/30 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none">
             {/* Hours View - Cirkeldiagram */}
             {selectedView === 'hours' && (
               <div>
-                <h3 className="mb-6 text-2xl font-bold text-slate-900 dark:text-slate-100">Arbetstimmar per moment</h3>
+                <h3 className="mb-6 text-2xl font-bold text-slate-900 dark:text-zinc-100">Arbetstimmar per moment</h3>
                 {Object.keys(taskHours).length === 0 ? (
-                  <p className="py-12 text-center text-slate-500 dark:text-slate-400">Inga timmar registrerade ännu</p>
+                  <p className="py-12 text-center text-slate-500 dark:text-zinc-400">Inga timmar registrerade ännu</p>
                 ) : (
                   (() => {
                     // Lista arbetsmoment och totalt antal timmar, sorterat fallande
@@ -695,14 +695,14 @@ export default function StudentDetailPage() {
                         </div>
                         {/* Listan */}
                         <div className="space-y-4">
-                          <h3 className="mb-4 text-center text-xl font-bold text-slate-900 dark:text-slate-100 md:text-left">Totala arbetstimmar per arbetsmoment</h3>
+                          <h3 className="mb-4 text-center text-xl font-bold text-slate-900 dark:text-zinc-100 md:text-left">Totala arbetstimmar per arbetsmoment</h3>
                           {filteredTasks.map(([task, hours], index) => (
-                            <div key={task} className="flex items-center justify-between rounded-2xl border border-slate-200/50 bg-white/50 p-4 transition-colors hover:border-slate-300/50 dark:border-slate-700 dark:bg-slate-800/80 dark:hover:border-slate-600">
+                            <div key={task} className="flex items-center justify-between rounded-2xl border border-slate-200/50 bg-white/50 p-4 transition-colors hover:border-slate-300/50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-600">
                               <div className="flex items-center gap-3">
                                 <div className="w-4 h-4 rounded-full" style={{ backgroundColor: pieColors[index % pieColors.length] }}></div>
-                                <span className="text-base font-medium text-slate-700 dark:text-slate-200">{task}</span>
+                                <span className="text-base font-medium text-slate-700 dark:text-zinc-200">{task}</span>
                               </div>
-                              <span className="text-base font-bold text-slate-900 dark:text-slate-100">{hours}h</span>
+                              <span className="text-base font-bold text-slate-900 dark:text-zinc-100">{hours}h</span>
                             </div>
                           ))}
                         </div>
@@ -716,27 +716,27 @@ export default function StudentDetailPage() {
             {/* Timesheets View */}
             {selectedView === 'timesheets' && (
               <div>
-                <h3 className="mb-6 text-2xl font-bold text-slate-900 dark:text-slate-100">Tidkort</h3>
+                <h3 className="mb-6 text-2xl font-bold text-slate-900 dark:text-zinc-100">Tidkort</h3>
                 <div className="space-y-4">
                   {timesheets.length === 0 ? (
-                    <p className="py-12 text-center text-slate-500 dark:text-slate-400">Inga tidkort ännu</p>
+                    <p className="py-12 text-center text-slate-500 dark:text-zinc-400">Inga tidkort ännu</p>
                   ) : (
                     timesheets.map(timesheet => {
                       const weekNum = getWeekNumber(timesheet.weekStart);
                       const isExpanded = expandedTimesheetId === timesheet.id;
                       
                       return (
-                        <div key={timesheet.id} className="overflow-hidden rounded-2xl border-2 border-slate-200/50 bg-slate-50/30 transition-colors hover:border-blue-300/50 dark:border-slate-800 dark:bg-slate-900/70 dark:hover:border-blue-500/60">
+                        <div key={timesheet.id} className="overflow-hidden rounded-2xl border-2 border-slate-200/50 bg-slate-50/30 transition-colors hover:border-blue-300/50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700">
                           <button
                             onClick={() => setExpandedTimesheetId(isExpanded ? null : timesheet.id)}
-                            className="w-full p-6 text-left transition hover:bg-slate-100/40 dark:hover:bg-slate-800/70"
+                            className="w-full p-6 text-left transition hover:bg-slate-100/40 dark:hover:bg-zinc-800/70"
                           >
                             <div className="flex items-center justify-between">
                               <div>
-                                <p className="font-semibold text-slate-900 dark:text-slate-100">
+                                <p className="font-semibold text-slate-900 dark:text-zinc-100">
                                   Vecka {weekNum}
                                 </p>
-                                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                                <p className="mt-2 text-sm text-slate-600 dark:text-zinc-300">
                                   {timesheet.totalHours} timmar
                                 </p>
                               </div>
@@ -748,14 +748,14 @@ export default function StudentDetailPage() {
                                 }`}>
                                   {timesheet.approved ? '✓ Godkänt' : 'Väntande'}
                                 </span>
-                                <span className="text-slate-400 dark:text-slate-500">{isExpanded ? '▲' : '▼'}</span>
+                                <span className="text-slate-400 dark:text-zinc-500">{isExpanded ? '▲' : '▼'}</span>
                               </div>
                             </div>
                           </button>
                           
                           {isExpanded && timesheet.entries && (
-                            <div className="border-t border-slate-200 bg-gradient-to-br from-slate-50/50 to-blue-50/30 p-6 dark:border-slate-800 dark:from-slate-900 dark:to-slate-900/70">
-                              <h4 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-200">Arbetsmoment:</h4>
+                            <div className="border-t border-slate-200 bg-gradient-to-br from-slate-50/50 to-blue-50/30 p-6 dark:border-zinc-800 dark:from-zinc-900 dark:to-zinc-900">
+                              <h4 className="mb-4 text-sm font-semibold text-slate-700 dark:text-zinc-200">Arbetsmoment:</h4>
                               <div className="space-y-3">
                                 {(() => {
                                   const groupedEntries = new Map<string, Array<[string, any]>>();
@@ -778,7 +778,7 @@ export default function StudentDetailPage() {
 
                                     return (
                                       <div key={group} className="space-y-2">
-                                        <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">{group}</p>
+                                        <p className="text-xs font-semibold uppercase text-slate-500 dark:text-zinc-400">{group}</p>
                                         {activities.map(([activity, dayEntries]: [string, any]) => {
                                   // Filtrera bort dagar med 0 eller 0.0 timmar
                                   const filteredTasks = Object.entries(dayEntries || {}).filter(([_, hours]: [string, any]) => Number(hours) > 0);
@@ -787,22 +787,22 @@ export default function StudentDetailPage() {
                                   
                                   return filteredTasks.length > 0 ? (
                                     <div key={activity} className="">
-                                      <p className="mb-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">{activityItemName}</p>
+                                      <p className="mb-2 text-xs font-semibold uppercase text-slate-500 dark:text-zinc-400">{activityItemName}</p>
                                       <div className="ml-4 space-y-1">
                                         {filteredTasks.map(([day, hours]: [string, any]) => {
 
                                           return (
                                             <div key={day} className="text-sm">
                                               <div className="flex justify-between">
-                                                <div className="text-slate-700 dark:text-slate-200">
+                                                <div className="text-slate-700 dark:text-zinc-200">
                                                   <span>{translateDayToSwedish(day)}</span>
                                                   {activityComment && (
-                                                    <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
+                                                    <span className="ml-2 text-xs text-slate-500 dark:text-zinc-400">
                                                       Kommentar: {activityComment}
                                                     </span>
                                                   )}
                                                 </div>
-                                                <span className="font-semibold text-slate-900 dark:text-slate-100">{hours}h</span>
+                                                <span className="font-semibold text-slate-900 dark:text-zinc-100">{hours}h</span>
                                               </div>
                                             </div>
                                           );
@@ -829,10 +829,10 @@ export default function StudentDetailPage() {
             {/* Assessments View */}
             {selectedView === 'assessments' && (
               <div>
-                <h3 className="mb-6 text-2xl font-bold text-slate-900 dark:text-slate-100">Bedömningar</h3>
+                <h3 className="mb-6 text-2xl font-bold text-slate-900 dark:text-zinc-100">Bedömningar</h3>
                 <div className="space-y-4">
                   {assessments.length === 0 ? (
-                    <p className="py-12 text-center text-slate-500 dark:text-slate-400">Inga bedömningar ännu</p>
+                    <p className="py-12 text-center text-slate-500 dark:text-zinc-400">Inga bedömningar ännu</p>
                   ) : (
                     assessments.map(assessment => {
                       const isExpanded = expandedAssessmentId === assessment.id;
@@ -840,14 +840,14 @@ export default function StudentDetailPage() {
                       const isApprovedStatus = isAssessmentApprovedForDisplay(assessment);
 
                       return (
-                        <div key={assessment.id} className="overflow-hidden rounded-2xl border-2 border-slate-200/50 bg-slate-50/30 transition-colors hover:border-purple-300/50 dark:border-slate-800 dark:bg-slate-900/70 dark:hover:border-purple-500/60">
+                        <div key={assessment.id} className="overflow-hidden rounded-2xl border-2 border-slate-200/50 bg-slate-50/30 transition-colors hover:border-purple-300/50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700">
                           <button
                             onClick={() => setExpandedAssessmentId(isExpanded ? null : assessment.id)}
-                            className="w-full p-6 text-left transition hover:bg-slate-100/40 dark:hover:bg-slate-800/70"
+                            className="w-full p-6 text-left transition hover:bg-slate-100/40 dark:hover:bg-zinc-800/70"
                           >
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-4">
-                                <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{weeksLabel}</p>
+                                <p className="text-lg font-semibold text-slate-900 dark:text-zinc-100">{weeksLabel}</p>
                                 <span className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
                                   isApprovedStatus
                                     ? 'bg-green-100/70 text-green-800'
@@ -855,7 +855,7 @@ export default function StudentDetailPage() {
                                 }`}>
                                   {isApprovedStatus ? '✓ Godkänd' : 'Väntande'}
                                 </span>
-                                <span className="text-sm text-slate-600 dark:text-slate-300">
+                                <span className="text-sm text-slate-600 dark:text-zinc-300">
                                   {assessment.totalHours || 0}h
                                 </span>
                                 {!isApprovedStatus && (
@@ -878,21 +878,21 @@ export default function StudentDetailPage() {
                                     <p className="text-xs text-slate-500">av 5</p>
                                   </div>
                                 )}
-                                <span className="text-slate-400 dark:text-slate-500">{isExpanded ? '▲' : '▼'}</span>
+                                <span className="text-slate-400 dark:text-zinc-500">{isExpanded ? '▲' : '▼'}</span>
                               </div>
                             </div>
                           </button>
                           
                           {isExpanded && (
-                            <div className="border-t border-slate-200 bg-gradient-to-br from-slate-50/50 to-purple-50/30 p-6 dark:border-slate-800 dark:from-slate-900 dark:to-slate-900/70">
+                            <div className="border-t border-slate-200 bg-gradient-to-br from-slate-50/50 to-purple-50/30 p-6 dark:border-zinc-800 dark:from-zinc-900 dark:to-zinc-900">
                               {console.debug && isExpanded && console.debug('assessment data:', assessment)}
                               {assessment.submittedAt && (
-                                <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
+                                <p className="mb-4 text-sm text-slate-600 dark:text-zinc-300">
                                   <strong>Datum:</strong> {new Date(assessment.submittedAt.seconds * 1000).toLocaleDateString('sv-SE')}
                                 </p>
                               )}
                               {assessment.supervisorName && (
-                                <div className="mb-4 text-sm text-slate-600 dark:text-slate-300">
+                                <div className="mb-4 text-sm text-slate-600 dark:text-zinc-300">
                                   <p><strong>Handledare:</strong> {assessment.supervisorName}</p>
                                   {assessment.supervisorCompany && (
                                     <p><strong>Företag:</strong> {assessment.supervisorCompany}</p>
@@ -901,15 +901,15 @@ export default function StudentDetailPage() {
                               )}
                               {assessment.assessmentData && (
                                 <div className="text-sm mb-6">
-                                  <p className="mb-3 font-semibold text-slate-700 dark:text-slate-200">Bedömningskriterier:</p>
+                                  <p className="mb-3 font-semibold text-slate-700 dark:text-zinc-200">Bedömningskriterier:</p>
                                   <div className="space-y-2">
                                     {getOrderedCriterionEntries(assessment).map((criterion) => (
-                                      <div key={criterion.key} className="rounded-lg border border-slate-200/50 bg-white/50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/80">
+                                      <div key={criterion.key} className="rounded-lg border border-slate-200/50 bg-white/50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800">
                                         <div className="flex justify-between">
-                                          <span className="text-slate-700 dark:text-slate-200">{criterion.label}</span>
+                                          <span className="text-slate-700 dark:text-zinc-200">{criterion.label}</span>
                                           <span className="font-semibold text-purple-600">{criterion.ratingText}</span>
                                         </div>
-                                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                        <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">
                                           Kommentar: {criterion.commentText || 'Ingen kommentar'}
                                         </p>
                                       </div>
@@ -919,7 +919,7 @@ export default function StudentDetailPage() {
                               )}
                               {assessment.images && assessment.images.length > 0 && (
                                 <div className="text-sm mt-6">
-                                  <p className="mb-3 font-semibold text-slate-700 dark:text-slate-200">Bilder ({assessment.images.length}):</p>
+                                  <p className="mb-3 font-semibold text-slate-700 dark:text-zinc-200">Bilder ({assessment.images.length}):</p>
                                   <div className="grid grid-cols-3 gap-3">
                                     {assessment.images.map((img, idx) => (
                                       <div key={idx} className="mb-4">
@@ -927,7 +927,7 @@ export default function StudentDetailPage() {
                                           href={img.url}
                                           target="_blank"
                                           rel="noopener noreferrer"
-                                          className="overflow-hidden rounded-2xl border-2 border-slate-200/50 bg-white transition-colors hover:border-purple-300/50 shadow-md shadow-slate-100/50 dark:border-slate-700 dark:bg-slate-800 dark:shadow-none dark:hover:border-purple-500/60"
+                                          className="overflow-hidden rounded-2xl border-2 border-slate-200/50 bg-white transition-colors hover:border-purple-300/50 shadow-md shadow-slate-100/50 dark:border-zinc-700 dark:bg-zinc-800 dark:shadow-none dark:hover:border-zinc-600"
                                         >
                                           <img
                                             src={img.url}
@@ -936,7 +936,7 @@ export default function StudentDetailPage() {
                                           />
                                         </a>
                                         {assessment.imageComments && assessment.imageComments[idx] && (
-                                          <p className="mt-2 text-sm text-gray-600 dark:text-slate-300">{assessment.imageComments[idx]}</p>
+                                          <p className="mt-2 text-sm text-gray-600 dark:text-zinc-300">{assessment.imageComments[idx]}</p>
                                         )}
                                       </div>
                                     ))}
@@ -946,9 +946,9 @@ export default function StudentDetailPage() {
 
                               {assessment.studentSelfAssessment && (
                                 <div className="mt-6 space-y-2">
-                                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Elevens självskattning</h3>
+                                  <h3 className="text-lg font-semibold text-slate-900 dark:text-zinc-100">Elevens självskattning</h3>
                                   {getOrderedSelfAssessmentEntries(assessment).map((entry) => (
-                                    <p key={entry.key} className="text-slate-700 dark:text-slate-200">
+                                    <p key={entry.key} className="text-slate-700 dark:text-zinc-200">
                                       <strong>{entry.label}:</strong> {entry.valueText}
                                     </p>
                                   ))}
@@ -956,7 +956,7 @@ export default function StudentDetailPage() {
                               )}
                               {assessment.attachments && assessment.attachments.length > 0 && (
                                 <div className="text-sm mt-6">
-                                  <p className="mb-3 font-semibold text-slate-700 dark:text-slate-200">Bifogade bilder ({assessment.attachments.length}):</p>
+                                  <p className="mb-3 font-semibold text-slate-700 dark:text-zinc-200">Bifogade bilder ({assessment.attachments.length}):</p>
                                   <div className="grid grid-cols-2 gap-3">
                                     {assessment.attachments.map((url, idx) => (
                                       <a 
@@ -964,7 +964,7 @@ export default function StudentDetailPage() {
                                         href={url} 
                                         target="_blank" 
                                         rel="noopener noreferrer"
-                                        className="overflow-hidden rounded-2xl border-2 border-slate-200/50 bg-white transition-colors hover:border-purple-300/50 shadow-md shadow-slate-100/50 dark:border-slate-700 dark:bg-slate-800 dark:shadow-none dark:hover:border-purple-500/60"
+                                        className="overflow-hidden rounded-2xl border-2 border-slate-200/50 bg-white transition-colors hover:border-purple-300/50 shadow-md shadow-slate-100/50 dark:border-zinc-700 dark:bg-zinc-800 dark:shadow-none dark:hover:border-zinc-600"
                                       >
                                         <img 
                                           src={url} 
@@ -977,7 +977,7 @@ export default function StudentDetailPage() {
                                 </div>
                               )}
                               {(!assessment.attachments || assessment.attachments.length === 0) && (
-                                <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Inga bilder bifogade</p>
+                                <p className="mt-4 text-sm text-slate-500 dark:text-zinc-400">Inga bilder bifogade</p>
                               )}
                             </div>
                           )}
@@ -992,7 +992,7 @@ export default function StudentDetailPage() {
             {/* Compensations View */}
             {selectedView === 'compensations' && (
               <div>
-                <h3 className="mb-6 text-2xl font-bold text-slate-900 dark:text-slate-100">Ersättningar per vecka</h3>
+                <h3 className="mb-6 text-2xl font-bold text-slate-900 dark:text-zinc-100">Ersättningar per vecka</h3>
                 {(() => {
                   // Debug
                   console.debug('COMPENSATIONS VIEW: total assessments for student=', approvedAssessments.length);
@@ -1005,7 +1005,7 @@ export default function StudentDetailPage() {
                   });
                   console.debug('COMPENSATIONS VIEW: compAssessments count=', compAssessments.length);
                   if (compAssessments.length === 0) {
-                    return <p className="py-12 text-center text-slate-500 dark:text-slate-400">Inga godkända bedömningar ännu</p>;
+                    return <p className="py-12 text-center text-slate-500 dark:text-zinc-400">Inga godkända bedömningar ännu</p>;
                   }
 
                   // Hjälp-funktion: bygg en array av week-nycklar (standardiserad) från en assessment
@@ -1094,20 +1094,20 @@ export default function StudentDetailPage() {
                         const m = weekKey.match(/(\d{4})-W(\d{1,2})/);
                         const display = m ? `v.${Number(m[2])} (${m[1]})` : weekKey;
                         return (
-                          <div key={weekKey} className="rounded-2xl border-2 border-slate-200/50 bg-gradient-to-br from-amber-50/30 to-orange-50/20 p-6 transition-colors hover:border-amber-300/50 dark:border-slate-800 dark:from-slate-900 dark:to-slate-800 dark:hover:border-amber-500/60">
+                          <div key={weekKey} className="rounded-2xl border-2 border-slate-200/50 bg-gradient-to-br from-amber-50/30 to-orange-50/20 p-6 transition-colors hover:border-amber-300/50 dark:border-zinc-800 dark:from-zinc-900 dark:to-zinc-900 dark:hover:border-zinc-700">
                             <div className="flex items-center justify-between mb-4">
-                              <h4 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{display}</h4>
+                              <h4 className="text-lg font-semibold text-slate-900 dark:text-zinc-100">{display}</h4>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                              <div className="rounded-2xl border border-blue-200/50 bg-gradient-to-br from-blue-100/50 to-blue-50/30 p-4 dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
-                                <p className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">Luncher</p>
+                              <div className="rounded-2xl border border-blue-200/50 bg-gradient-to-br from-blue-100/50 to-blue-50/30 p-4 dark:border-zinc-700 dark:from-zinc-800 dark:to-zinc-900">
+                                <p className="mb-2 text-xs font-medium text-slate-600 dark:text-zinc-300">Luncher</p>
                                 <p className="text-3xl font-bold text-blue-600">{lunch}</p>
-                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">st</p>
+                                <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">st</p>
                               </div>
-                              <div className="rounded-2xl border border-green-200/50 bg-gradient-to-br from-green-100/50 to-green-50/30 p-4 dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
-                                <p className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">Resa</p>
+                              <div className="rounded-2xl border border-green-200/50 bg-gradient-to-br from-green-100/50 to-green-50/30 p-4 dark:border-zinc-700 dark:from-zinc-800 dark:to-zinc-900">
+                                <p className="mb-2 text-xs font-medium text-slate-600 dark:text-zinc-300">Resa</p>
                                 <p className="text-3xl font-bold text-green-600">{Math.round(travel)}</p>
-                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">km</p>
+                                <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">km</p>
                               </div>
                             </div>
                           </div>
@@ -1121,20 +1121,20 @@ export default function StudentDetailPage() {
 
             {selectedView === 'assignments' && (
               <div>
-                <h3 className="mb-6 text-2xl font-bold text-slate-900 dark:text-slate-100">Godkända uppgifter</h3>
+                <h3 className="mb-6 text-2xl font-bold text-slate-900 dark:text-zinc-100">Godkända uppgifter</h3>
                 <div className="space-y-4">
                   {approvedAssignments.length === 0 ? (
-                    <p className="py-12 text-center text-slate-500 dark:text-slate-400">Inga godkända uppgifter ännu</p>
+                    <p className="py-12 text-center text-slate-500 dark:text-zinc-400">Inga godkända uppgifter ännu</p>
                   ) : (
                     approvedAssignments.map((assignment) => (
-                      <div key={assignment.id} className="overflow-hidden rounded-2xl border-2 border-slate-200/50 bg-slate-50/30 p-6 dark:border-slate-800 dark:bg-slate-900/70">
+                      <div key={assignment.id} className="overflow-hidden rounded-2xl border-2 border-slate-200/50 bg-slate-50/30 p-6 dark:border-zinc-800 dark:bg-zinc-900">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">{assignment.title}</p>
-                            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                            <p className="text-lg font-semibold text-slate-900 dark:text-zinc-100">{assignment.title}</p>
+                            <p className="mt-2 text-sm text-slate-600 dark:text-zinc-300">
                               Godkänd {assignment.approvedAt?.seconds ? new Date(assignment.approvedAt.seconds * 1000).toLocaleDateString('sv-SE') : '-'}
                             </p>
-                            <p className="text-sm text-slate-600 dark:text-slate-300">
+                            <p className="text-sm text-slate-600 dark:text-zinc-300">
                               Inlämnad {assignment.submittedAt?.seconds ? new Date(assignment.submittedAt.seconds * 1000).toLocaleDateString('sv-SE') : '-'}
                             </p>
                           </div>
@@ -1144,12 +1144,12 @@ export default function StudentDetailPage() {
                         </div>
 
                         {(assignment.textAnswer ?? '').trim().length > 0 && (
-                          <p className="mt-4 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{assignment.textAnswer}</p>
+                          <p className="mt-4 whitespace-pre-wrap text-sm text-slate-700 dark:text-zinc-200">{assignment.textAnswer}</p>
                         )}
 
                         {(assignment.mediaUrls ?? []).length > 0 && (
                           <div className="mt-4">
-                            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Bilder / Media</p>
+                            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">Bilder / Media</p>
                             <div className="flex flex-wrap gap-3">
                               {(assignment.mediaUrls ?? []).map((url, idx) => {
                                 const type = getMediaType(url);
@@ -1159,7 +1159,7 @@ export default function StudentDetailPage() {
                                       <img
                                         src={url}
                                         alt={`Bild ${idx + 1}`}
-                                        className="h-36 w-36 rounded-xl border border-slate-200 object-cover shadow-sm transition-opacity hover:opacity-90 dark:border-slate-700"
+                                        className="h-36 w-36 rounded-xl border border-slate-200 object-cover shadow-sm transition-opacity hover:opacity-90 dark:border-zinc-700"
                                       />
                                     </a>
                                   );
@@ -1170,7 +1170,7 @@ export default function StudentDetailPage() {
                                     href={url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-blue-600 transition-colors hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-800 dark:text-blue-300 dark:hover:bg-slate-700"
+                                    className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-blue-600 transition-colors hover:bg-blue-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-blue-300 dark:hover:bg-zinc-700"
                                   >
                                     {type === 'video' ? '▶ Öppna video' : 'Öppna media'}
                                   </a>
@@ -1181,9 +1181,9 @@ export default function StudentDetailPage() {
                         )}
 
                         {(assignment.teacherComment ?? '').trim().length > 0 && (
-                          <div className="mt-4 rounded-2xl border border-slate-200/60 bg-white/70 p-4 dark:border-slate-700 dark:bg-slate-800/80">
-                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Lärarkommentar</p>
-                            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{assignment.teacherComment}</p>
+                          <div className="mt-4 rounded-2xl border border-slate-200/60 bg-white/70 p-4 dark:border-zinc-700 dark:bg-zinc-800">
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">Lärarkommentar</p>
+                            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-zinc-200">{assignment.teacherComment}</p>
                           </div>
                         )}
                       </div>
