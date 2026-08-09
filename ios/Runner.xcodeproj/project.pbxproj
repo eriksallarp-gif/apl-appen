@@ -373,7 +373,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.aplappen.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = APLAppen_AppStore_Profile_2026;
+				PROVISIONING_PROFILE_SPECIFIER = APL_AppStore_2026_New_Cert;
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
@@ -556,7 +556,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.aplappen.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = APLAppen_AppStore_Profile_2026;
+				PROVISIONING_PROFILE_SPECIFIER = APL_AppStore_2026_New_Cert;
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -582,7 +582,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.aplappen.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = APLAppen_AppStore_Profile_2026;
+				PROVISIONING_PROFILE_SPECIFIER = APL_AppStore_2026_New_Cert;
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
