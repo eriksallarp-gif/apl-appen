@@ -76,6 +76,12 @@ jobs:
 
       - name: Build IPA
         run: |
+          set -e
+          cd ios
+          pod deintegrate
+          rm -rf Pods
+          pod install --repo-update
+          cd ..
           flutter build ipa \
             --release \
             --build-number "${{ github.event.inputs.build_number }}" \
